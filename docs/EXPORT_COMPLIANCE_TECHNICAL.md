@@ -1,3 +1,11 @@
+# Build 11 — current encryption inventory
+
+The September 13 TestFlight candidate adds official libsignal 0.102.2 to the earlier inventory below. It is not accurate to say the cryptographic implementation is unchanged from build 9. The pinned native library uses the Signal session/prekey APIs, including elliptic-curve and Kyber prekeys, for asynchronous end-to-end encryption. Private media uses AES-256-GCM; keys travel within Signal-encrypted content. SQLCipher, Ed25519 authentication, HTTPS/WSS and WebRTC DTLS/SRTP remain. No custom cipher or key escrow is introduced.
+
+The owner's France exclusion remains in force. The earlier selection of third-party standard encryption in addition to the operating system is recorded below; any new Apple question or requested documentation must be assessed against this actual expanded inventory. No Info.plist claim of no encryption or blanket exemption is added. Apple's classification/acceptance is separate from technical QA and open-source licensing.
+
+Historical build-specific inventory follows.
+
 # Encryption inventory for the account owner
 
 Target: Mnelo 0.1.0 (4), com.mnelo.messenger, App Store Connect 6811153275. Build 4 repairs a missing native permission description; the cryptographic implementations remain those of the background-capable build 3.

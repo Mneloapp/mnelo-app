@@ -7,6 +7,8 @@ import { useLocalAction } from './shared';
 import licenseText from '@/lib/open-source-license.json';
 
 const source = 'https://github.com/Mneloapp/mnelo-app';
+// Retain this exact public source tag for the distributed binary.
+const sourceRef = 'ios-0.1.0-11';
 
 export function OpenSourceScreen() {
   const { t } = useTranslation();
@@ -20,13 +22,15 @@ export function OpenSourceScreen() {
       <Button
         label={t('messenger.viewSource')}
         busy={action.busy}
-        onPress={() => void action.run(() => Linking.openURL(source))}
+        onPress={() => void action.run(() => Linking.openURL(source + '/tree/' + sourceRef))}
       />
       <Button
         label={t('messenger.thirdPartyNotices')}
         variant="secondary"
         onPress={() =>
-          void action.run(() => Linking.openURL(source + '/blob/main/docs/licenses/README.md'))
+          void action.run(() =>
+            Linking.openURL(source + '/blob/' + sourceRef + '/docs/licenses/README.md'),
+          )
         }
       />
       <Button

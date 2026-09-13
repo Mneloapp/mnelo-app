@@ -57,14 +57,32 @@ assert.ok(
   'IOS_BACKGROUND_LOCATION_UNEXPECTED',
 );
 if (process.argv[2]) {
-  // The camera itself contains the provider's name as a lookup string even
-  // when the class is absent. Require its defined Objective-C class symbol.
+  // A lookup string alone does not establish a linked provider. Development
+  // binaries retain the class symbol; App Store archives strip local symbols,
+  // so verify the actual Objective-C class definition in that case.
   const symbols = execFileSync('xcrun', ['nm', '-U', resolve(app, info.CFBundleExecutable)], {
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
   });
+  let hasProvider = symbols.includes('_OBJC_CLASS_$_ExpoCameraZXingProvider');
+  if (!hasProvider) {
+    const metadata = execFileSync(
+      'xcrun',
+      ['otool', '-ov', resolve(app, info.CFBundleExecutable)],
+      {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
+    const classLists = metadata
+      .split(/^Contents of /m)
+      .filter((section) => /^\(__DATA(?:_CONST)?,__objc_classlist\) section\n/.test(section));
+    hasProvider = classLists.some((section) =>
+      /^\s+name\s+0x[0-9a-f]+ ExpoCameraZXingProvider$/m.test(section),
+    );
+  }
   assert.ok(
-    symbols.includes('_OBJC_CLASS_$_ExpoCameraZXingProvider'),
+    hasProvider,
     'IOS_QR_PROVIDER_MISSING: camera preview alone cannot decode contact QR codes',
   );
 }

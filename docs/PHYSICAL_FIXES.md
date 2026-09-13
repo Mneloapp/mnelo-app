@@ -1,6 +1,6 @@
 # Physical-test correction tracker — September 13
 
-The owner reported these issues on build 9. Source changes are implemented for development build 10; neither physical phone has been updated yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
+The owner reported these issues on build 9. Source changes are implemented in local development build 10 and the new TestFlight candidate **0.1.0 (11)**; neither physical phone has been updated to them yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
 
 | Reported issue                                 | Implemented change                                                                                                          | Actual verification / remaining check                                                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -19,3 +19,5 @@ The owner reported these issues on build 9. Source changes are implemented for d
 | Intermittent delivery feels stuck              | Per-item persistent retry, round-robin pages, exact read IDs, resumable encrypted media and provider push jobs              | 131 device/protocol tests; cross-network/background testing on actual phones pending                                        |
 
 Build 10 is signed for the two paired phones, with no uninstall or data reset. Source and server work is preserved in Git. The owner has authorized AGPL source distribution. Public binary distribution still requires corresponding-source/store compliance, complete key rotation/recovery and physical acceptance; the existence of a compiled build is not a public-release recommendation.
+
+Build 11 is a standalone App Store-signed TestFlight candidate using the existing hosted preview services and encrypted delivery. Both participants must update in place before testing. Do not delete Mnelo, downgrade a migrated vault or use backup restore as a workaround. Follow the table above, including sender-offline delivery, cross-network calls, background/locked-screen notifications and photo/QR acceptance. Build and Apple availability evidence is in [BUILD_LOG.md](BUILD_LOG.md); a successful archive is not proof that an external tester has access.

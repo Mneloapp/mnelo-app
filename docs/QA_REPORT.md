@@ -827,3 +827,17 @@ Tests: 438 local automated tests and source checks PASS; Expo Doctor 21/21, depe
 Native checks: No new phone installation or Xcode/Gradle binary in this publication step. Both real phones remain on build 9.
 Known limitations: Public source does not certify cryptography, complete recovery/key lifecycle, solve the reported physical call failure by itself, or establish App Store license compatibility. Donation support remains future intent, without payment processing.
 Commit: Initial public `0d97fc563d74e018a98a2fea4e8cdd2bd36b54d1`; original source `c6140fe1ac7354b64c1bb702905d31a6a65e86af`; tree equality verified as `a1f578af5ce7a7c1f883a5d00f9559303cb4b2b8`.
+
+# September 13 — TestFlight 0.1.0 (11)
+
+Status: signed archive, App Store export and upload PASS; Apple processing/tester availability is tracked in [BUILD_LOG.md](BUILD_LOG.md). This is an owner-requested functional beta. Physical acceptance and independent security review are still pending.
+
+- Source: `58665f4c5aae5a32ec950a7fe971212a82a13e7d`; exact public corresponding source tag `ios-0.1.0-11`.
+- Full source checks: TypeScript, lint, formatting, security/environment/localization/brand PASS; 304 Jest tests in 61 suites, 3 server checks and 131 device/protocol checks (438 total). Public CI independently PASS.
+- Expo Doctor: 21/21 PASS. Native dependency versions remain aligned and unchanged.
+- Clean generated iOS project and pod resolution: PASS after using the correct native working directory; first failure retained with its cause in BUILD_LOG.md.
+- Xcode 26.6 archive / App Store-signed IPA / upload: PASS, build 11, existing com.mnelo.messenger identity and team. Production APNs and associated domains verified; debugging disabled in the IPA.
+- Permissions/QR: six purpose strings, EN/KA translations and real linked provider definition PASS in both archive and exported app. Corrected verification of stripped symbols; old build 9 remains a failing negative control.
+- Secrets: final native app scan and 49.93 MB disassembled Hermes scan both zero findings. No credentials or phone data added to public source.
+- Upload warnings: missing upstream dSYMs for React, ReactNativeDependencies, WebRTC and hermesvm limit crash symbolication; Apple upload succeeds. The app's own matching dSYM exists.
+- No device data reset or uninstall. Both phones must receive build 11 before testing the new protocol. Do not infer physical call, QR, media, background or migration PASS from these build results. Key rotation/recovery and public-release gates remain documented.

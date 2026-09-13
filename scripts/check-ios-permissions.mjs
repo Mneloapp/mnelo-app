@@ -14,6 +14,7 @@ const keys = [
   'NSContactsUsageDescription',
   'NSLocationWhenInUseUsageDescription',
   'NSMotionUsageDescription',
+  'NSCalendarsUsageDescription',
 ];
 function plist(path) {
   return JSON.parse(
@@ -46,6 +47,18 @@ assert.equal(
   info.NSMotionUsageDescription,
   JSON.parse(readFileSync('src/i18n/native/en.json', 'utf8')).ios.NSMotionUsageDescription,
 );
+assert.equal(
+  info.NSCalendarsUsageDescription,
+  JSON.parse(readFileSync('src/i18n/native/en.json', 'utf8')).ios.NSCalendarsUsageDescription,
+);
+for (const key of [
+  'NSCalendarsFullAccessUsageDescription',
+  'NSCalendarsWriteOnlyAccessUsageDescription',
+  'NSRemindersUsageDescription',
+  'NSRemindersFullAccessUsageDescription',
+]) {
+  assert.equal(info[key], undefined, `IOS_CALENDAR_SCOPE_UNEXPECTED: ${key}`);
+}
 assert.equal(info.NSLocationAlwaysUsageDescription, undefined, 'IOS_ALWAYS_LOCATION_UNEXPECTED');
 assert.equal(
   info.NSLocationAlwaysAndWhenInUseUsageDescription,
@@ -87,5 +100,5 @@ if (process.argv[2]) {
   );
 }
 console.log(
-  'iOS purpose strings: 6 keys and EN/KA translations PASS; no always/background location; archived apps include the QR provider. This does not prove Apple processing or physical scanning/permission QA.',
+  'iOS purpose strings: 7 keys and EN/KA translations PASS; no always/background location; archived apps include the QR provider. This does not prove Apple processing or physical scanning/permission QA.',
 );

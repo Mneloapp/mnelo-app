@@ -7,6 +7,7 @@
     "NSPhotoLibraryUsageDescription": "Choose a photo to share on your Mnelo profile or in a conversation.",
     "NSContactsUsageDescription": "Use the names saved in your Contacts and save people you add. Your address book is not uploaded.",
     "NSLocationWhenInUseUsageDescription": "Share your current location with this conversation only when you choose.",
+    "NSCalendarsUsageDescription": "Add a Mnelo chat event to your calendar only when you choose to save it. Mnelo does not read your existing events.",
     "NSMotionUsageDescription": "Mnelo does not use motion or fitness data. You can deny this permission and continue using all messaging and calling features."
   },
   "android": {

@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '22',
+    buildNumber: '23',
     supportsTablet: false,
     associatedDomains: ['applinks:mnelo.com', 'applinks:www.mnelo.com'],
     infoPlist: { UIBackgroundModes: ['audio', 'voip', 'remote-notification'] },
@@ -122,7 +122,17 @@ const config: ExpoConfig = {
     ['./plugins/with-local-network.cjs', { local: environment.appEnv === 'local' }],
     './plugins/with-signal.cjs',
     ['@livekit/react-native-expo-plugin', { android: { enableScreenShareService: true } }],
-    ['expo-calendar', { calendarPermission: false, remindersPermission: false }],
+    [
+      'expo-calendar',
+      {
+        // The linked EventKit framework requires the legacy purpose string even
+        // though the system event editor does not request access to calendars.
+        calendarPermission: nativeEnglish.ios.NSCalendarsUsageDescription,
+        writeOnlyAccess: true,
+        writeOnlyCalendarPermission: false,
+        remindersPermission: false,
+      },
+    ],
     './plugins/with-screen-sharing.cjs',
     ['expo-sqlite', { useSQLCipher: true, enableFTS: false }],
     [

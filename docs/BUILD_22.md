@@ -10,7 +10,9 @@ Long press opens message actions at the measured message position, with a moving
 
 Only a message author may edit their sent text or delete an individual sent item for everyone. Revisions are authenticated and ordered locally; deletion is terminal, including when it arrives before the original message or its attachment. Photos, voice notes, documents, location, contacts, polls and events use the same deletion control. Deleted content becomes a placeholder and reactions/media are removed from the local database. Clearing a whole conversation never requests remote deletion. Already queued explicit message changes survive a later local clear.
 
-All participants should update to build 22 before group calling, screen sharing, editing or deletion tests. Build 21 does not implement the new group or message-change controls. Deletion cannot revoke a copy someone separately saved or exported.
+Build 22 was rejected during Apple processing for a missing calendar purpose string. Build 23 adds the EN/KA string without adding calendar-read requests and is the replacement release.
+
+All participants should update to build 23 before group calling, screen sharing, editing or deletion tests. Build 21 does not implement the new group or message-change controls. Deletion cannot revoke a copy someone separately saved or exported.
 
 ## Verification
 

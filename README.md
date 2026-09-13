@@ -5,7 +5,7 @@
 Built for simple, private human communication, without AI. A future voluntary
 donation model is intended; no payment integration is active.
 
-> September 14: TestFlight **0.1.0 (21)** is available to the existing internal testing group; the external group is **Waiting for Review**. Build 22 is in verification and adds group calls, video-call screen sharing and the latest chat corrections. [Build evidence](docs/BUILD_LOG.md) · [Build 22 behavior and validation](docs/BUILD_22.md).
+> September 14: TestFlight **0.1.0 (21)** is available to the existing internal testing group; the external group is **Waiting for Review**. Build 22 failed Apple processing because the linked calendar framework lacked its purpose string. Build 23 corrects this metadata and retains group calls, video-call screen sharing and the latest chat corrections. [Build evidence](docs/BUILD_LOG.md) · [Build 22 behavior and validation](docs/BUILD_22.md).
 
 Mnelo is the official product name. The product is now a device-owned messenger: direct chats, private groups and voice/video calls. Navigation is **Chats | Calls | Me**. Connect, Need/Offer, matching and reputation are removed. Phone registration and exact-number contact lookup are supported through a separate minimal identity registry. Calls provides local history and voice/video calling to saved contacts; calls also remain available inside direct conversations.
 

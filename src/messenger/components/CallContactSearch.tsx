@@ -13,7 +13,13 @@ import { CallActions, type CallTarget } from '../screens/CallActions';
 import { PeerAvatar } from './ContactCard';
 import type { Contact } from '../model';
 
-export function CallContactSearch({ search }: { search: string }) {
+export function CallContactSearch({
+  search,
+  embedded = false,
+}: {
+  search: string;
+  embedded?: boolean;
+}) {
   const { engine, view, identity, enrollment, calls, mesh } = useDevice();
   const { client, status } = usePhoneService();
   const cache = useQueryClient();
@@ -119,7 +125,9 @@ export function CallContactSearch({ search }: { search: string }) {
   return (
     <>
       <FlatList
-        style={ui.flex}
+        style={embedded ? undefined : ui.flex}
+        scrollEnabled={!embedded}
+        showsVerticalScrollIndicator={false}
         data={query === search.trim() ? (result.data?.matches ?? []) : []}
         keyExtractor={(c) => c.key}
         keyboardShouldPersistTaps="handled"

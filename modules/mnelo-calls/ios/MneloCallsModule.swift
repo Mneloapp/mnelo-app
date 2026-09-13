@@ -36,11 +36,13 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     RTCAudioSession.sharedInstance().useManualAudio = true
     RTCAudioSession.sharedInstance().isAudioEnabled = false
   }
+  func contains(_ id: UUID) -> Bool { live.contains(id) }
   func start() {
     guard registry == nil else { return }
     let next = PKPushRegistry(queue: .main)
     next.delegate = self
     next.desiredPushTypes = [.voIP]
+    MneloScreenShare.shared.stop()
     registry = next
   }
   private func event(_ value: [String: Any]) {
@@ -160,6 +162,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func providerDidReset(_ provider: CXProvider) {
     for id in live { event(["type":"end", "id":id.uuidString.lowercased()]) }
+    MneloScreenShare.shared.stop()
     live.removeAll()
     answeredCalls.removeAll()
     outgoingCalls.removeAll()
@@ -211,6 +214,15 @@ public class MneloCallsModule: Module {
       self.observer = NotificationCenter.default.addObserver(forName: wakeChanged, object: nil, queue: .main) { [weak self] _ in self?.sendEvent("changed", [:]) }
     }
     OnStopObserving { if let observer = self.observer { NotificationCenter.default.removeObserver(observer) }; self.observer = nil }
+    AsyncFunction("prepareScreenShare") { (value: String) async throws -> String in
+      try await MainActor.run {
+        guard let id = UUID(uuidString: value) else { throw NSError(domain: "Mnelo", code: 1) }
+        return try MneloScreenShare.shared.prepare(id)
+      }
+    }
+    AsyncFunction("presentScreenShare") { (token: String) async throws in try await MainActor.run { try MneloScreenShare.shared.present(token) } }
+    AsyncFunction("screenShareActive") { (token: String) async -> Bool in await MainActor.run { MneloScreenShare.shared.active(token) } }
+    AsyncFunction("stopScreenShare") { (token: String) async in await MainActor.run { MneloScreenShare.shared.stop(token: token) } }
     AsyncFunction("state") { () async -> [String: Any] in await MainActor.run { MneloCallManager.shared.start(); return MneloCallManager.shared.state() } }
     AsyncFunction("drain") { () async -> [[String: Any]] in await MainActor.run { MneloCallManager.shared.drain() } }
     AsyncFunction("incoming") { (value: String, video: Bool) async in

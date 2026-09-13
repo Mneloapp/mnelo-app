@@ -2,6 +2,7 @@ import { DeviceCalls } from '@/messenger/calls';
 import type { DeviceMessenger } from '@/messenger/engine';
 import type { PeerMesh } from '@/messenger/peer-mesh';
 import { captureCall, stopCallAudio } from '@/messenger/call-platform';
+jest.mock('@/messenger/capture-screen', () => ({ captureScreen: jest.fn() }));
 jest.mock('@/messenger/call-platform', () => ({
   captureCall: jest.fn(async () => ({ getTracks: () => [] })),
   stopCallAudio: jest.fn(async () => undefined),

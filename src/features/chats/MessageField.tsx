@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import { useWindowDimensions, type TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { Field } from '@/components/ui';
@@ -12,22 +12,25 @@ export function MessageField({
   onChangeText,
   focusKey,
   onFocus,
+  inputRef,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   focusKey?: string | undefined;
   onFocus?: () => void;
+  inputRef?: RefObject<TextInput | null>;
 }) {
   const { t } = useTranslation();
   const { fontScale } = useWindowDimensions();
   const minimum = inputMinimumHeight(fontScale);
   const maximum = Math.max(minimum, theme.controls.textareaHeight);
-  const input = useRef<TextInput>(null);
+  const fallbackInput = useRef<TextInput>(null);
+  const input = inputRef ?? fallbackInput;
   useEffect(() => {
     if (!focusKey) return;
     const timer = setTimeout(() => input.current?.focus(), 100);
     return () => clearTimeout(timer);
-  }, [focusKey]);
+  }, [focusKey, input]);
   return (
     <Field
       inputRef={input}

@@ -16,13 +16,15 @@ export function ReplyQuote({ chat, id }: { chat: string; id: string }) {
   const quote = q.data;
   const body =
     quote?.body ||
-    (quote?.kind === 'image'
-      ? t('messenger.photo')
-      : quote?.kind === 'voice'
-        ? t('messenger.voice')
-        : quote?.kind === 'file'
-          ? t('messenger.file')
-          : t('messenger.quoteUnavailable'));
+    (quote?.kind === 'deleted'
+      ? t('messenger.deletedMessage')
+      : quote?.kind === 'image'
+        ? t('messenger.photo')
+        : quote?.kind === 'voice'
+          ? t('messenger.voice')
+          : quote?.kind === 'file'
+            ? t('messenger.file')
+            : t('messenger.quoteUnavailable'));
   return (
     <View style={styles.quote}>
       <AppText variant="label" numberOfLines={1}>

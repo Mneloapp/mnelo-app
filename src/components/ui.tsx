@@ -43,8 +43,10 @@ export function Page({
   nativeHeader = false,
   nativeKeyboardInsets = false,
   showDevelopmentNotice = true,
+  avoidKeyboard = true,
 }: PropsWithChildren<{
   nativeHeader?: boolean;
+  avoidKeyboard?: boolean;
   nativeKeyboardInsets?: boolean;
   showDevelopmentNotice?: boolean;
   title?: string;
@@ -82,6 +84,7 @@ export function Page({
       ]}
     >
       <KeyboardAvoidingView
+        enabled={avoidKeyboard}
         style={ui.flex}
         behavior={
           Platform.OS === 'ios'
@@ -355,9 +358,11 @@ export function Field({
 }
 export function Avatar({
   uri,
+  group = false,
   size = 'normal',
 }: {
   name: string;
+  group?: boolean;
   uri?: string | undefined;
   size?: 'small' | 'normal' | 'large' | 'profile' | 'call';
 }) {
@@ -384,7 +389,7 @@ export function Avatar({
         />
       ) : (
         <AppIcon
-          name="user"
+          name={group ? 'users' : 'user'}
           size={t.avatar[size] / 2}
           color={dark ? t.colors.callSecondary : t.colors.textSecondaryOnSoft}
         />

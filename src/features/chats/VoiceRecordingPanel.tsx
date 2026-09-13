@@ -91,7 +91,7 @@ export function VoiceRecordingPanel({
             <VoiceWaveform samples={samples} live={recording} />
             <IconButton
               variant="soft"
-              icon={recording ? 'square' : 'mic'}
+              icon={recording ? 'stop' : 'mic'}
               label={t(recording ? 'media.stop' : 'media.record')}
               disabled={disabled}
               busy={preparing}

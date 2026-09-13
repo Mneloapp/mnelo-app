@@ -62,11 +62,19 @@ export function CallActions({
     if (trusted) void mesh?.focus(target.key).catch(() => undefined);
   }, [mesh, target.key, trusted]);
   const available = Boolean(
-    trusted && calls && (calls.supportsQueuedSignaling || mesh?.online(target.key)),
+    calls &&
+    (target.history?.group
+      ? calls.supportsQueuedSignaling
+      : trusted && (calls.supportsQueuedSignaling || mesh?.online(target.key))),
   );
   function start(media: 'voice' | 'video') {
     void action.run(async () => {
       if (!calls || !available || current) return;
+      if (target.history?.group) {
+        onClose();
+        router.push({ pathname: '/call/[id]', params: { id: target.history.chatId, media } });
+        return;
+      }
       const saved = (await engine.contacts()).find((c) => c.key === target.key && !c.blocked);
       if (!saved) return;
       const id = await engine.trustContact(saved);
@@ -79,7 +87,11 @@ export function CallActions({
   return (
     <ActionSheet
       visible
-      title={contacts.data?.find((c) => c.key === target.key)?.name ?? target.name}
+      title={
+        target.history?.group
+          ? target.name
+          : (contacts.data?.find((c) => c.key === target.key)?.name ?? target.name)
+      }
       onClose={onClose}
     >
       <CurrentCall onNavigate={onClose} onOpen={onStarted} />

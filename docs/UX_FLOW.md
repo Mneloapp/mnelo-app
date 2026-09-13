@@ -22,7 +22,7 @@ New chat / New call → New contact → Find by phone number → complete known 
 
 New chat / New call → New contact → Add with Mnelo code → confirm identity through a trusted channel → save local name → picker. Both devices must trust the corresponding identity for a direct connection. Group owners may introduce member keys through authenticated group membership; this is delegated group trust, not a fabricated verification badge.
 
-Chats support local pending/delivered/read state, text, photos, files, voice notes, explicit location/contact sharing, reply, reaction, forwarding and local deletion. History is local and paginated. Offline means waiting on the sending device. No platform queue is implied.
+Chats support local pending/delivered/read state, text, photos, files, voice notes, explicit location/contact sharing, reply, reaction, forwarding, author text editing and individual deletion for everyone. Clearing a whole conversation stays local. History is local and paginated. Offline means waiting on the sending device. No platform queue is implied.
 
 New chat → New group → name and select contacts → create → conversation. Group details let the owner change members/name. Other members can leave locally; owner notification is retried when connected. Existing history stays on each device.
 

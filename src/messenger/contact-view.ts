@@ -54,7 +54,7 @@ export class ContactView {
     ]);
     return calls.map((c) => ({
       ...c,
-      name: names.get(c.peer) ?? c.name,
+      name: c.group ? c.name : (names.get(c.peer) ?? c.name),
     }));
   }
 }

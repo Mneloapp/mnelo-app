@@ -2,6 +2,20 @@ import { z } from 'zod';
 import type { CallDirection, CallOutcome } from './call-record';
 
 export const peerKey = z.string().regex(/^[a-f0-9]{64}$/);
+export const MAX_CALL_PARTICIPANTS = 8;
+export const groupCallSchema = z
+  .object({
+    chat: z.string().min(1).max(80),
+    host: peerKey,
+    participants: z.array(peerKey).min(2).max(MAX_CALL_PARTICIPANTS),
+  })
+  .strict()
+  .refine(
+    (value) =>
+      new Set(value.participants).size === value.participants.length &&
+      value.participants.includes(value.host),
+  );
+export type GroupCall = z.infer<typeof groupCallSchema>;
 const identifier = z.string().uuid();
 export const contactSchema = z
   .object({ key: peerKey, name: z.string().trim().min(1).max(60) })
@@ -9,6 +23,7 @@ export const contactSchema = z
 export type Contact = z.infer<typeof contactSchema> & { blocked: boolean; phone?: string };
 export type LocalIdentity = { key: string; secret: string; name: string };
 export type LocalCall = {
+  group?: boolean;
   id: string;
   chatId: string;
   peer: string;
@@ -35,6 +50,7 @@ export type Chat = {
   updated: number;
 };
 export type LocalMessage = {
+  editedAt?: number;
   id: string;
   chatId: string;
   sender: string;
@@ -61,10 +77,22 @@ export interface LocalDatabase {
 export const packetSchema = z.discriminatedUnion('type', [
   z
     .object({
+      type: z.literal('message_change'),
+      id: identifier,
+      chat: z.string().min(1).max(80),
+      action: z.enum(['edit', 'delete']),
+      revision: z.number().int().min(1).max(2147483647),
+      body: z.string().max(8000),
+      changedAt: z.number().int().nonnegative().max(8640000000000000),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('call'),
       id: identifier,
       action: z.enum(['invite', 'accept', 'decline', 'end']),
       media: z.enum(['voice', 'video']),
+      group: groupCallSchema.optional(),
     })
     .strict(),
   z
@@ -163,6 +191,8 @@ CREATE TABLE IF NOT EXISTS reactions (message_id TEXT NOT NULL REFERENCES messag
 CREATE TABLE IF NOT EXISTS reaction_versions (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,peer TEXT NOT NULL,emoji TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(message_id,peer,emoji));
 CREATE TABLE IF NOT EXISTS group_deliveries (chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE, peer TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(chat_id,peer));
 CREATE TABLE IF NOT EXISTS forgotten_messages (id TEXT PRIMARY KEY, peer TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS message_changes (message_id TEXT NOT NULL, peer TEXT NOT NULL, chat TEXT NOT NULL, revision INTEGER NOT NULL, action TEXT NOT NULL CHECK(action IN ('edit','delete')), body TEXT NOT NULL, changed_at INTEGER NOT NULL, PRIMARY KEY(message_id,peer));
+CREATE TABLE IF NOT EXISTS recent_reactions (emoji TEXT PRIMARY KEY, used_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS control_outbox (id TEXT PRIMARY KEY,peer TEXT NOT NULL,packet TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS delivery_block_changes (peer TEXT PRIMARY KEY,blocked INTEGER NOT NULL CHECK(blocked IN (0,1)),revision TEXT NOT NULL);
 

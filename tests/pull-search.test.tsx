@@ -1,58 +1,49 @@
 import { act, renderHook, render, screen } from '@testing-library/react-native';
-import { usePullSearch, searchScrollIntent, PullSearch } from '@/components/PullSearch';
+import { usePullSearch, PullSearch } from '@/components/PullSearch';
 import { chatStamp, ChatHistoryRow } from '@/messenger/components/ChatHistoryRow';
 import type { Chat } from '@/messenger/model';
-import { View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-const scroll = (y: number) =>
-  ({ nativeEvent: { contentOffset: { x: 0, y } } }) as NativeSyntheticEvent<NativeScrollEvent>;
-test('both lists reveal on intentional downward drag and collapse upward; bounce settling never reverses the state', async () => {
+import { FlatList, View, type LayoutChangeEvent } from 'react-native';
+const layout = (height: number) =>
+  ({ nativeEvent: { layout: { height, width: 390, x: 0, y: 0 } } }) as LayoutChangeEvent;
+test('even an empty list has native scroll travel for its search header; later layout changes never reset a user scroll', async () => {
   const { result, rerender } = await renderHook(
-    ({ query }: { query: string }) => usePullSearch(query),
-    {
-      initialProps: { query: '' },
-    },
+    ({ value }: { value: string }) => usePullSearch<Chat>(value),
+    { initialProps: { value: '' } },
   );
-  expect(result.current.visible).toBe(false);
-  await act(() => {
-    result.current.scrollProps.onScrollBeginDrag(scroll(0));
-    result.current.scrollProps.onScroll(scroll(-40));
-    result.current.scrollProps.onScrollEndDrag();
-    result.current.scrollProps.onScroll(scroll(0));
-  });
-  expect(result.current.visible).toBe(true);
-  await act(() => {
-    result.current.scrollProps.onScrollBeginDrag(scroll(0));
-    result.current.scrollProps.onScroll(scroll(50));
-  });
-  expect(result.current.visible).toBe(false);
+  const scrollToOffset = jest.fn();
+  result.current.listRef.current = { scrollToOffset } as unknown as FlatList<Chat>;
+  await act(() => result.current.scrollProps.onLayout(layout(600)));
+  await act(() => result.current.measureHeader(layout(92)));
+  expect(result.current.scrollProps.contentContainerStyle.minHeight).toBe(692);
+  expect(scrollToOffset).toHaveBeenLastCalledWith({ offset: 92, animated: false });
+  await act(() => result.current.scrollProps.onScrollBeginDrag());
+  scrollToOffset.mockClear();
+  await act(() => result.current.scrollProps.onLayout(layout(610)));
+  expect(scrollToOffset).not.toHaveBeenCalled();
+  await act(() => result.current.reveal());
+  expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
   await act(() => result.current.focus(true));
-  await act(() => result.current.scrollProps.onScroll(scroll(100)));
-  expect(result.current.visible).toBe(true);
-  await rerender({ query: 'Contact' });
+  expect(result.current.scrollProps.stickyHeaderIndices).toEqual([0]);
+  await rerender({ value: 'Contact' });
   await act(() => result.current.focus(false));
-  await act(() => result.current.scrollProps.onScroll(scroll(150)));
-  expect(result.current.visible).toBe(true);
-  await rerender({ query: '' });
-  await act(() => result.current.scrollProps.onScroll(scroll(200)));
-  expect(result.current.visible).toBe(false);
+  expect(result.current.locked).toBe(true);
+  await rerender({ value: '' });
+  await act(() => result.current.close());
+  expect(result.current.scrollProps.stickyHeaderIndices).toEqual([]);
+  expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 92 }));
 });
-test('small direction changes do not repeatedly open and close search', () => {
-  expect(searchScrollIntent(1, 3, 1).hide).toBe(false);
-  expect(searchScrollIntent(0, -8, 0).reveal).toBe(false);
-  expect(searchScrollIntent(300, 260, 0).reveal).toBe(true);
-});
-test('search remains mounted while hidden so toggling does not replace the input or reset query', async () => {
-  const props = {
-    label: 'Find a chat',
-    value: '',
-    onChangeText: jest.fn(),
-    onFocusChange: jest.fn(),
-    onClose: jest.fn(),
-  };
-  const { rerender } = await render(<PullSearch {...props} visible />);
+test('search is a persistent header with no animated height or border separating it from the list', async () => {
+  await render(
+    <PullSearch
+      label="Find a chat"
+      value=""
+      onChangeText={jest.fn()}
+      onFocusChange={jest.fn()}
+      onClose={jest.fn()}
+    />,
+  );
   expect(screen.getByLabelText('Find a chat')).toBeVisible();
-  await rerender(<PullSearch {...props} visible={false} />);
-  expect(screen.getByLabelText('Find a chat', { includeHiddenElements: true })).toBeTruthy();
+  expect(screen.getByTestId('pull-search-header')).not.toHaveStyle({ borderBottomWidth: 1 });
 });
 test('chat rows show the latest local activity at the upper right in 24-hour format and keep unread counts', async () => {
   const now = new Date(2026, 8, 13, 23, 43).getTime(),

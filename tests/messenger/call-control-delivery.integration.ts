@@ -114,3 +114,48 @@ test('expired and cancelled queued call invitations create one missed entry with
     await engine.close();
   }
 });
+
+test('group invitation recovery preserves its roster, remaining deadline and group history', async () => {
+  let now = 2_000_000_000_000;
+  const storage = deliveryDatabase(),
+    engine = new DeviceMessenger(storage.db, randomBytes, randomUUID, () => now);
+  await engine.initialize();
+  const own = await engine.createIdentity('Fixture owner');
+  const host = createKeys(randomBytes),
+    other = createKeys(randomBytes);
+  for (const peer of [host, other])
+    await engine.trustContact({ key: peer.key, name: 'Fixture member' });
+  const chat = await engine.createGroup('Fixture group', [host.key, other.key]);
+  const group = { chat, host: host.key, participants: [host.key, own.key, other.key] };
+  const packet = {
+    type: 'call' as const,
+    id: randomUUID(),
+    action: 'invite' as const,
+    media: 'video' as const,
+    group,
+  };
+  const received: { control: unknown; window: number | undefined }[] = [];
+  const calls = {
+    receive: async (_peer: string, control: unknown, window?: number) => {
+      received.push({ control, window });
+    },
+  };
+  try {
+    await new DeliveredCallControl(engine, calls, () => now).receive(host.key, packet, {
+      createdAt: now,
+    });
+    now += 40000;
+    await new DeliveredCallControl(engine, calls, () => now).recover();
+    assert.deepEqual(received[1], { control: packet, window: 20000 });
+    now += 20000;
+    await new DeliveredCallControl(engine, calls, () => now).recover();
+    assert.equal(received.length, 2);
+    const history = await engine.callHistory();
+    assert.equal(history.length, 1);
+    assert.equal(history[0]?.group, true);
+    assert.equal(history[0]?.chatId, chat);
+    assert.equal(history[0]?.status, 'missed');
+  } finally {
+    await engine.close();
+  }
+});

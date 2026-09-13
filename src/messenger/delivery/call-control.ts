@@ -1,6 +1,7 @@
 import type { CallControl, DeviceCalls } from '../calls';
 import type { DeviceMessenger } from '../engine';
 import { directChatId } from '../crypto';
+import { groupCallSchema, acceptsGroupCall, type GroupCall } from '../group-call';
 import { DELIVERY_TTL_MS } from './schema';
 
 export const CALL_RING_WINDOW_MS = 60000;
@@ -10,6 +11,7 @@ type PendingCall = {
   media: 'voice' | 'video';
   created_at: number;
   phase: 'incoming' | 'connecting' | 'active';
+  group_context: string | null;
 };
 // Durable call-id tombstones prevent a late invite from ringing again after
 // cancellation/restart. Audio/video never enters this journal or server store.
@@ -26,6 +28,9 @@ export class DeliveredCallControl {
         CREATE TABLE IF NOT EXISTS delivered_call_ends(peer TEXT NOT NULL,id TEXT NOT NULL,expires_at INTEGER NOT NULL,PRIMARY KEY(peer,id));
         CREATE TABLE IF NOT EXISTS delivered_call_invites(peer TEXT NOT NULL,id TEXT NOT NULL,media TEXT NOT NULL,created_at INTEGER NOT NULL,phase TEXT NOT NULL DEFAULT 'incoming',PRIMARY KEY(peer,id));
       `);
+      const columns = await db.all<{ name: string }>('PRAGMA table_info(delivered_call_invites)');
+      if (!columns.some((column) => column.name === 'group_context'))
+        await db.exec('ALTER TABLE delivered_call_invites ADD COLUMN group_context TEXT');
     }));
   }
   async track() {
@@ -48,6 +53,23 @@ export class DeliveredCallControl {
       db.all<PendingCall>('SELECT * FROM delivered_call_invites ORDER BY created_at LIMIT 20'),
     );
     for (const row of rows) {
+      let group: GroupCall | undefined;
+      if (row.group_context) {
+        try {
+          group = groupCallSchema.parse(JSON.parse(row.group_context));
+        } catch {
+          await this.engine.deliveryAtomic((db) =>
+            db.run('DELETE FROM delivered_call_invites WHERE peer=? AND id=?', row.peer, row.id),
+          );
+          continue;
+        }
+      }
+      if (group && !(await acceptsGroupCall(this.engine, group))) {
+        await this.engine.deliveryAtomic((db) =>
+          db.run('DELETE FROM delivered_call_invites WHERE peer=? AND id=?', row.peer, row.id),
+        );
+        continue;
+      }
       const live = this.calls.snapshot?.();
       if (live?.id === row.id && live.peer === row.peer) continue;
       if (
@@ -63,7 +85,7 @@ export class DeliveredCallControl {
         const own = this.engine.currentIdentity();
         if (own)
           await this.engine.recordCall(
-            directChatId(own.key, row.peer),
+            group?.chat ?? directChatId(own.key, row.peer),
             row.id,
             row.peer,
             row.media,
@@ -74,7 +96,13 @@ export class DeliveredCallControl {
       }
       await this.receive(
         row.peer,
-        { type: 'call', id: row.id, media: row.media, action: 'invite' },
+        {
+          type: 'call',
+          id: row.id,
+          media: row.media,
+          action: 'invite',
+          ...(group ? { group } : {}),
+        },
         { createdAt: row.created_at },
       );
     }
@@ -83,6 +111,13 @@ export class DeliveredCallControl {
     if (!(await this.engine.acceptsPeer(peer))) return;
     const own = this.engine.currentIdentity();
     if (!own) return;
+    if (
+      control.group &&
+      (!control.group.participants.includes(peer) ||
+        (control.action === 'invite' && control.group.host !== peer) ||
+        !(await acceptsGroupCall(this.engine, control.group)))
+    )
+      return;
     const completed = await this.engine.hasReceivedMessage(peer, control.id);
     const expired = this.now() - context.createdAt >= CALL_RING_WINDOW_MS;
     await this.initialize();
@@ -107,7 +142,7 @@ export class DeliveredCallControl {
     if (control.action === 'invite' && (expired || terminal || completed)) {
       if (!completed)
         await this.engine.recordCall(
-          directChatId(own.key, peer),
+          control.group?.chat ?? directChatId(own.key, peer),
           control.id,
           peer,
           control.media,
@@ -120,11 +155,12 @@ export class DeliveredCallControl {
     if (control.action === 'invite')
       await this.engine.deliveryAtomic((db) =>
         db.run(
-          'INSERT OR IGNORE INTO delivered_call_invites(peer,id,media,created_at) VALUES(?,?,?,?)',
+          'INSERT OR IGNORE INTO delivered_call_invites(peer,id,media,created_at,group_context) VALUES(?,?,?,?,?)',
           peer,
           control.id,
           control.media,
           context.createdAt,
+          control.group ? JSON.stringify(control.group) : null,
         ),
       );
     await this.calls.receive(

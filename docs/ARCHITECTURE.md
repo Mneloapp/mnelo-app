@@ -25,7 +25,7 @@ These are standard primitives and WebRTC protocols, with a **new Mnelo integrati
 
 ## Implementation boundaries
 
-- `src/messenger/engine.ts`: serialized local transactions, identity/contacts/chats/groups/media/history, receipt authorization, independent local deletion, backup/restore.
+- `src/messenger/engine.ts`: serialized local transactions, identity/contacts/chats/groups/media/history, receipt authorization, independent local conversation deletion, authenticated author message edits/deletion, backup/restore.
 - `src/messenger/peer-mesh.ts`: bounded live peers, signed signaling, DTLS channel lifecycle, file chunking and call negotiation. Up to 16 simultaneous direct links; contact probes rotate in batches. Open conversations are prioritized.
 - `src/messenger/calls.ts`: consent, ringing, accept/decline, tracks and call lifecycle. No content recording on a server.
 - `modules/mnelo-vault`: backup-excluded native directory. iOS file protection; Android noBackupFilesDir.

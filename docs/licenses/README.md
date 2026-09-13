@@ -13,6 +13,8 @@ and [publication scope](../OPEN_SOURCE.md).
   or declared license is not a compatibility finding or legal approval.
 - [Installed iOS dependency notices](Native-iOS-notices.txt), extracted from
   CocoaPods acknowledgments, excluding our own modules.
+- [ReplayKit socket sample provenance](../../plugins/broadcast/NOTICE.md) and
+  [Jitsi Apache-2.0 license](../../plugins/broadcast/LICENSE), retained with the adapted broadcast extension.
 - [libsignal 0.102.2 Rust dependency notices](Libsignal-Rust-notices.txt), extracted
   from the vendor's iOS acknowledgments. Android packaging must also be
   checked against the exact artifact; these are not blanket Android certification.

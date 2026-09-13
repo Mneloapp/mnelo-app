@@ -1,13 +1,36 @@
 import type { Packet } from './model';
+import { groupCallSchema, sameGroupCall, acceptsGroupCall, type GroupCall } from './group-call';
 import type { DeviceMessenger } from './engine';
 import type { PeerMesh } from './peer-mesh';
-import { captureCall, stopCallAudio, speakerOutput, switchCallCamera } from './call-platform';
+import {
+  captureCall,
+  stopCallAudio,
+  speakerOutput,
+  switchCallCamera,
+  callOutputStream,
+} from './call-platform';
 import { directChatId } from './crypto';
 import { callOutcome } from './call-record';
+import { captureScreen } from './capture-screen';
+import type { ScreenCapture } from './screen-capture';
+export type CallMediaState = { sharing: boolean; muted: boolean; camera: boolean };
 
 export type CallControl = Extract<Packet, { type: 'call' }>;
 export type CallSignaling = { send(peer: string, control: CallControl): Promise<void> };
+export type CallParticipant = {
+  peer: string;
+  status: 'ringing' | 'connecting' | 'active' | 'left' | 'declined' | 'failed';
+  remote: MediaStream | null;
+  muted: boolean;
+  camera: boolean;
+  sharing: boolean;
+};
 export type DeviceCall = {
+  screen?: MediaStream | null;
+  screenStarting?: boolean;
+  remoteState?: CallMediaState;
+  group?: GroupCall;
+  participants?: CallParticipant[];
   diagnostic?: string;
   id: string;
   peer: string;
@@ -76,6 +99,379 @@ export class DeviceCalls {
       Math.min(60_000, Math.max(1, delay)),
     );
   }
+  private screenCapture: ScreenCapture | null = null;
+  private screenRequest: AbortController | null = null;
+  private screenGeneration = 0;
+  private stopCapturedScreen() {
+    this.screenGeneration++;
+    this.screenRequest?.abort();
+    this.screenRequest = null;
+    this.screenCapture?.stop();
+    this.screenCapture = null;
+  }
+  localMediaState() {
+    return {
+      v: 1 as const,
+      sharing: Boolean(this.value?.screen),
+      camera: Boolean(this.value?.camera),
+      muted: Boolean(this.value?.muted),
+    };
+  }
+  remoteMediaState(peer: string, id: string, state: CallMediaState) {
+    const call = this.value;
+    if (!call || call.id !== id || !this.active()) return;
+    if (call.group)
+      this.update({
+        ...call,
+        participants: call.participants!.map((value) =>
+          value.peer === peer && ['connecting', 'active'].includes(value.status)
+            ? { ...value, ...state }
+            : value,
+        ),
+      });
+    else if (call.peer === peer) this.update({ ...call, remoteState: state });
+  }
+  outputStream() {
+    const call = this.value;
+    if (!call?.local) return null;
+    if (!call.screen) return call.local;
+    return callOutputStream(call.local, call.screen);
+  }
+  async shareScreen() {
+    const call = this.value;
+    if (!call || call.media !== 'video' || call.status !== 'active' || !call.local) return;
+    if (call.screen || call.screenStarting) {
+      await this.stopScreenShare();
+      return;
+    }
+    const generation = ++this.screenGeneration;
+    const request = new AbortController();
+    this.screenRequest = request;
+    this.update({ ...call, screenStarting: true });
+    try {
+      const capture = await captureScreen(call.id, request.signal);
+      if (generation !== this.screenGeneration || this.value?.id !== call.id || !this.active()) {
+        capture.stop();
+        return;
+      }
+      this.screenCapture = capture;
+      const track = capture.stream.getVideoTracks()[0]!;
+      track.addEventListener(
+        'ended',
+        () => {
+          if (this.screenCapture === capture) void this.stopScreenShare().catch(() => undefined);
+        },
+        { once: true },
+      );
+      this.update({ ...this.value, screen: capture.stream });
+      await this.mesh.replaceVideo(call.id, track);
+      if (generation !== this.screenGeneration || this.value?.id !== call.id || !this.active()) {
+        capture.stop();
+        return;
+      }
+      call.local.getVideoTracks().forEach((track) => {
+        track.enabled = false;
+      });
+      this.update({ ...this.value, screen: capture.stream, screenStarting: false });
+      this.mesh.publishMediaState(call.id);
+    } catch (error) {
+      if (generation !== this.screenGeneration || this.value?.id !== call.id || !this.active())
+        return;
+      this.stopCapturedScreen();
+      if (this.value?.id === call.id)
+        this.update({ ...this.value, screen: null, screenStarting: false });
+      await this.restoreCamera(call);
+      if (!(error instanceof Error && error.message === 'SCREEN_SHARE_CANCELLED')) throw error;
+    }
+  }
+  async stopScreenShare() {
+    const call = this.value;
+    this.stopCapturedScreen();
+    if (!call?.local || !this.active()) return;
+    call.local.getVideoTracks().forEach((track) => {
+      track.enabled = call.camera;
+    });
+    this.update({ ...call, screen: null, screenStarting: false });
+    await this.restoreCamera(call);
+  }
+  private async restoreCamera(call: DeviceCall) {
+    if (!call.local || this.value?.id !== call.id || !this.active()) return;
+    try {
+      await this.mesh.replaceVideo(call.id, call.local.getVideoTracks()[0] ?? null);
+    } catch (error) {
+      // A failed rollback must not leave a frozen screen advertised as a working camera.
+      if (this.value?.id === call.id) await this.end(true);
+      throw error;
+    }
+    if (this.value?.id === call.id) this.mesh.publishMediaState(call.id);
+  }
+  private groupReady = new Set<string>();
+  private groupOffers = new Set<string>();
+  private groupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private clearGroupTimers() {
+    this.groupTimers.forEach(clearTimeout);
+    this.groupTimers.clear();
+  }
+  private acceptsGroup(group: GroupCall) {
+    return acceptsGroupCall(this.engine, group);
+  }
+  async enforceMembership() {
+    const call = this.value;
+    if (
+      call?.group &&
+      this.active() &&
+      !(await this.acceptsGroup(call.group)) &&
+      this.value?.id === call.id
+    )
+      await this.end(true);
+  }
+  private groupParticipants(group: GroupCall): CallParticipant[] {
+    const own = this.engine.currentIdentity()!.key;
+    return group.participants
+      .filter((peer) => peer !== own)
+      .map((peer) => ({
+        peer,
+        status: 'ringing',
+        remote: null,
+        muted: false,
+        camera: true,
+        sharing: false,
+      }));
+  }
+  async startGroup(chat: string, peers: string[], media: 'voice' | 'video') {
+    const own = this.engine.currentIdentity();
+    if (!own) throw new Error('IDENTITY_REQUIRED');
+    const group = groupCallSchema.parse({
+      chat,
+      host: own.key,
+      participants: [...new Set([own.key, ...peers])].sort(),
+    });
+    if (this.active() || !(await this.acceptsGroup(group))) throw new Error('CALL_UNAVAILABLE');
+    if (this.active()) throw new Error('CALL_UNAVAILABLE');
+    const id = this.uuid();
+    this.groupReady.clear();
+    this.groupOffers.clear();
+    this.clearGroupTimers();
+    this.update({
+      id,
+      peer: own.key,
+      chat,
+      group,
+      participants: this.groupParticipants(group),
+      media,
+      incoming: false,
+      status: 'ringing',
+      local: null,
+      remote: null,
+      muted: false,
+      speaker: true,
+      camera: media === 'video',
+    });
+    this.expire();
+    try {
+      const stream = await captureCall(media === 'video', true);
+      if (this.value?.id !== id || !this.active()) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (!this.active()) await stopCallAudio();
+        return;
+      }
+      this.update({ ...this.value, local: stream });
+      await Promise.all(
+        this.value.participants!.map(async (participant) => {
+          try {
+            await this.send(participant.peer, { type: 'call', id, media, action: 'invite', group });
+            this.armGroupParticipant(participant.peer, id);
+          } catch {
+            await this.leaveParticipant(participant.peer, id, 'failed');
+          }
+        }),
+      );
+    } catch (error) {
+      if (this.value?.id === id) await this.end(true);
+      throw error;
+    }
+  }
+  private armGroupParticipant(peer: string, id: string) {
+    if (
+      this.groupTimers.has(peer) ||
+      !this.active() ||
+      this.value?.id !== id ||
+      this.value.participants?.find((value) => value.peer === peer)?.status === 'active'
+    )
+      return;
+    this.groupTimers.set(
+      peer,
+      setTimeout(() => {
+        this.groupTimers.delete(peer);
+        void this.leaveParticipant(peer, id, 'failed');
+      }, 60000),
+    );
+  }
+  private async receiveGroup(
+    peer: string,
+    control: CallControl & { group: GroupCall },
+    ringWindow?: number,
+  ) {
+    const { group } = control;
+    if (!group.participants.includes(peer) || !(await this.acceptsGroup(group))) return;
+    let call = this.value;
+    if (control.action === 'invite') {
+      if (peer !== group.host) return;
+      if (call?.id === control.id) return;
+      if (this.active()) {
+        await this.send(peer, { ...control, action: 'decline' }).catch(() => undefined);
+        await this.engine.recordCall(
+          group.chat,
+          control.id,
+          peer,
+          control.media,
+          'missed',
+          'incoming',
+        );
+        return;
+      }
+      this.groupReady.clear();
+      this.groupOffers.clear();
+      this.clearGroupTimers();
+      this.update({
+        id: control.id,
+        peer,
+        chat: group.chat,
+        group,
+        participants: this.groupParticipants(group),
+        media: control.media,
+        incoming: true,
+        status: 'incoming',
+        local: null,
+        remote: null,
+        muted: false,
+        speaker: true,
+        camera: control.media === 'video',
+      });
+      this.expire(ringWindow);
+      return;
+    }
+    if (
+      !call?.group ||
+      call.id !== control.id ||
+      call.media !== control.media ||
+      !sameGroupCall(call.group, group) ||
+      !this.active()
+    )
+      return;
+    const participant = call.participants?.find((value) => value.peer === peer);
+    if (!participant || ['left', 'declined', 'failed'].includes(participant.status)) return;
+    if (control.action === 'end' || control.action === 'decline') {
+      if (call.status === 'incoming' && peer === group.host) {
+        await this.end(false, false, 'remote');
+        return;
+      }
+      await this.leaveParticipant(
+        peer,
+        call.id,
+        control.action === 'decline' ? 'declined' : 'left',
+      );
+      return;
+    }
+    if (control.action !== 'accept') return;
+    const first = !this.groupReady.has(peer);
+    this.groupReady.add(peer);
+    if (!call.local || call.status === 'incoming') return;
+    if (first) {
+      // Answer readiness once, including an accept that arrived before our invite.
+      await this.send(peer, { ...control, action: 'accept' }).catch(() => undefined);
+    }
+    call = this.value;
+    if (call?.id === control.id && this.active()) await this.connectParticipant(peer, call.id);
+  }
+  private async acceptGroup(call: DeviceCall & { group: GroupCall }) {
+    this.update({ ...call, status: 'connecting' });
+    try {
+      if (!(await this.acceptsGroup(call.group))) throw new Error('CALL_UNAVAILABLE');
+      if (this.value?.id !== call.id || !this.active()) return;
+      const stream = await captureCall(call.media === 'video', true);
+      if (this.value?.id !== call.id || !this.active()) {
+        stream.getTracks().forEach((track) => track.stop());
+        if (!this.active()) await stopCallAudio();
+        return;
+      }
+      this.update({ ...this.value, local: stream });
+      await Promise.all(
+        this.value
+          .participants!.filter((value) => !['left', 'declined', 'failed'].includes(value.status))
+          .map(async (participant) => {
+            this.armGroupParticipant(participant.peer, call.id);
+            await this.send(participant.peer, {
+              type: 'call',
+              id: call.id,
+              media: call.media,
+              action: 'accept',
+              group: call.group,
+            }).catch(() => undefined);
+            if (this.groupReady.has(participant.peer))
+              await this.connectParticipant(participant.peer, call.id);
+          }),
+      );
+    } catch {
+      if (this.value?.id === call.id) await this.end(true);
+    }
+  }
+  private async connectParticipant(peer: string, id: string) {
+    const call = this.value;
+    if (
+      !call?.group ||
+      call.id !== id ||
+      !call.local ||
+      !this.active() ||
+      !this.groupReady.has(peer)
+    )
+      return;
+    const participant = call.participants?.find((value) => value.peer === peer);
+    if (!participant || ['active', 'left', 'declined', 'failed'].includes(participant.status))
+      return;
+    this.update({
+      ...call,
+      status: call.status === 'active' ? 'active' : 'connecting',
+      participants: call.participants!.map((value) =>
+        value.peer === peer ? { ...value, status: 'connecting' } : value,
+      ),
+    });
+    const own = this.engine.currentIdentity()!.key;
+    if (own > peer || this.groupOffers.has(peer)) return;
+    this.groupOffers.add(peer);
+    try {
+      await this.mesh.startMedia(peer, id, this.outputStream() ?? call.local);
+    } catch {
+      await this.leaveParticipant(peer, id, 'failed');
+    }
+  }
+  private async leaveParticipant(peer: string, id: string, status: 'left' | 'declined' | 'failed') {
+    const call = this.value;
+    if (!call?.group || call.id !== id || !this.active()) return;
+    clearTimeout(this.groupTimers.get(peer));
+    this.groupTimers.delete(peer);
+    this.groupReady.delete(peer);
+    this.mesh.endMedia(peer, id);
+    const participants = call.participants!.map((value) =>
+      value.peer === peer ? { ...value, status, remote: null } : value,
+    );
+    this.update({ ...call, participants });
+    if (participants.every((value) => ['left', 'declined', 'failed'].includes(value.status)))
+      await this.end(status === 'failed', false, 'remote');
+  }
+  mediaAllowed(peer: string, id: string) {
+    const call = this.value;
+    if (!call || call.id !== id || !this.active()) return false;
+    if (!call.group) return call.peer === peer && call.status === 'connecting';
+    return Boolean(
+      call.local &&
+      call.status !== 'incoming' &&
+      call.participants?.some(
+        (value) => value.peer === peer && ['ringing', 'connecting'].includes(value.status),
+      ) &&
+      this.groupReady.has(peer),
+    );
+  }
   async start(peer: string, media: 'voice' | 'video') {
     if (!(await this.engine.acceptsPeer(peer)) || this.active())
       throw new Error('CALL_UNAVAILABLE');
@@ -124,6 +520,9 @@ export class DeviceCalls {
   }
   async receive(peer: string, control: CallControl, ringWindow?: number) {
     if (!(await this.engine.acceptsPeer(peer))) return;
+    if (control.group)
+      return this.receiveGroup(peer, { ...control, group: control.group }, ringWindow);
+    if (control.action !== 'invite' && this.value?.group) return;
     if (control.action === 'invite') {
       // A retransmitted invite must not reject the call already ringing/active.
       if (this.value?.id === control.id && this.value.peer === peer) return;
@@ -183,6 +582,7 @@ export class DeviceCalls {
   async accept() {
     const call = this.value;
     if (!call || call.status !== 'incoming') return;
+    if (call.group) return this.acceptGroup({ ...call, group: call.group });
     this.update({ ...call, status: 'connecting' });
     try {
       this.stage('CAPTURE_INCOMING');
@@ -206,6 +606,10 @@ export class DeviceCalls {
   }
   allowedOffer(peer: string, id: string) {
     const call = this.value;
+    if (call?.group)
+      return this.mediaAllowed(peer, id) && peer < this.engine.currentIdentity()!.key
+        ? this.outputStream()
+        : null;
     return call?.peer === peer &&
       call.id === id &&
       call.incoming &&
@@ -216,10 +620,28 @@ export class DeviceCalls {
   }
   allowedAnswer(peer: string, id: string) {
     const call = this.value;
+    if (call?.group)
+      return this.mediaAllowed(peer, id) && peer > this.engine.currentIdentity()!.key;
     return call?.peer === peer && call.id === id && !call.incoming && call.status === 'connecting';
   }
   connected(peer: string, id: string) {
     const call = this.value;
+    if (call?.group) {
+      if (!this.mediaAllowed(peer, id)) return;
+      if (this.timer) clearTimeout(this.timer);
+      this.timer = null;
+      clearTimeout(this.groupTimers.get(peer));
+      this.groupTimers.delete(peer);
+      this.update({
+        ...call,
+        status: 'active',
+        diagnostic: 'CONNECTED',
+        participants: call.participants!.map((value) =>
+          value.peer === peer ? { ...value, status: 'active' } : value,
+        ),
+      });
+      return;
+    }
     if (call?.peer !== peer || call.id !== id || !this.active()) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
@@ -227,10 +649,22 @@ export class DeviceCalls {
   }
   remote(peer: string, id: string, stream: MediaStream) {
     const call = this.value;
+    if (call?.group && call.id === id && this.active()) {
+      this.update({
+        ...call,
+        participants: call.participants!.map((value) =>
+          value.peer === peer && ['connecting', 'active'].includes(value.status)
+            ? { ...value, remote: stream }
+            : value,
+        ),
+      });
+      return;
+    }
     if (call?.peer === peer && call.id === id && this.active())
       this.update({ ...call, remote: stream });
   }
   async failed(peer: string, id: string) {
+    if (this.value?.group) return this.leaveParticipant(peer, id, 'failed');
     if (this.value?.peer === peer && this.value.id === id && this.active()) await this.end(true);
   }
   async end(
@@ -242,9 +676,22 @@ export class DeviceCalls {
     if (!call || !this.active()) return;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    this.update({ ...call, status: failed ? 'failed' : 'ended', local: null, remote: null });
+    this.stopCapturedScreen();
+    this.update({
+      ...call,
+      status: failed ? 'failed' : 'ended',
+      local: null,
+      remote: null,
+      screen: null,
+      screenStarting: false,
+      ...(call.participants
+        ? { participants: call.participants.map((value) => ({ ...value, remote: null })) }
+        : {}),
+    });
     // Stop local capture and playback before waiting for delivery of the hangup control.
-    this.mesh.endMedia(call.peer, call.id);
+    this.clearGroupTimers();
+    for (const peer of call.group ? call.group.participants : [call.peer])
+      this.mesh.endMedia(peer, call.id);
     call.local?.getTracks().forEach((track) => track.stop());
     const audioStopped = stopCallAudio().catch(() => undefined);
     let notification = Promise.resolve();
@@ -254,8 +701,15 @@ export class DeviceCalls {
         id: call.id,
         media: call.media,
         action: call.status === 'incoming' ? 'decline' : 'end',
+        ...(call.group ? { group: call.group } : {}),
       };
-      if (this.signaling) notification = this.send(call.peer, control).catch(() => undefined);
+      if (call.group)
+        notification = Promise.all(
+          call.participants!.map((participant) =>
+            this.send(participant.peer, control).catch(() => undefined),
+          ),
+        ).then(() => undefined);
+      else if (this.signaling) notification = this.send(call.peer, control).catch(() => undefined);
       else if (!this.mesh.send(call.peer, control))
         void this.mesh
           .waitForPeer(call.peer, () => true, 15000)
@@ -285,15 +739,17 @@ export class DeviceCalls {
       track.enabled = !muted;
     });
     this.update({ ...call, muted });
+    this.mesh.publishMediaState?.(call.id);
   }
   camera() {
     const call = this.value;
-    if (!call?.local || call.media !== 'video') return;
+    if (!call?.local || call.media !== 'video' || call.screen || call.screenStarting) return;
     const camera = !call.camera;
     call.local.getVideoTracks().forEach((track) => {
       track.enabled = camera;
     });
     this.update({ ...call, camera });
+    this.mesh.publishMediaState?.(call.id);
   }
   async speaker() {
     const call = this.value;
@@ -306,6 +762,10 @@ export class DeviceCalls {
     if (stream) await switchCallCamera(stream);
   }
   stop() {
+    this.stopCapturedScreen();
+    this.clearGroupTimers();
+    this.groupReady.clear();
+    this.groupOffers.clear();
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.value?.local?.getTracks().forEach((track) => track.stop());

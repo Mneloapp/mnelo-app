@@ -61,9 +61,15 @@ export class PeerMesh implements PeerTransport {
     null;
   calls: DeviceCalls | null = null;
   wake: DeviceWake | null = null;
+  private videoReplacement = Promise.resolve();
   private mediaLinks = new Map<
     string,
-    { peer: RTCPeerConnection; id: string; deadline: ReturnType<typeof setTimeout> }
+    {
+      peer: RTCPeerConnection;
+      id: string;
+      deadline: ReturnType<typeof setTimeout>;
+      state?: RTCDataChannel;
+    }
   >();
   private socket: WebSocket | null = null;
   private links = new Map<string, Link>();
@@ -123,6 +129,7 @@ export class PeerMesh implements PeerTransport {
     throw new Error('CALL_UNAVAILABLE');
   }
   async enforceContacts() {
+    await this.calls?.enforceMembership();
     for (const peer of new Set([
       ...this.links.keys(),
       ...this.mediaLinks.keys(),
@@ -641,8 +648,7 @@ export class PeerMesh implements PeerTransport {
         !accepted ||
         this.pendingMedia.get(remote) !== id ||
         call?.id !== id ||
-        call.peer !== remote ||
-        call.status !== 'connecting'
+        !this.calls?.mediaAllowed(remote, id)
       )
         throw new Error('CALL_CANCELLED');
       peer = this.factory(configuration);
@@ -654,7 +660,11 @@ export class PeerMesh implements PeerTransport {
     }, 30_000);
     this.mediaLinks.set(remote, { peer, id, deadline });
     this.calls?.stage('MEDIA_TRACKS');
-    for (const track of stream.getTracks()) peer.addTrack(track, stream);
+    const output = this.calls?.outputStream() ?? stream;
+    for (const track of output.getTracks()) peer.addTrack(track, output);
+    peer.addEventListener('datachannel', (event) =>
+      this.attachMediaState(remote, id, event.channel),
+    );
     peer.addEventListener('track', (event) => {
       if (this.mediaLinks.get(remote)?.peer !== peer) return;
       const stream = event.streams[0];
@@ -694,6 +704,11 @@ export class PeerMesh implements PeerTransport {
   }
   async startMedia(remote: string, id: string, stream: MediaStream) {
     const peer = await this.createMedia(remote, id, stream);
+    this.attachMediaState(
+      remote,
+      id,
+      peer.createDataChannel('mnelo-call-state-v1', { ordered: true }),
+    );
     this.calls?.stage('MEDIA_CREATE_OFFER');
     await peer.setLocalDescription(await peer.createOffer());
     await this.publishMedia(remote, id, peer, 'offer');
@@ -740,6 +755,73 @@ export class PeerMesh implements PeerTransport {
         await this.calls?.failed(signal.from, signal.session);
       }
     }
+  }
+  private attachMediaState(remote: string, id: string, channel: RTCDataChannel) {
+    const link = this.mediaLinks.get(remote);
+    if (!link || link.id !== id || channel.label !== 'mnelo-call-state-v1' || link.state) {
+      channel.close();
+      return;
+    }
+    link.state = channel;
+    channel.addEventListener('open', () => this.publishMediaState(id));
+    channel.addEventListener('message', (event) => {
+      if (
+        this.mediaLinks.get(remote) !== link ||
+        typeof event.data !== 'string' ||
+        event.data.length > 256
+      )
+        return;
+      try {
+        const state = z
+          .object({
+            v: z.literal(1),
+            sharing: z.boolean(),
+            camera: z.boolean(),
+            muted: z.boolean(),
+          })
+          .strict()
+          .parse(JSON.parse(event.data));
+        this.calls?.remoteMediaState(remote, id, state);
+      } catch {
+        /* Only bounded media state is accepted on this authenticated call channel. */
+      }
+    });
+  }
+  publishMediaState(id: string) {
+    const state = JSON.stringify(this.calls?.localMediaState());
+    for (const link of this.mediaLinks.values())
+      if (link.id === id && link.state?.readyState === 'open') {
+        try {
+          link.state.send(state);
+        } catch {
+          /* Media continues while the control channel closes. */
+        }
+      }
+  }
+  replaceVideo(id: string, track: MediaStreamTrack | null) {
+    const next = this.videoReplacement
+      .catch(() => undefined)
+      .then(async () => {
+        const results = await Promise.allSettled(
+          [...this.mediaLinks.entries()]
+            .filter(([, link]) => link.id === id)
+            .map(async ([remote, link]) => {
+              const sender = link.peer
+                .getSenders()
+                .find((sender) => sender.track?.kind === 'video');
+              try {
+                if (sender) await sender.replaceTrack(track);
+              } catch (error) {
+                if (this.mediaLinks.get(remote) === link) throw error;
+              }
+            }),
+        );
+        // Wait for every peer before a queued rollback can restore the camera.
+        const failure = results.find((result) => result.status === 'rejected');
+        if (failure?.status === 'rejected') throw failure.reason;
+      });
+    this.videoReplacement = next;
+    return next;
   }
   endMedia(remote: string, id: string) {
     if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { FlatList } from 'react-native';
+import { FlatList, View } from 'react-native';
+import type { Chat } from '../model';
+import { theme } from '@/theme/tokens';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -21,7 +23,7 @@ export function ChatsScreen() {
   const { view } = useDevice();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
-  const searchBar = usePullSearch(search);
+  const { listRef: searchListRef, ...searchBar } = usePullSearch<Chat>(search);
   const today = useDayBoundary();
   const [filter, setFilter] = useState<ChatFilter>('all');
   const q = useInfiniteQuery({
@@ -49,20 +51,25 @@ export function ChatsScreen() {
         />
       }
     >
-      <PullSearch
-        label={t('messenger.searchChats')}
-        value={search}
-        onChangeText={setSearch}
-        visible={searchBar.visible}
-        onFocusChange={searchBar.focus}
-        onClose={searchBar.close}
-      />
-      <ChatFilters value={filter} onChange={setFilter} />
       <FlatList
+        ref={searchListRef}
         testID="chats-list"
         showsVerticalScrollIndicator={false}
         {...searchBar.scrollProps}
-        ListHeaderComponent={<ContactRequests />}
+        ListHeaderComponent={
+          <View style={{ backgroundColor: theme.colors.background }}>
+            <PullSearch
+              label={t('messenger.searchChats')}
+              value={search}
+              onChangeText={setSearch}
+              onFocusChange={searchBar.focus}
+              onClose={searchBar.close}
+              onLayout={searchBar.measureHeader}
+            />
+            <ChatFilters value={filter} onChange={setFilter} />
+            <ContactRequests />
+          </View>
+        }
         data={rows}
         keyExtractor={(row) => row.id}
         keyboardShouldPersistTaps="handled"
@@ -87,9 +94,11 @@ export function ChatsScreen() {
             chat={item}
             now={today}
             subtitle={
-              item.previewKind === 'call'
-                ? t(callOutcomeCopy[readCallRecord(item.preview).status])
-                : item.preview
+              item.previewKind === 'deleted'
+                ? t('messenger.deletedMessage')
+                : item.previewKind === 'call'
+                  ? t(callOutcomeCopy[readCallRecord(item.preview).status])
+                  : item.preview
             }
             avatar={
               item.kind === 'direct' && item.peer ? (

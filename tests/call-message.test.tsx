@@ -1,8 +1,9 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { CallBackSheet, CallMessage } from '@/messenger/components/CallMessage';
 import { MessageActions } from '@/messenger/components/MessageActions';
 import { theme } from '@/theme/tokens';
 import { formatTime } from '@/i18n/format';
+import { Platform } from 'react-native';
 import type { LocalMessage } from '@/messenger/model';
 
 const message: LocalMessage = {
@@ -117,6 +118,7 @@ test('holding a call retains local deletion without message reactions, replies o
   const remove = jest.fn();
   await render(
     <MessageActions
+      reduceMotion
       message={message}
       close={jest.fn()}
       reply={jest.fn()}
@@ -133,6 +135,9 @@ test('holding a call retains local deletion without message reactions, replies o
   expect(screen.queryByRole('button', { name: 'Reply' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Copy text' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'React with 👍' })).toBeNull();
+  const dismiss = screen.getByTestId('message-actions-modal', { includeHiddenElements: true }).props
+    .onDismiss;
   await fireEvent.press(screen.getByRole('button', { name: 'Delete from this device' }));
+  if (Platform.OS === 'ios') await act(() => dismiss());
   expect(remove).toHaveBeenCalledTimes(1);
 });

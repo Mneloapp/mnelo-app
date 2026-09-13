@@ -1,6 +1,7 @@
 import { formatTime, formatDate } from '@/i18n/format';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Keyboard, StyleSheet, View, type TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { File, Paths } from 'expo-file-system';
@@ -12,6 +13,7 @@ import { AppText } from '@/components/AppText';
 import { ActionSheet } from '@/components/ActionSheet';
 import { Button, IconButton, Page, StateView, ui } from '@/components/ui';
 import { theme } from '@/theme/tokens';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { MessageField } from '@/features/chats/MessageField';
 import { VoiceRecorder } from '@/features/chats/VoiceRecorder';
 import { AudioPlayback } from '@/features/chats/AudioPlayback';
@@ -175,6 +177,14 @@ function Bubble({
             !voteEmoji.slice(0, card.options.length).some((emoji) => emoji === reaction.emoji),
         )}
       >
+        {message.kind === 'deleted' && (
+          <AppText tone="secondary">{t('messenger.deletedMessage')}</AppText>
+        )}
+        {Boolean(message.editedAt) && (
+          <AppText variant="caption" tone="secondary">
+            {t('messenger.edited')}
+          </AppText>
+        )}
         {(message.body.length > 0 && !card) || message.replyTo ? (
           <View style={styles.messageBody}>
             {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
@@ -194,6 +204,7 @@ function Bubble({
   );
 }
 export function ChatScreen() {
+  const reduceMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { engine, identity, mesh, calls, deliveryState, view } = useDevice();
   const { t } = useTranslation();
@@ -215,7 +226,14 @@ export function ChatScreen() {
   const [selected, setSelected] = useState<LocalMessage | null>(null);
   const [callBack, setCallBack] = useState<LocalMessage | null>(null);
   const [reply, setReply] = useState<string | undefined>();
-  const attachmentPanel = useAttachmentPanel();
+  const insets = useSafeAreaInsets();
+  const messageInput = useRef<TextInput>(null);
+  const attachmentPanel = useAttachmentPanel(insets.bottom);
+  const quickEmoji = useQuery({
+    queryKey: ['device', 'recent-reactions'],
+    queryFn: () => engine.quickReactionChoices(),
+    networkMode: 'always',
+  });
   const [cardComposer, setCardComposer] = useState<'poll' | 'event' | null>(null);
   const [recording, setRecording] = useState(false);
   const [voice, setVoice] = useState<SelectedMedia | null>(null);
@@ -310,12 +328,14 @@ export function ChatScreen() {
       }
       titleLines={1}
       headerStyle={styles.chatHeader}
+      bottomSafe={false}
+      avoidKeyboard={!attachmentPanel.managedKeyboard}
       back
       scroll={false}
       contentStyle={[ui.flex, styles.chatContent]}
       right={
         <View style={styles.headerButtons}>
-          {chat.data?.kind === 'direct' && remote && (
+          {chat.data && !chat.data.left_group && remote && (
             <>
               <IconButton
                 icon="phone"
@@ -414,7 +434,8 @@ export function ChatScreen() {
           message={callBack}
           name={chat.data?.title ?? t('brand')}
           available={Boolean(
-            chat.data?.kind === 'direct' &&
+            chat.data &&
+            !chat.data.left_group &&
             remote &&
             calls &&
             (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
@@ -446,18 +467,19 @@ export function ChatScreen() {
           />
         </View>
       ) : (
-        <View style={ui.row}>
+        <View style={styles.composer}>
           <IconButton
-            icon={attachmentPanel.visible ? 'x' : 'plus'}
-            label={t('messenger.attachments')}
-            onPress={attachmentPanel.toggle}
+            icon={attachmentPanel.visible ? 'keyboard' : 'plus'}
+            label={t(attachmentPanel.visible ? 'messenger.showKeyboard' : 'messenger.attachments')}
+            onPress={() => attachmentPanel.toggle(() => messageInput.current?.focus())}
           />
           <View style={ui.flex}>
             <MessageField
+              inputRef={messageInput}
               value={text}
               onChangeText={setText}
               focusKey={reply}
-              onFocus={attachmentPanel.close}
+              onFocus={attachmentPanel.focusInput}
             />
           </View>
           {text.trim() ? (
@@ -542,11 +564,25 @@ export function ChatScreen() {
       </ActionSheet>
       {selected && (
         <MessageActions
+          reduceMotion={reduceMotion}
           message={selected}
           own={selected.sender === identity?.key}
           anchor={selectedAnchor}
           busy={action.busy}
           close={() => setSelected(null)}
+          quickEmojis={quickEmoji.data}
+          edit={(body) =>
+            void action.run(async () => {
+              await engine.editMessage(selected.id, body);
+              setSelected(null);
+            })
+          }
+          removeEverywhere={() =>
+            void action.run(async () => {
+              await engine.deleteForEveryone(selected.id);
+              setSelected(null);
+            })
+          }
           reply={() => {
             setReply(selected.id);
             setSelected(null);
@@ -581,80 +617,91 @@ export function ChatScreen() {
           }
         />
       )}
-      {attachmentPanel.visible && (
-        <ScrollView
-          testID="attachment-panel"
-          style={[styles.attachmentPanel, { height: attachmentPanel.height }]}
-          contentContainerStyle={styles.panelContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.attachmentGrid}>
-            <AttachmentAction
-              icon="image"
-              label={t('messenger.photo')}
-              busy={action.busy}
-              onPress={() => void action.run(async () => sendFile(await imageSelection(), 'image'))}
-            />
-            <AttachmentAction
-              icon="camera"
-              label={t('messenger.camera')}
-              busy={action.busy}
-              onPress={() =>
-                void action.run(async () => sendFile(await imageSelection(true), 'image'))
-              }
-            />
-            <AttachmentAction
-              icon="map-pin"
-              label={t('messenger.attachmentLocation')}
-              busy={action.busy}
-              onPress={() =>
-                void action.run(async () => {
-                  const permission = await Location.requestForegroundPermissionsAsync();
-                  if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
-                  const point = await Location.getCurrentPositionAsync({
-                    accuracy: Location.Accuracy.Balanced,
-                  });
-                  await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
-                    kind: 'location',
-                  });
+      <View
+        testID="chat-input-dock"
+        style={{ height: attachmentPanel.reservedHeight, flexShrink: 0 }}
+      >
+        {attachmentPanel.visible && (
+          <View
+            testID="attachment-panel"
+            style={[styles.attachmentPanel, { paddingBottom: insets.bottom }]}
+          >
+            <View style={styles.attachmentGrid}>
+              <AttachmentAction
+                icon="image"
+                color="#147BF3"
+                label={t('messenger.photo')}
+                busy={action.busy}
+                onPress={() =>
+                  void action.run(async () => sendFile(await imageSelection(), 'image'))
+                }
+              />
+              <AttachmentAction
+                icon="camera"
+                color="#46515D"
+                label={t('messenger.camera')}
+                busy={action.busy}
+                onPress={() =>
+                  void action.run(async () => sendFile(await imageSelection(true), 'image'))
+                }
+              />
+              <AttachmentAction
+                icon="map-pin"
+                color="#008B68"
+                label={t('messenger.attachmentLocation')}
+                busy={action.busy}
+                onPress={() =>
+                  void action.run(async () => {
+                    const permission = await Location.requestForegroundPermissionsAsync();
+                    if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
+                    const point = await Location.getCurrentPositionAsync({
+                      accuracy: Location.Accuracy.Balanced,
+                    });
+                    await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
+                      kind: 'location',
+                    });
+                    attachmentPanel.close();
+                  })
+                }
+              />
+              <AttachmentAction
+                icon="user"
+                color="#7460CE"
+                label={t('messenger.attachmentContact')}
+                onPress={() => {
                   attachmentPanel.close();
-                })
-              }
-            />
-            <AttachmentAction
-              icon="user"
-              label={t('messenger.attachmentContact')}
-              onPress={() => {
-                attachmentPanel.close();
-                setContactPicker(true);
-              }}
-            />
-            <AttachmentAction
-              icon="file-text"
-              label={t('messenger.file')}
-              busy={action.busy}
-              onPress={() => void action.run(async () => sendFile(await fileSelection(), 'file'))}
-            />
-            <AttachmentAction
-              icon="bar-chart-2"
-              label={t('messenger.poll')}
-              onPress={() => {
-                attachmentPanel.close();
-                setCardComposer('poll');
-              }}
-            />
-            <AttachmentAction
-              icon="calendar"
-              label={t('messenger.event')}
-              onPress={() => {
-                attachmentPanel.close();
-                setCardComposer('event');
-              }}
-            />
+                  setContactPicker(true);
+                }}
+              />
+              <AttachmentAction
+                icon="file-text"
+                color="#008DB8"
+                label={t('messenger.file')}
+                busy={action.busy}
+                onPress={() => void action.run(async () => sendFile(await fileSelection(), 'file'))}
+              />
+              <AttachmentAction
+                icon="bar-chart-2"
+                color="#C28100"
+                label={t('messenger.poll')}
+                onPress={() => {
+                  attachmentPanel.close();
+                  setCardComposer('poll');
+                }}
+              />
+              <AttachmentAction
+                icon="calendar"
+                color="#D92354"
+                label={t('messenger.event')}
+                onPress={() => {
+                  attachmentPanel.close();
+                  setCardComposer('event');
+                }}
+              />
+            </View>
           </View>
-        </ScrollView>
-      )}
+        )}
+      </View>
       {cardComposer && (
         <RichCardComposer
           kind={cardComposer}
@@ -679,22 +726,33 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.sm,
     gap: theme.spacing.xs,
   },
-  chatContent: { paddingHorizontal: theme.spacing.md, gap: theme.spacing.sm },
+  chatContent: { paddingHorizontal: theme.spacing.md, paddingBottom: 0, gap: theme.spacing.sm },
+  composer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: 2,
+  },
   headerButtons: {
     flexDirection: 'row',
     gap: theme.spacing.xs,
     borderRadius: theme.radii.pill,
   },
   attachmentPanel: {
-    flexGrow: 0,
-    flexShrink: 0,
+    flex: 1,
+    overflow: 'hidden',
     backgroundColor: '#DCDDD9',
     marginHorizontal: -theme.spacing.md,
     borderTopLeftRadius: theme.radii.lg,
     borderTopRightRadius: theme.radii.lg,
   },
-  panelContent: { paddingVertical: theme.spacing.md },
-  attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  attachmentGrid: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
   messageBody: { minHeight: theme.spacing.xl },
   empty: { transform: [{ scaleY: -1 }] },
 });

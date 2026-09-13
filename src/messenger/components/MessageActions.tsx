@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Animated,
+  Easing,
   Modal,
   Pressable,
   ScrollView,
@@ -9,7 +11,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTranslation } from 'react-i18next';
 import { formatDate, formatTime } from '@/i18n/format';
 import { AppText } from '@/components/AppText';
@@ -26,6 +29,7 @@ export type MessageAnchor = { x: number; y: number; width: number; height: numbe
 export function MessageActions({
   message,
   own = false,
+  reduceMotion,
   anchor,
   close,
   reply,
@@ -35,9 +39,13 @@ export function MessageActions({
   react,
   retry,
   busy,
+  quickEmojis = quickReactions,
+  edit,
+  removeEverywhere,
 }: {
   message: LocalMessage;
   own?: boolean;
+  reduceMotion?: boolean;
   anchor?: MessageAnchor | undefined;
   close: () => void;
   reply: () => void;
@@ -47,93 +55,211 @@ export function MessageActions({
   react: (emoji: string) => void;
   retry: () => void;
   busy: boolean;
+  quickEmojis?: readonly string[] | undefined;
+  edit?: (body: string) => void;
+  removeEverywhere?: () => void;
 }) {
   const { t } = useTranslation();
-  const { height, fontScale } = useWindowDimensions();
-  const [forwardPending, setForwardPending] = useState(false);
+  const { height, width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const observedReducedMotion = useReducedMotion();
+  const reducedMotion = reduceMotion ?? observedReducedMotion;
+  const [progress] = useState(() => new Animated.Value(0));
+  const [visible, setVisible] = useState(true);
+  const completion = useRef<(() => void) | null>(null);
+  const closing = useRef(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [previewY, setPreviewY] = useState(0);
+  const [menuHeight, setMenuHeight] = useState(420);
   useEffect(() => {
-    if (forwardPending && Platform.OS !== 'ios') forward();
-  }, [forwardPending, forward]);
-  const [contentHeight, setContentHeight] = useState(500);
+    if (!contentHeight || closing.current) return;
+    if (reducedMotion) {
+      progress.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(progress, {
+      toValue: 1,
+      duration: reducedMotion ? 0 : 200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [contentHeight, progress, reducedMotion]);
+  const finishDismiss = useCallback(() => {
+    const action = completion.current;
+    completion.current = null;
+    action?.();
+  }, []);
+  const dismiss = useCallback(
+    (action?: () => void) => {
+      if (closing.current) return;
+      closing.current = true;
+      completion.current = () => {
+        close();
+        action?.();
+      };
+      if (reducedMotion) {
+        progress.setValue(0);
+        setVisible(false);
+        if (Platform.OS !== 'ios') finishDismiss();
+        return;
+      }
+      Animated.timing(progress, {
+        toValue: 0,
+        duration: reducedMotion ? 0 : 170,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (!finished) return;
+        setVisible(false);
+        if (Platform.OS !== 'ios') finishDismiss();
+      });
+    },
+    [close, finishDismiss, progress, reducedMotion],
+  );
   const [picker, setPicker] = useState(false),
     [emoji, setEmoji] = useState(''),
     [info, setInfo] = useState(false);
+  const [editing, setEditing] = useState(false),
+    [editedBody, setEditedBody] = useState(message.body);
+  const deleted = message.kind === 'deleted';
   const call = message.kind === 'call' ? readCallRecord(message.body) : null;
   const preview = call
     ? `${t(call.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice')} · ${t(callOutcomeCopy[call.status])}`
-    : message.body || t(message.kind === 'image' ? 'messenger.openPhoto' : 'common.more');
-  const actions: { icon: IconName; label: string; onPress: () => void }[] = [
-    ...(!call
+    : deleted
+      ? t('messenger.deletedMessage')
+      : message.body || t(message.kind === 'image' ? 'messenger.openPhoto' : 'common.more');
+  const actions: { icon: IconName; label: string }[] = [
+    ...(!call && !deleted
       ? [
-          { icon: 'corner-up-left' as const, label: t('messenger.reply'), onPress: reply },
-          {
-            icon: 'corner-up-right' as const,
-            label: t('messenger.forward'),
-            onPress: () => setForwardPending(true),
-          },
+          { icon: 'corner-up-left' as const, label: t('messenger.reply') },
+          { icon: 'corner-up-right' as const, label: t('messenger.forward') },
         ]
       : []),
-    ...(!call && message.body
-      ? [{ icon: 'copy' as const, label: t('messenger.copy'), onPress: copy }]
+    ...(!call && !deleted && message.body
+      ? [{ icon: 'copy' as const, label: t('messenger.copy') }]
       : []),
-    { icon: 'info', label: t('messenger.messageInfo'), onPress: () => setInfo((value) => !value) },
+    { icon: 'info', label: t('messenger.messageInfo') },
+    ...(own && message.kind === 'text' && edit
+      ? [{ icon: 'edit-2' as const, label: t('messenger.editMessage') }]
+      : []),
     ...(!call && message.status === 'pending'
-      ? [{ icon: 'refresh-cw' as const, label: t('messenger.retry'), onPress: retry }]
+      ? [{ icon: 'refresh-cw' as const, label: t('messenger.retry') }]
       : []),
-    { icon: 'trash-2', label: t('messenger.deleteLocal'), onPress: remove },
+    {
+      icon: 'trash-2',
+      label: t(
+        own && !call && !deleted && removeEverywhere
+          ? 'messenger.deleteEveryone'
+          : 'messenger.deleteLocal',
+      ),
+    },
   ];
-  const top = Math.max(
-    12,
-    Math.min((anchor?.y ?? height * 0.35) - 90, height - contentHeight - 70),
-  );
+  function performAction(icon: IconName) {
+    switch (icon) {
+      case 'corner-up-left':
+        dismiss(reply);
+        break;
+      case 'corner-up-right':
+        dismiss(forward);
+        break;
+      case 'copy':
+        dismiss(copy);
+        break;
+      case 'info':
+        setInfo((value) => !value);
+        break;
+      case 'edit-2':
+        setEditing(true);
+        break;
+      case 'refresh-cw':
+        dismiss(retry);
+        break;
+      case 'trash-2':
+        dismiss(own && !call && !deleted && removeEverywhere ? removeEverywhere : remove);
+        break;
+    }
+  }
+  const available = height - insets.top - insets.bottom - 24;
+  const previewLimit = Math.max(64, available - menuHeight - (!call && !deleted ? 64 : 0) - 24);
+  const top =
+    picker || editing
+      ? 12
+      : Math.max(
+          12,
+          Math.min(
+            (anchor?.y ?? height * 0.35) - insets.top - previewY,
+            available - contentHeight + 12,
+          ),
+        );
+  const lift = anchor && !picker && !editing ? anchor.y - insets.top - top - previewY : 12;
+  const translation = progress.interpolate({ inputRange: [0, 1], outputRange: [lift, 0] });
   return (
     <Modal
+      testID="message-actions-modal"
       transparent
-      visible={!forwardPending}
-      onRequestClose={close}
+      visible={visible}
+      onRequestClose={() => dismiss()}
       animationType="none"
-      onDismiss={() => {
-        if (forwardPending) forward();
-      }}
+      onDismiss={finishDismiss}
     >
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.overlay} accessibilityViewIsModal onAccessibilityEscape={close}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            accessibilityRole="button"
-            accessibilityLabel={t('compose.close')}
-            onPress={close}
-          />
-          <KeyboardAvoidingView
-            style={[styles.position, { marginTop: picker ? 12 : top }]}
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <View style={styles.overlay} accessibilityViewIsModal onAccessibilityEscape={() => dismiss()}>
+        <Animated.View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: theme.colors.scrim, opacity: progress },
+          ]}
+        />
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          accessibilityRole="button"
+          accessibilityLabel={t('compose.close')}
+          onPress={() => dismiss()}
+        />
+        <KeyboardAvoidingView
+          style={[styles.position, { top: insets.top + top, maxHeight: available - top + 12 }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Animated.View
+            style={{
+              opacity: contentHeight ? 1 : 0,
+              transform: [{ translateY: translation }],
+              maxHeight: available - top + 12,
+            }}
           >
             <ScrollView
-              style={styles.scroll}
+              testID="message-actions-content"
+              style={[styles.scroll, { maxHeight: available - top + 12 }]}
               contentContainerStyle={[styles.content, own && styles.own]}
               bounces={false}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               onContentSizeChange={(_, size) => setContentHeight(size)}
             >
-              {!call && !picker && (
-                <View
-                  style={[styles.reactions, { maxWidth: fontScale > 1.3 ? '100%' : 380 }]}
+              {!call && !deleted && !picker && !editing && (
+                <Animated.View
+                  style={[
+                    styles.reactions,
+                    { opacity: progress },
+                    { width: Math.min(width - 32, quickEmojis.length * 48 + 56) },
+                  ]}
                   testID="message-reaction-bar"
                 >
                   <ScrollView
+                    style={styles.reactionScroll}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.reactionRow}
                   >
-                    {quickReactions.map((value) => (
+                    {quickEmojis.map((value) => (
                       <FocusPressable
                         key={value}
                         style={styles.reaction}
                         accessibilityRole="button"
                         accessibilityLabel={t('messenger.reactWith', { emoji: value })}
                         disabled={busy}
-                        onPress={() => react(value)}
+                        onPress={() => dismiss(() => react(value))}
                       >
                         <AppText style={styles.emoji}>{value}</AppText>
                       </FocusPressable>
@@ -145,16 +271,60 @@ export function MessageActions({
                     disabled={busy}
                     onPress={() => setPicker(true)}
                   />
-                </View>
+                </Animated.View>
               )}
-              {!picker && (
-                <View pointerEvents="none" style={styles.preview} testID="selected-message-preview">
-                  <MessageBubble own={own} status={message.status} sentAt={message.sentAt}>
-                    <AppText numberOfLines={8}>{preview}</AppText>
+              {!picker && !editing && (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.preview,
+                    { width: Math.min(anchor?.width ?? width - 32, width - 32) },
+                  ]}
+                  onLayout={(event) => setPreviewY(event.nativeEvent.layout.y)}
+                  testID="selected-message-preview"
+                >
+                  <MessageBubble
+                    own={own}
+                    status={message.status}
+                    sentAt={message.sentAt}
+                    containerStyle={styles.previewBubble}
+                  >
+                    <ScrollView
+                      style={{ maxHeight: previewLimit - 40 }}
+                      bounces={false}
+                      nestedScrollEnabled
+                      showsVerticalScrollIndicator
+                    >
+                      <AppText>{preview}</AppText>
+                    </ScrollView>
                   </MessageBubble>
                 </View>
               )}
-              {picker ? (
+              {editing ? (
+                <View style={styles.picker}>
+                  <Field
+                    label={t('messenger.editMessage')}
+                    value={editedBody}
+                    onChangeText={setEditedBody}
+                    multiline
+                    autoFocus
+                    maxLength={8000}
+                    style={{ maxHeight: 220 }}
+                  />
+                  <Button
+                    label={t('common.save')}
+                    variant="accent"
+                    busy={busy}
+                    disabled={!editedBody.trim() || editedBody === message.body}
+                    onPress={() => dismiss(() => edit?.(editedBody))}
+                  />
+                  <Button
+                    label={t('common.cancel')}
+                    variant="secondary"
+                    onPress={() => setEditing(false)}
+                  />
+                </View>
+              ) : picker ? (
                 <View style={styles.picker}>
                   <View style={ui.row}>
                     <AppText variant="headline" style={ui.flex}>
@@ -174,7 +344,7 @@ export function MessageActions({
                         accessibilityRole="button"
                         accessibilityLabel={t('messenger.reactWith', { emoji: value })}
                         disabled={busy}
-                        onPress={() => react(value)}
+                        onPress={() => dismiss(() => react(value))}
                       >
                         <AppText style={styles.emoji}>{value}</AppText>
                       </FocusPressable>
@@ -191,17 +361,21 @@ export function MessageActions({
                     label={t('messenger.addReaction')}
                     variant="accent"
                     disabled={!isReactionEmoji(emoji) || busy}
-                    onPress={() => react(emoji)}
+                    onPress={() => dismiss(() => react(emoji))}
                   />
                 </View>
               ) : (
-                <View style={styles.menu} testID="message-action-menu">
+                <Animated.View
+                  style={[styles.menu, { opacity: progress }]}
+                  testID="message-action-menu"
+                  onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)}
+                >
                   {actions.map((item) => (
                     <FocusPressable
                       key={item.icon}
                       style={styles.action}
                       accessibilityRole="button"
-                      onPress={item.onPress}
+                      onPress={() => performAction(item.icon)}
                       accessibilityLabel={item.label}
                       disabled={busy}
                     >
@@ -224,35 +398,36 @@ export function MessageActions({
                       {own ? ' · ' + t(`messenger.${message.status}`) : ''}
                     </AppText>
                   )}
-                </View>
+                </Animated.View>
               )}
             </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </SafeAreaProvider>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: theme.colors.scrim },
-  position: { flexShrink: 1, marginHorizontal: 16, marginBottom: 16 },
+  overlay: { flex: 1 },
+  position: { position: 'absolute', left: 16, right: 16 },
   scroll: { flexGrow: 0 },
   content: { gap: 8, alignItems: 'flex-start' },
   own: { alignItems: 'flex-end' },
-  preview: { width: '100%' },
+  preview: { maxWidth: '100%' },
+  previewBubble: { width: '100%', maxWidth: '100%', marginHorizontal: 0, marginVertical: 0 },
   reactions: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.pill,
     padding: 4,
-    alignSelf: 'stretch',
   },
+  reactionScroll: { flexGrow: 0, flexShrink: 1 },
   reactionRow: { alignItems: 'center' },
   reaction: { minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   emoji: { fontSize: 28, lineHeight: 38 },
   menu: {
-    width: '86%',
+    width: '100%',
     maxWidth: 320,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.xl,

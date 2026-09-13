@@ -1,11 +1,22 @@
 import { systemCallAudio, systemCallSpeaker } from './system-calls';
 import { Platform } from 'react-native';
-import { mediaDevices, type MediaStream as NativeStream } from '@livekit/react-native-webrtc';
+import {
+  mediaDevices,
+  MediaStream as NativeMediaStream,
+  type MediaStream as NativeStream,
+} from '@livekit/react-native-webrtc';
 import { AudioSession } from '@livekit/react-native';
-export async function captureCall(video: boolean): Promise<MediaStream> {
+export async function captureCall(video: boolean, group = false): Promise<MediaStream> {
   const stream = await mediaDevices.getUserMedia({
     audio: true,
-    video: video ? { facingMode: 'user', width: 640, height: 480, frameRate: 24 } : false,
+    video: video
+      ? {
+          facingMode: 'user',
+          width: group ? 480 : 640,
+          height: group ? 360 : 480,
+          frameRate: group ? 15 : 24,
+        }
+      : false,
   });
   if (!stream.getAudioTracks().length || (video && !stream.getVideoTracks().length)) {
     stream.getTracks().forEach((track) => track.stop());
@@ -14,9 +25,9 @@ export async function captureCall(video: boolean): Promise<MediaStream> {
   try {
     if (!systemCallAudio() || Platform.OS === 'ios')
       await AudioSession.configureAudio({
-        ios: { defaultOutput: video ? 'speaker' : 'earpiece' },
+        ios: { defaultOutput: video || group ? 'speaker' : 'earpiece' },
         android: {
-          preferredOutputList: ['bluetooth', 'headset', video ? 'speaker' : 'earpiece'],
+          preferredOutputList: ['bluetooth', 'headset', video || group ? 'speaker' : 'earpiece'],
           audioTypeOptions: { audioMode: 'inCommunication', manageAudioFocus: true },
         },
       });
@@ -49,4 +60,11 @@ export async function switchCallCamera(stream: MediaStream) {
   const track = native.getVideoTracks()[0];
   if (!track) throw new Error('CAMERA_UNAVAILABLE');
   await track._switchCamera();
+}
+
+export function callOutputStream(local: MediaStream, screen: MediaStream): MediaStream {
+  return new NativeMediaStream([
+    ...local.getAudioTracks(),
+    ...screen.getVideoTracks(),
+  ] as never) as unknown as MediaStream;
 }

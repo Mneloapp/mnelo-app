@@ -1,4 +1,6 @@
 import { wakeCapability } from './wake-protocol';
+import { receiveMessageChange, applyMessageChange, type MessageChange } from './message-change';
+import { isReactionEmoji, quickReactions } from './reaction-emoji';
 import { readRichMedia, voteEmoji } from './rich-message';
 import { z } from 'zod';
 import {
@@ -36,6 +38,7 @@ export type ChatCursor = { activity: number; id: string };
 export type IncomingMessage = { id: string; chat: string; type: 'message' | 'missed-call' };
 
 type MessageRow = {
+  edited_at?: number;
   id: string;
   chat_id: string;
   sender: string;
@@ -50,6 +53,7 @@ type MessageRow = {
   unread_delivery: number;
 };
 const mapMessage = (row: MessageRow, own: string): LocalMessage => ({
+  ...(row.edited_at ? { editedAt: row.edited_at } : {}),
   id: row.id,
   chatId: row.chat_id,
   sender: row.sender,
@@ -112,7 +116,9 @@ export class DeviceMessenger {
     return Boolean(
       (
         await this.db.all(
-          'SELECT 1 FROM messages WHERE sender=? AND id=? UNION ALL SELECT 1 FROM forgotten_messages WHERE peer=? AND id=? LIMIT 1',
+          "SELECT 1 FROM messages WHERE sender=? AND id=? UNION ALL SELECT 1 FROM forgotten_messages WHERE peer=? AND id=? UNION ALL SELECT 1 FROM message_changes WHERE peer=? AND message_id=? AND action='delete' LIMIT 1",
+          peer,
+          id,
           peer,
           id,
           peer,
@@ -143,6 +149,7 @@ export class DeviceMessenger {
     this.deliveryVersion = version >= 6 ? 2 : 1;
     await this.db.exec(localSchema);
     for (const [table, column, definition] of [
+      ['messages', 'edited_at', 'INTEGER NOT NULL DEFAULT 0'],
       ['chats', 'left_group', 'INTEGER NOT NULL DEFAULT 0 CHECK(left_group IN (0,1))'],
       ['deliveries', 'read_at', 'INTEGER'],
       ['identity', 'username', "TEXT NOT NULL DEFAULT ''"],
@@ -736,7 +743,7 @@ export class DeviceMessenger {
       await this.db.run('DELETE FROM delivery_media_outbox WHERE message_id=?', id);
     if (await this.hasTable('signal_outbox'))
       await this.db.run(
-        "DELETE FROM signal_outbox WHERE uploaded=0 AND (CASE WHEN json_valid(body) THEN json_extract(body,'$.packet.id') ELSE NULL END)=?",
+        "DELETE FROM signal_outbox WHERE uploaded=0 AND (CASE WHEN json_valid(body) AND json_extract(body,'$.packet.type')='message' THEN json_extract(body,'$.packet.id') ELSE NULL END)=?",
         id,
       );
   }
@@ -963,6 +970,7 @@ export class DeviceMessenger {
       file ? packet.id : null,
       Number(own),
     );
+    await applyMessageChange(this.db, peer, packet.id, packet.chat);
   }
   async flush(peer?: string) {
     await this.tail;
@@ -1156,6 +1164,10 @@ export class DeviceMessenger {
           )[0]?.blocked !== 0
         )
           throw new Error('CONTACT_BLOCKED');
+        if (packet.type === 'message_change') {
+          await receiveMessageChange(this.db, own, peer, packet);
+          return;
+        }
         if (packet.type === 'group_ack') {
           await this.db.run(
             'UPDATE group_deliveries SET revision=MAX(revision,?) WHERE chat_id=? AND peer=? AND ?<=(SELECT revision FROM chats WHERE id=?)',
@@ -1323,7 +1335,11 @@ export class DeviceMessenger {
           )
             throw new Error('GROUP_LEFT');
           await this.insertMessage(peer, packet);
-          incoming = { id: packet.id, chat: packet.chat, type: 'message' };
+          if (
+            !(await this.db.all("SELECT id FROM messages WHERE id=? AND kind='deleted'", packet.id))
+              .length
+          )
+            incoming = { id: packet.id, chat: packet.chat, type: 'message' };
           acknowledge = packet.id;
           return;
         }
@@ -1334,6 +1350,11 @@ export class DeviceMessenger {
             peer,
           );
           if (!member.length) throw new Error('CHAT_FORBIDDEN');
+          if (
+            (await this.db.all("SELECT id FROM messages WHERE id=? AND kind='deleted'", packet.id))
+              .length
+          )
+            return;
           const previous = (
             await this.db.all<{ revision: number }>(
               'SELECT revision FROM reaction_versions WHERE message_id=? AND peer=? AND emoji=?',
@@ -1433,7 +1454,10 @@ export class DeviceMessenger {
     z.string().min(1).max(24).parse(emoji);
     const own = this.own().key;
     const row = (
-      await this.db.all<{ chat_id: string }>('SELECT chat_id FROM messages WHERE id=?', id)
+      await this.db.all<{ chat_id: string }>(
+        "SELECT chat_id FROM messages WHERE id=? AND kind!='deleted'",
+        id,
+      )
     )[0];
     if (!row) throw new Error('MESSAGE_MISSING');
     await this.transaction(async () => {
@@ -1447,6 +1471,21 @@ export class DeviceMessenger {
           )
         ).length > 0;
       await this.writeReaction(id, row.chat_id, own, emoji, !current);
+      if (!current && isReactionEmoji(emoji)) {
+        const previousUse = (
+          await this.db.all<{ latest: number }>(
+            'SELECT COALESCE(MAX(used_at),0) AS latest FROM recent_reactions',
+          )
+        )[0]!.latest;
+        await this.db.run(
+          'INSERT INTO recent_reactions VALUES(?,?) ON CONFLICT(emoji) DO UPDATE SET used_at=excluded.used_at',
+          emoji,
+          Math.max(this.now(), previousUse + 1),
+        );
+        await this.db.run(
+          'DELETE FROM recent_reactions WHERE emoji NOT IN (SELECT emoji FROM recent_reactions ORDER BY used_at DESC,rowid DESC LIMIT 12)',
+        );
+      }
     });
     this.changed();
     await this.flush().catch(() => undefined);
@@ -1573,16 +1612,23 @@ export class DeviceMessenger {
   async callHistory(before = Number.MAX_SAFE_INTEGER): Promise<LocalCall[]> {
     await this.tail;
     const rows = await this.db.all<
-      Omit<LocalCall, 'media' | 'status' | 'direction'> & { body: string }
+      Omit<LocalCall, 'media' | 'status' | 'direction'> & {
+        body: string;
+        chatKind: 'direct' | 'group';
+      }
     >(
-      `SELECT m.id, m.chat_id AS chatId, m.sender AS peer, c.title AS name, m.body,
+      `SELECT m.id, m.chat_id AS chatId, m.sender AS peer, c.title AS name, c.kind AS chatKind, m.body,
         1-m.is_read AS unseen, m.received_at AS endedAt, m.sequence
       FROM messages m JOIN chats c ON c.id=m.chat_id
-      WHERE m.kind='call' AND c.kind='direct' AND m.sequence<?
+      WHERE m.kind='call' AND m.sequence<?
       ORDER BY m.sequence DESC LIMIT 40`,
       before,
     );
-    return rows.map(({ body, ...row }) => ({ ...row, ...readCallRecord(body) }));
+    return rows.map(({ body, chatKind, ...row }) => ({
+      ...row,
+      ...(chatKind === 'group' ? { group: true } : {}),
+      ...readCallRecord(body),
+    }));
   }
   async recordCall(
     chat: string,
@@ -1616,6 +1662,89 @@ export class DeviceMessenger {
     if (inserted && status === 'missed')
       this.incomingListeners.forEach((listener) => listener({ id, chat, type: 'missed-call' }));
   }
+  async quickReactionChoices() {
+    await this.tail;
+    const recent = await this.db.all<{ emoji: string }>(
+      'SELECT emoji FROM recent_reactions ORDER BY used_at DESC,rowid DESC LIMIT 12',
+    );
+    return [
+      ...new Set([...recent.map((row) => row.emoji).filter(isReactionEmoji), ...quickReactions]),
+    ].slice(0, 12);
+  }
+  async editMessage(id: string, body: string) {
+    await this.changeOwnMessage(id, 'edit', body);
+  }
+  async deleteForEveryone(id: string) {
+    await this.changeOwnMessage(id, 'delete', '');
+  }
+  private async changeOwnMessage(id: string, action: 'edit' | 'delete', body: string) {
+    const own = this.own().key;
+    await this.transaction(async () => {
+      const row = (
+        await this.db.all<{ sender: string; chat_id: string; kind: string }>(
+          'SELECT sender,chat_id,kind FROM messages WHERE id=?',
+          id,
+        )
+      )[0];
+      if (
+        !row ||
+        row.sender !== own ||
+        ['call', 'deleted'].includes(row.kind) ||
+        (action === 'edit' && row.kind !== 'text')
+      )
+        throw new Error('MESSAGE_CHANGE_FORBIDDEN');
+      const revision =
+        ((
+          await this.db.all<{ revision: number }>(
+            'SELECT revision FROM message_changes WHERE message_id=? AND peer=?',
+            id,
+            own,
+          )
+        )[0]?.revision ?? 0) + 1;
+      const change = packetSchema.parse({
+        type: 'message_change',
+        id,
+        chat: row.chat_id,
+        action,
+        revision,
+        body,
+        changedAt: this.now(),
+      }) as MessageChange;
+      const recipients = await this.db.all<{ peer: string }>(
+        'SELECT peer FROM deliveries WHERE message_id=?',
+        id,
+      );
+      if (
+        action === 'edit' &&
+        !(
+          await this.db.all(
+            'SELECT 1 FROM chats c JOIN members m ON m.chat_id=c.id WHERE c.id=? AND c.left_group=0 AND m.public_key=?',
+            row.chat_id,
+            own,
+          )
+        ).length
+      )
+        throw new Error('GROUP_LEFT');
+      if (action === 'delete') await this.purgeDeliveryMessage(id);
+      await receiveMessageChange(this.db, own, own, change);
+      for (const recipient of recipients) {
+        if (
+          action === 'edit' &&
+          !(
+            await this.db.all(
+              'SELECT 1 FROM members WHERE chat_id=? AND public_key=?',
+              row.chat_id,
+              recipient.peer,
+            )
+          ).length
+        )
+          continue;
+        await this.stageControl(recipient.peer, change);
+      }
+    });
+    this.changed();
+    await this.flush().catch(() => undefined);
+  }
   async deleteLocalMessage(id: string) {
     await this.transaction(async () => {
       const row = (
@@ -1628,8 +1757,9 @@ export class DeviceMessenger {
       await this.purgeDeliveryMessage(id);
       await this.db.run('INSERT OR IGNORE INTO forgotten_messages VALUES(?,?)', id, row.sender);
       await this.db.run('DELETE FROM messages WHERE id=?', id);
+      await this.db.run('DELETE FROM message_changes WHERE message_id=?', id);
       await this.db.run(
-        "DELETE FROM control_outbox WHERE json_extract(packet,'$.id')=? OR json_extract(packet,'$.through')=?",
+        "DELETE FROM control_outbox WHERE json_extract(packet,'$.type')!='message_change' AND (json_extract(packet,'$.id')=? OR json_extract(packet,'$.through')=?)",
         id,
         id,
       );
@@ -1654,8 +1784,9 @@ export class DeviceMessenger {
         chat,
       );
       await this.db.run('DELETE FROM messages WHERE chat_id=?', chat);
+      await this.db.run('DELETE FROM message_changes WHERE chat=?', chat);
       await this.db.run(
-        "DELETE FROM control_outbox WHERE json_extract(packet,'$.chat')=? OR json_extract(packet,'$.id') IN (SELECT id FROM forgotten_messages)",
+        "DELETE FROM control_outbox WHERE json_extract(packet,'$.type')!='message_change' AND (json_extract(packet,'$.chat')=? OR json_extract(packet,'$.id') IN (SELECT id FROM forgotten_messages))",
         chat,
       );
       for (const row of media) await this.db.run('DELETE FROM media WHERE id=?', row.media_id);
@@ -1741,6 +1872,8 @@ export class DeviceMessenger {
     // Version-one archives made before profile cards have no contact_profiles table.
     if (!('contact_profiles' in archive.tables)) archive.tables.contact_profiles = [];
     if (!('contact_numbers' in archive.tables)) archive.tables.contact_numbers = [];
+    if (!('message_changes' in archive.tables)) archive.tables.message_changes = [];
+    if (!('recent_reactions' in archive.tables)) archive.tables.recent_reactions = [];
     if (
       Object.keys(archive.tables).length !== backupTables.length ||
       backupTables.some((table) => !archive.tables[table])
@@ -1797,6 +1930,7 @@ export class DeviceMessenger {
           ) {
             for (const key of ['headline', 'about', 'email', 'website', 'avatar']) row[key] = '';
           }
+          if (table === 'messages' && !('edited_at' in row)) row.edited_at = 0;
           if (
             Object.keys(row).length !== columns.length ||
             columns.some((column) => !(column in row))
@@ -1853,6 +1987,8 @@ const backupTables = [
   'reactions',
   'group_deliveries',
   'forgotten_messages',
+  'message_changes',
+  'recent_reactions',
 ] as const;
 
 type ProfileRow = {

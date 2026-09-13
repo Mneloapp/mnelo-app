@@ -5,7 +5,8 @@ import { MessageActions } from '@/messenger/components/MessageActions';
 import { useSentMessageScroll } from '@/messenger/useSentMessageScroll';
 import { isReactionEmoji } from '@/messenger/reaction-emoji';
 import type { LocalMessage } from '@/messenger/model';
-import type { FlatList } from 'react-native';
+import { Platform, type FlatList } from 'react-native';
+jest.mock('@/hooks/useReducedMotion', () => ({ useReducedMotion: () => true }));
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
 );
@@ -22,6 +23,20 @@ const message: LocalMessage = {
   attachment: null,
   sequence: 1,
 };
+let nativeDismiss: () => void;
+async function measureActions() {
+  nativeDismiss = screen.getByTestId('message-actions-modal', { includeHiddenElements: true }).props
+    .onDismiss;
+  await fireEvent(
+    screen.getByTestId('message-actions-content', { includeHiddenElements: true }),
+    'contentSizeChange',
+    358,
+    510,
+  );
+}
+async function finishDismiss() {
+  if (Platform.OS === 'ios') await act(() => nativeDismiss());
+}
 const actions = {
   close: jest.fn(),
   reply: jest.fn(),
@@ -53,21 +68,25 @@ test('reactions, selected bubble and menu are separate surfaces and Copy copies 
       {...actions}
     />,
   );
+  await measureActions();
   expect(screen.getByTestId('message-reaction-bar')).toBeVisible();
   expect(screen.getByTestId('selected-message-preview')).toBeVisible();
   expect(screen.getByTestId('message-action-menu')).toBeVisible();
   expect(actions.copy).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Copy text' }));
+  await finishDismiss();
   expect(actions.copy).toHaveBeenCalledTimes(1);
 });
 test('More reactions supports both a larger grid and a joined emoji from the keyboard', async () => {
   await render(<MessageActions message={message} {...actions} />);
+  await measureActions();
   await fireEvent.press(screen.getByRole('button', { name: 'More reactions' }));
   expect(screen.getByRole('button', { name: 'React with 🦋' })).toBeVisible();
   await fireEvent.changeText(screen.getByLabelText('Or use any emoji from your keyboard'), 'hello');
   expect(screen.getByRole('button', { name: 'Add reaction' })).toBeDisabled();
   await fireEvent.changeText(screen.getByLabelText('Or use any emoji from your keyboard'), '👩🏽‍💻');
   await fireEvent.press(screen.getByRole('button', { name: 'Add reaction' }));
+  await finishDismiss();
   expect(actions.react).toHaveBeenCalledWith('👩🏽‍💻');
 });
 test.each(['🇬🇪', '👩🏽‍💻', '1️⃣', '👍🏿', '❤️', '🫶', '🏳️‍🌈'])('supports emoji sequence %s', (value) =>
@@ -95,4 +114,38 @@ test('send jumps once after the sent message arrives; reading history and incomi
   await act(async () => jest.runOnlyPendingTimers());
   expect(scrollToOffset).toHaveBeenCalledTimes(1);
   jest.useRealTimers();
+});
+
+test('own text exposes editing and delete for everyone; incoming text only offers local deletion', async () => {
+  const edit = jest.fn(),
+    removeEverywhere = jest.fn();
+  const view = await render(
+    <MessageActions
+      message={message}
+      own
+      {...actions}
+      edit={edit}
+      removeEverywhere={removeEverywhere}
+    />,
+  );
+  await measureActions();
+  expect(screen.getByRole('button', { name: 'Delete for everyone' })).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit message' }));
+  await fireEvent.changeText(screen.getByLabelText('Edit message'), 'Corrected text');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  await finishDismiss();
+  expect(edit).toHaveBeenCalledWith('Corrected text');
+  await view.unmount();
+  await render(
+    <MessageActions
+      message={message}
+      {...actions}
+      edit={edit}
+      removeEverywhere={removeEverywhere}
+    />,
+  );
+  await measureActions();
+  expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Delete for everyone' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Delete from this device' })).toBeVisible();
 });

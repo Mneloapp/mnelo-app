@@ -1,5 +1,5 @@
 import type { PropsWithChildren, Ref } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { theme } from '@/theme/tokens';
@@ -10,6 +10,7 @@ import { DeliveryLeaf } from './MessageMetadata';
 // Reactions are siblings of the bubble, never part of the message body or its copy action.
 export function MessageBubble({
   own,
+  containerStyle,
   bubbleRef,
   onLongPress,
   accessibilityLabel,
@@ -20,6 +21,7 @@ export function MessageBubble({
   children,
 }: PropsWithChildren<{
   own: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
   bubbleRef?: Ref<View>;
   onLongPress?: () => void;
   accessibilityLabel?: string;
@@ -33,7 +35,7 @@ export function MessageBubble({
   for (const { emoji } of reactions) counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
   const receipt = own && (status === 'delivered' || status === 'read');
   return (
-    <View style={[styles.row, own && styles.own, media && styles.media]}>
+    <View style={[styles.row, own && styles.own, media && styles.media, containerStyle]}>
       <Pressable
         testID="message-bubble"
         ref={bubbleRef}

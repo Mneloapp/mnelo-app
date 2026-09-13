@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '21',
+    buildNumber: '22',
     supportsTablet: false,
     associatedDomains: ['applinks:mnelo.com', 'applinks:www.mnelo.com'],
     infoPlist: { UIBackgroundModes: ['audio', 'voip', 'remote-notification'] },
@@ -54,6 +54,10 @@ const config: ExpoConfig = {
       ? { googleServicesFile: process.env.MNELO_GOOGLE_SERVICES_FILE }
       : {}),
     allowBackup: false,
+    permissions: [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION',
+    ],
     intentFilters: [
       {
         action: 'VIEW',
@@ -75,6 +79,8 @@ const config: ExpoConfig = {
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.SYSTEM_ALERT_WINDOW',
+      'android.permission.READ_CALENDAR',
+      'android.permission.WRITE_CALENDAR',
     ],
   },
   plugins: [
@@ -115,7 +121,9 @@ const config: ExpoConfig = {
     ],
     ['./plugins/with-local-network.cjs', { local: environment.appEnv === 'local' }],
     './plugins/with-signal.cjs',
-    '@livekit/react-native-expo-plugin',
+    ['@livekit/react-native-expo-plugin', { android: { enableScreenShareService: true } }],
+    ['expo-calendar', { calendarPermission: false, remindersPermission: false }],
+    './plugins/with-screen-sharing.cjs',
     ['expo-sqlite', { useSQLCipher: true, enableFTS: false }],
     [
       '@config-plugins/react-native-webrtc',

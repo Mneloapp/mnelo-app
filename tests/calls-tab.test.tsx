@@ -83,5 +83,6 @@ test('pulling the call list down reveals search, and cancelling restores the com
   });
   expect(screen.getByLabelText('Name or phone number')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
-  expect(screen.queryByLabelText('Name or phone number')).toBeNull();
+  // Closing scrolls the persistent header away; it must not unmount the input.
+  expect(screen.getByLabelText('Name or phone number')).toHaveProp('value', '');
 });

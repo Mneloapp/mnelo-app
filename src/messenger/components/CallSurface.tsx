@@ -10,10 +10,13 @@ import { ScreenAppearance } from '@/theme/appearance';
 import { theme } from '@/theme/tokens';
 import type { DeviceCall } from '../calls';
 import { VideoView } from '../VideoView';
+import { GroupCallStage } from './GroupCallStage';
 
 export function CallSurface({
   call,
   title,
+  names = {},
+  onShareScreen,
   avatar,
   available,
   busy,
@@ -29,6 +32,8 @@ export function CallSurface({
 }: {
   call: DeviceCall | null;
   title: string;
+  names?: Record<string, string>;
+  onShareScreen?: () => void;
   avatar: ReactNode;
   available: boolean;
   busy: boolean;
@@ -48,8 +53,16 @@ export function CallSurface({
   const previewHeight = Math.min(156, Math.max(0, stageHeight - theme.spacing.lg * 2));
   const terminal = call?.status === 'ended' || call?.status === 'failed';
   const video = call?.media === 'video' && !terminal;
-  const remoteVideo = Boolean(video && call?.remote?.getVideoTracks().length);
-  const localVideo = video && call?.camera ? call.local : null;
+  const group = Boolean(call?.group);
+  const remoteSharing = Boolean(call?.remoteState?.sharing);
+  const remoteVideo =
+    !group &&
+    Boolean(
+      video &&
+      (remoteSharing || call?.remoteState?.camera !== false) &&
+      call?.remote?.getVideoTracks().length,
+    );
+  const localVideo = !group && video ? (call?.screen ?? (call?.camera ? call.local : null)) : null;
   const backdrop = remoteVideo || Boolean(localVideo);
   const incoming = call?.status === 'incoming';
   const status = t(
@@ -71,7 +84,7 @@ export function CallSurface({
     <ScreenAppearance.Provider value="call">
       <View style={styles.screen}>
         <StatusBar style="light" />
-        {call?.remote && !terminal && (
+        {call?.remote && !terminal && !group && (
           <View
             testID={remoteVideo ? 'call-remote-video' : 'call-audio'}
             pointerEvents="none"
@@ -79,12 +92,17 @@ export function CallSurface({
             importantForAccessibility="no-hide-descendants"
             style={remoteVideo ? styles.backdrop : styles.audio}
           >
-            <VideoView stream={call.remote} />
+            <VideoView stream={call.remote} fit={remoteSharing ? 'contain' : 'cover'} />
           </View>
         )}
         {localVideo && !remoteVideo && (
           <View testID="call-local-video" pointerEvents="none" style={styles.backdrop}>
-            <VideoView stream={localVideo} local />
+            <VideoView
+              stream={localVideo}
+              local
+              mirror={!call?.screen}
+              fit={call?.screen ? 'contain' : 'cover'}
+            />
           </View>
         )}
         <View style={styles.chrome} pointerEvents="box-none">
@@ -108,7 +126,9 @@ export function CallSurface({
               <CallControl
                 icon="refresh-cw"
                 label={t('messenger.switchCamera')}
-                disabled={busy || ending || !call.camera}
+                disabled={
+                  busy || ending || !call.camera || Boolean(call.screen || call.screenStarting)
+                }
                 onPress={onSwitchCamera}
               />
             ) : (
@@ -121,7 +141,10 @@ export function CallSurface({
             pointerEvents="box-none"
             onLayout={({ nativeEvent }) => setStageHeight(nativeEvent.layout.height)}
           >
-            {!backdrop && (
+            {group && call && !terminal && (
+              <GroupCallStage call={call} names={names} availableHeight={stageHeight} />
+            )}
+            {!group && !backdrop && (
               <ScrollView
                 contentContainerStyle={styles.identity}
                 showsVerticalScrollIndicator={false}
@@ -138,7 +161,12 @@ export function CallSurface({
                 ]}
                 pointerEvents="none"
               >
-                <VideoView stream={localVideo} local />
+                <VideoView
+                  stream={localVideo}
+                  local
+                  mirror={!call?.screen}
+                  fit={call?.screen ? 'contain' : 'cover'}
+                />
               </View>
             )}
           </View>
@@ -178,8 +206,26 @@ export function CallSurface({
                       label={t(call.camera ? 'messenger.cameraOff' : 'messenger.cameraOn')}
                       caption={t('calls.controlCamera')}
                       selected={!call.camera}
-                      disabled={busy || ending || !call.local}
+                      disabled={
+                        busy || ending || !call.local || Boolean(call.screen || call.screenStarting)
+                      }
                       onPress={onCamera}
+                    />
+                  )}
+                  {video && onShareScreen && (
+                    <CallControl
+                      icon="monitor"
+                      label={t(
+                        call.screen
+                          ? 'groupCall.stopShare'
+                          : call.screenStarting
+                            ? 'groupCall.cancelShare'
+                            : 'groupCall.share',
+                      )}
+                      caption={t(call.screen ? 'groupCall.stopShare' : 'groupCall.share')}
+                      selected={Boolean(call.screen || call.screenStarting)}
+                      disabled={ending || call.status !== 'active'}
+                      onPress={onShareScreen}
                     />
                   )}
                   <CallControl
@@ -314,7 +360,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.callSecondary,
   },
   footer: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.sm,
     gap: theme.spacing.sm,
   },
@@ -322,14 +368,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'center',
-    gap: theme.spacing.sm,
-    padding: theme.spacing.md,
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
     borderRadius: theme.radii.xl,
     backgroundColor: 'rgba(42,42,42,0.96)',
   },
   control: {
     flex: 1,
-    minWidth: theme.controls.minTapTarget,
+    flexBasis: '27%',
+    minWidth: 80,
+    maxWidth: 120,
     alignItems: 'center',
     gap: theme.spacing.sm,
   },

@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { router, useIsFocused, useLocalSearchParams, usePathname } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/ui';
 import { PeerAvatar } from '../components/ContactCard';
+import { GroupCallSetup } from '../components/GroupCallSetup';
 import { CallSurface } from '../components/CallSurface';
 import { useDevice } from '../DeviceProvider';
 import { useLocalAction } from './shared';
@@ -37,7 +38,9 @@ export function CallScreen() {
   const { t } = useTranslation();
   const action = useLocalAction();
   const endAction = useLocalAction();
+  const shareAction = useLocalAction();
   const started = useRef(false);
+  const [groupStarted, setGroupStarted] = useState(false);
   const dismissed = useRef(false);
   const focused = useIsFocused();
   const call = useSyncExternalStore(calls?.subscribe ?? noSubscribe, calls?.snapshot ?? noCall);
@@ -74,11 +77,44 @@ export function CallScreen() {
     void action.run(() => calls.start(peer.key, media));
   }, [action, call, calls, chat.data?.kind, id, media, peer]);
   const name = chat.data?.title ?? t('brand');
+  const names = Object.fromEntries((members.data ?? []).map((member) => [member.key, member.name]));
+  if (
+    chat.data?.kind === 'group' &&
+    media &&
+    members.data &&
+    (!active || ['ended', 'failed'].includes(active.status)) &&
+    !groupStarted
+  ) {
+    return (
+      <GroupCallSetup
+        title={name}
+        members={members.data.filter((member) => member.key !== identity?.key)}
+        media={media}
+        busy={action.busy || !calls}
+        error={action.error}
+        onStart={(peers) => {
+          void action.run(async () => {
+            if (!calls) return;
+            started.current = true;
+            setGroupStarted(true);
+            try {
+              await calls.startGroup(id, peers, media);
+            } catch (error) {
+              started.current = false;
+              setGroupStarted(false);
+              throw error;
+            }
+          });
+        }}
+      />
+    );
+  }
   const avatarPeer = active?.peer ?? peer?.key;
   return (
     <CallSurface
       call={active}
       title={name}
+      names={names}
       avatar={
         avatarPeer ? (
           <PeerAvatar peer={avatarPeer} name={name} size="call" />
@@ -89,7 +125,7 @@ export function CallScreen() {
       available={Boolean(calls)}
       busy={action.busy}
       ending={endAction.busy}
-      error={endAction.error ?? action.error}
+      error={endAction.error ?? shareAction.error ?? action.error}
       onBack={dismiss}
       onAccept={() =>
         void action.run(async () => {
@@ -101,6 +137,16 @@ export function CallScreen() {
           await calls?.end();
         })
       }
+      onShareScreen={() => {
+        if (active?.screenStarting)
+          void endAction.run(async () => {
+            await calls?.stopScreenShare();
+          });
+        else
+          void shareAction.run(async () => {
+            await calls?.shareScreen();
+          });
+      }}
       onMute={() => calls?.mute()}
       onSpeaker={() =>
         void action.run(async () => {

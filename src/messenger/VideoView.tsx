@@ -1,5 +1,15 @@
 import { useEffect, useRef } from 'react';
-export function VideoView({ stream, local = false }: { stream: MediaStream; local?: boolean }) {
+export function VideoView({
+  stream,
+  local = false,
+  fit = 'cover',
+  mirror = local,
+}: {
+  stream: MediaStream;
+  local?: boolean;
+  fit?: 'cover' | 'contain';
+  mirror?: boolean;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream;
@@ -10,7 +20,12 @@ export function VideoView({ stream, local = false }: { stream: MediaStream; loca
       autoPlay
       playsInline
       muted={local}
-      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: fit,
+        transform: mirror ? 'scaleX(-1)' : undefined,
+      }}
     />
   );
 }

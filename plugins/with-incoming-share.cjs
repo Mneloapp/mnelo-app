@@ -127,16 +127,43 @@ module.exports = function withIncomingShare(config) {
         typeof value === 'object' &&
         String(value.name).replaceAll('"', '') === 'expo-sharing-extension',
     );
-    if (target && !mod.modResults.hasFile(resource)) {
-      if (!mod.modResults.pbxGroupByName('Resources')) {
-        const group = mod.modResults.addPbxGroup([], 'Resources');
-        mod.modResults.addToPbxGroup(
-          { fileRef: group.uuid, basename: 'Resources' },
-          mod.modResults.getFirstProject().firstProject.mainGroup,
-        );
-      }
-      mod.modResults.addResourceFile(resource, { target: target[0] });
+    if (!target) throw new Error('Mnelo share extension target is missing.');
+    const project = mod.modResults;
+    // xcode falls back to the main app when the extension has no Resources phase.
+    if (!project.buildPhase('Resources', target[0])) {
+      project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', target[0]);
     }
+    let resources = project.pbxGroupByName('Resources');
+    if (!resources) {
+      const group = project.addPbxGroup([], 'Resources', '');
+      project.addToPbxGroup(
+        { fileRef: group.uuid, basename: 'Resources' },
+        project.getFirstProject().firstProject.mainGroup,
+      );
+      resources = group.pbxGroup;
+    }
+    // A virtual group must not serialize an undefined directory into the project.
+    if (!resources.path || resources.path === 'undefined') delete resources.path;
+    if (!project.hasFile(resource)) {
+      project.addResourceFile(resource, { target: target[0] });
+    }
+    // Repair earlier generated projects too, without touching the app's manifest.
+    const references = project.pbxFileReferenceSection();
+    const reference = Object.keys(references).find(
+      (key) => String(references[key]?.path).replaceAll('"', '') === resource,
+    );
+    const buildFiles = project.pbxBuildFileSection();
+    const build = Object.keys(buildFiles).find((key) => buildFiles[key]?.fileRef === reference);
+    if (!reference || !build) throw new Error('Mnelo share privacy resource is missing.');
+    const phases = project.hash.project.objects.PBXResourcesBuildPhase;
+    for (const phase of Object.values(phases)) {
+      if (Array.isArray(phase?.files))
+        phase.files = phase.files.filter((file) => file.value !== build);
+    }
+    project.pbxResourcesBuildPhaseObj(target[0]).files.push({
+      value: build,
+      comment: 'PrivacyInfo.xcprivacy in Resources',
+    });
     return mod;
   });
 };

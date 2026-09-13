@@ -12,11 +12,13 @@ export function SearchField({
   value,
   onChangeText,
   leading,
+  onFocusChange,
 }: {
   label: string;
   value: string;
   onChangeText: (text: string) => void;
   leading?: React.ReactNode;
+  onFocusChange?: (focused: boolean) => void;
 }) {
   const { t, i18n } = useTranslation();
   const font = useAppFont();
@@ -35,8 +37,14 @@ export function SearchField({
         placeholderTextColor={theme.colors.textSecondaryOnSoft}
         value={value}
         onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
+        onFocus={() => {
+          setFocused(true);
+          onFocusChange?.(true);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          onFocusChange?.(false);
+        }}
         autoCorrect={false}
         autoCapitalize="none"
         maxLength={80}

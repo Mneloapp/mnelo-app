@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { FlatList, Keyboard, Pressable, StyleSheet, View } from 'react-native';
+import { formatTime, formatDate } from '@/i18n/format';
+import { useEffect, useRef, useState } from 'react';
+import { FlatList, Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { File, Paths } from 'expo-file-system';
@@ -23,6 +24,11 @@ import {
 import { useDevice } from '../DeviceProvider';
 import type { LocalMessage } from '../model';
 import { useLocalAction } from './shared';
+import { RichMessageCard } from '../components/RichMessageCard';
+import { RichCardComposer } from '../components/RichCardComposer';
+import { readRichMedia, richMedia, voteEmoji, type RichCard } from '../rich-message';
+import { useAttachmentPanel } from '../useAttachmentPanel';
+import { useSentMessageScroll } from '../useSentMessageScroll';
 import { useVisibleRead } from '../useVisibleRead';
 import { CallBackSheet, CallMessage } from '../components/CallMessage';
 import { MessageTimeReveal } from '../components/MessageMetadata';
@@ -32,7 +38,7 @@ import { ChatPhoto } from '../components/ChatPhoto';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
 import { ReplyQuote } from '../components/ReplyQuote';
-import { MessageActions } from '../components/MessageActions';
+import { MessageActions, type MessageAnchor } from '../components/MessageActions';
 
 function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: () => void }) {
   const { engine } = useDevice();
@@ -121,7 +127,7 @@ function Bubble({
   onReply,
 }: {
   message: LocalMessage;
-  onSelect: () => void;
+  onSelect: (anchor?: MessageAnchor) => void;
   onReply: () => void;
 }) {
   const { identity, engine } = useDevice();
@@ -131,37 +137,55 @@ function Bubble({
     queryFn: () => engine.reactions(message.id),
     networkMode: 'always',
   });
+  const attachment = useQuery({
+    queryKey: ['device', 'media', message.attachment],
+    queryFn: () => engine.media(message.attachment!),
+    enabled: message.kind === 'file' && Boolean(message.attachment),
+    networkMode: 'always',
+  });
+  const card = message.kind === 'file' ? readRichMedia(attachment.data) : null;
   const own = message.sender === identity?.key;
+  const bubbleRef = useRef<View>(null);
+  function select() {
+    const bubble = bubbleRef.current;
+    if (!bubble) {
+      onSelect();
+      return;
+    }
+    bubble.measureInWindow((x, y, width, height) => onSelect({ x, y, width, height }));
+  }
   return (
     <MessageTimeReveal onReply={onReply}>
       <MessageBubble
         own={own}
+        bubbleRef={bubbleRef}
+        onLongPress={select}
+        accessibilityLabel={
+          (message.body || t('common.more')) +
+          '. ' +
+          formatTime(new Date(message.sentAt).toISOString()) +
+          (own ? '. ' + t(`messenger.${message.status}`) : '')
+        }
         sentAt={message.sentAt}
         status={message.status}
         media={Boolean(message.attachment)}
-        reactions={reaction.data ?? []}
+        reactions={(reaction.data ?? []).filter(
+          (reaction) =>
+            card?.type !== 'poll' ||
+            !voteEmoji.slice(0, card.options.length).some((emoji) => emoji === reaction.emoji),
+        )}
       >
-        {message.body.length > 0 || message.replyTo ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              (message.body || t('common.more')) +
-              '. ' +
-              new Date(message.sentAt).toLocaleTimeString(undefined, {
-                hour: '2-digit',
-                minute: '2-digit',
-              }) +
-              (own ? '. ' + t(`messenger.${message.status}`) : '')
-            }
-            onLongPress={onSelect}
-            onPress={onSelect}
-            style={styles.messageBody}
-          >
+        {(message.body.length > 0 && !card) || message.replyTo ? (
+          <View style={styles.messageBody}>
             {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
-            {message.body.length > 0 && <AppText>{message.body}</AppText>}
-          </Pressable>
+            {message.body.length > 0 && !card && <AppText>{message.body}</AppText>}
+          </View>
         ) : null}
-        {message.attachment && <MessageMedia message={message} onSelect={onSelect} />}
+        {card ? (
+          <RichMessageCard id={message.id} card={card} />
+        ) : message.attachment ? (
+          <MessageMedia message={message} onSelect={select} />
+        ) : null}
         {message.kind === 'location' && /^[-\d.]+,[-\d.]+$/.test(message.body) && (
           <LocationMessage coordinates={message.body} />
         )}
@@ -187,10 +211,12 @@ export function ChatScreen() {
     networkMode: 'always',
   });
   const [text, setText] = useState('');
+  const [selectedAnchor, setSelectedAnchor] = useState<MessageAnchor | undefined>();
   const [selected, setSelected] = useState<LocalMessage | null>(null);
   const [callBack, setCallBack] = useState<LocalMessage | null>(null);
   const [reply, setReply] = useState<string | undefined>();
-  const [attachments, setAttachments] = useState(false);
+  const attachmentPanel = useAttachmentPanel();
+  const [cardComposer, setCardComposer] = useState<'poll' | 'event' | null>(null);
   const [recording, setRecording] = useState(false);
   const [voice, setVoice] = useState<SelectedMedia | null>(null);
   const chat = useQuery({
@@ -211,6 +237,12 @@ export function ChatScreen() {
     networkMode: 'always',
   });
   const rows = messages.data?.pages.flat() ?? [];
+  const { listRef, sent: didSend } = useSentMessageScroll(id, rows);
+  async function sendCurrent(body: string, options?: Parameters<typeof engine.send>[2]) {
+    const messageId = await engine.send(id, body, options);
+    didSend(messageId);
+    return messageId;
+  }
   const newest = rows[0]?.sequence;
   useVisibleRead(engine, id, newest);
   const remote = members.data?.find((member) => member.key !== identity?.key);
@@ -224,13 +256,13 @@ export function ChatScreen() {
       const source = new File(file.uri);
       if (source.size > 10 * 1024 * 1024) throw new Error('MEDIA_SIZE_LIMIT');
       const bytes = await source.base64();
-      await engine.send(id, '', {
+      await sendCurrent('', {
         kind,
         ...(reply ? { replyTo: reply } : {}),
         media: { name: file.name, mime: file.mime, bytes, duration: file.duration ?? null },
       });
       committed = true;
-      setAttachments(false);
+      attachmentPanel.close();
       setRecording(false);
       setVoice(null);
       setReply(undefined);
@@ -238,6 +270,26 @@ export function ChatScreen() {
       // A voice preview must remain playable/retryable if the local commit fails.
       if (committed || kind !== 'voice') discardCachedMedia(file.uri);
     }
+  }
+  async function sendCard(card: RichCard) {
+    const body =
+      card.type === 'poll'
+        ? '📊 ' +
+          card.question +
+          '\n' +
+          card.options.map((option, index) => voteEmoji[index] + ' ' + option).join('\n')
+        : '📅 ' +
+          card.title +
+          '\n' +
+          formatDate(new Date(card.start).toISOString()) +
+          ' · ' +
+          formatTime(new Date(card.start).toISOString()) +
+          (card.location ? '\n' + card.location : '');
+    await sendCurrent(body, {
+      kind: 'file',
+      media: richMedia(card),
+      ...(reply ? { replyTo: reply } : {}),
+    });
   }
   return (
     <Page
@@ -315,6 +367,7 @@ export function ChatScreen() {
         </AppText>
       )}
       <FlatList
+        ref={listRef}
         data={rows}
         inverted
         keyExtractor={(row) => row.id}
@@ -325,7 +378,11 @@ export function ChatScreen() {
           item.kind === 'call' ? (
             <CallMessage
               message={item}
-              onLongPress={() => setSelected(item)}
+              onLongPress={() => {
+                Keyboard.dismiss();
+                setSelectedAnchor(undefined);
+                setSelected(item);
+              }}
               onPress={() => {
                 Keyboard.dismiss();
                 setCallBack(item);
@@ -334,7 +391,11 @@ export function ChatScreen() {
           ) : (
             <Bubble
               message={item}
-              onSelect={() => setSelected(item)}
+              onSelect={(anchor) => {
+                Keyboard.dismiss();
+                setSelectedAnchor(anchor);
+                setSelected(item);
+              }}
               onReply={() => setReply(item.id)}
             />
           )
@@ -387,12 +448,17 @@ export function ChatScreen() {
       ) : (
         <View style={ui.row}>
           <IconButton
-            icon="plus"
+            icon={attachmentPanel.visible ? 'x' : 'plus'}
             label={t('messenger.attachments')}
-            onPress={() => setAttachments(true)}
+            onPress={attachmentPanel.toggle}
           />
           <View style={ui.flex}>
-            <MessageField value={text} onChangeText={setText} focusKey={reply} />
+            <MessageField
+              value={text}
+              onChangeText={setText}
+              focusKey={reply}
+              onFocus={attachmentPanel.close}
+            />
           </View>
           {text.trim() ? (
             <IconButton
@@ -402,7 +468,7 @@ export function ChatScreen() {
               busy={action.busy}
               onPress={() =>
                 void action.run(async () => {
-                  await engine.send(id, text, reply ? { replyTo: reply } : {});
+                  await sendCurrent(text, reply ? { replyTo: reply } : {});
                   setText((draft) => (draft === text ? '' : draft));
                   setReply(undefined);
                 })
@@ -414,6 +480,7 @@ export function ChatScreen() {
               label={t('messenger.voice')}
               onPress={() => {
                 Keyboard.dismiss();
+                attachmentPanel.close();
                 setVoice(null);
                 setRecording(true);
               }}
@@ -464,7 +531,7 @@ export function ChatScreen() {
               busy={action.busy}
               onPress={() =>
                 void action.run(async () => {
-                  await engine.send(id, contact.name + '\nmnelo1:' + contact.key, {
+                  await sendCurrent(contact.name + '\nmnelo1:' + contact.key, {
                     kind: 'contact',
                   });
                   setContactPicker(false);
@@ -476,6 +543,8 @@ export function ChatScreen() {
       {selected && (
         <MessageActions
           message={selected}
+          own={selected.sender === identity?.key}
+          anchor={selectedAnchor}
           busy={action.busy}
           close={() => setSelected(null)}
           reply={() => {
@@ -512,66 +581,95 @@ export function ChatScreen() {
           }
         />
       )}
-      <ActionSheet
-        visible={attachments}
-        title={t('messenger.attachments')}
-        onClose={() => setAttachments(false)}
-      >
-        <View style={styles.attachmentGrid}>
-          <AttachmentAction
-            icon="user"
-            label={t('messenger.contact')}
-            onPress={() => {
-              setAttachments(false);
-              setContactPicker(true);
-            }}
-          />
-          <AttachmentAction
-            icon="image"
-            label={t('messenger.photo')}
-            busy={action.busy}
-            onPress={() => void action.run(async () => sendFile(await imageSelection(), 'image'))}
-          />
-          <AttachmentAction
-            icon="camera"
-            label={t('messenger.camera')}
-            busy={action.busy}
-            onPress={() =>
-              void action.run(async () => sendFile(await imageSelection(true), 'image'))
-            }
-          />
-          <AttachmentAction
-            icon="file-text"
-            label={t('messenger.file')}
-            busy={action.busy}
-            onPress={() => void action.run(async () => sendFile(await fileSelection(), 'file'))}
-          />
-          <AttachmentAction
-            icon="map-pin"
-            label={t('messenger.location')}
-            busy={action.busy}
-            onPress={() =>
-              void action.run(async () => {
-                const permission = await Location.requestForegroundPermissionsAsync();
-                if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
-                const point = await Location.getCurrentPositionAsync({
-                  accuracy: Location.Accuracy.Balanced,
-                });
-                await engine.send(id, `${point.coords.latitude},${point.coords.longitude}`, {
-                  kind: 'location',
-                });
-                setAttachments(false);
-              })
-            }
-          />
-        </View>
-        <Button
-          variant="secondary"
-          label={t('common.cancel')}
-          onPress={() => setAttachments(false)}
+      {attachmentPanel.visible && (
+        <ScrollView
+          testID="attachment-panel"
+          style={[styles.attachmentPanel, { height: attachmentPanel.height }]}
+          contentContainerStyle={styles.panelContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.attachmentGrid}>
+            <AttachmentAction
+              icon="image"
+              label={t('messenger.photo')}
+              busy={action.busy}
+              onPress={() => void action.run(async () => sendFile(await imageSelection(), 'image'))}
+            />
+            <AttachmentAction
+              icon="camera"
+              label={t('messenger.camera')}
+              busy={action.busy}
+              onPress={() =>
+                void action.run(async () => sendFile(await imageSelection(true), 'image'))
+              }
+            />
+            <AttachmentAction
+              icon="map-pin"
+              label={t('messenger.attachmentLocation')}
+              busy={action.busy}
+              onPress={() =>
+                void action.run(async () => {
+                  const permission = await Location.requestForegroundPermissionsAsync();
+                  if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
+                  const point = await Location.getCurrentPositionAsync({
+                    accuracy: Location.Accuracy.Balanced,
+                  });
+                  await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
+                    kind: 'location',
+                  });
+                  attachmentPanel.close();
+                })
+              }
+            />
+            <AttachmentAction
+              icon="user"
+              label={t('messenger.attachmentContact')}
+              onPress={() => {
+                attachmentPanel.close();
+                setContactPicker(true);
+              }}
+            />
+            <AttachmentAction
+              icon="file-text"
+              label={t('messenger.file')}
+              busy={action.busy}
+              onPress={() => void action.run(async () => sendFile(await fileSelection(), 'file'))}
+            />
+            <AttachmentAction
+              icon="bar-chart-2"
+              label={t('messenger.poll')}
+              onPress={() => {
+                attachmentPanel.close();
+                setCardComposer('poll');
+              }}
+            />
+            <AttachmentAction
+              icon="calendar"
+              label={t('messenger.event')}
+              onPress={() => {
+                attachmentPanel.close();
+                setCardComposer('event');
+              }}
+            />
+          </View>
+        </ScrollView>
+      )}
+      {cardComposer && (
+        <RichCardComposer
+          kind={cardComposer}
+          close={() => setCardComposer(null)}
+          busy={action.busy}
+          error={action.error}
+          send={(card) =>
+            void action.run(async () => {
+              await sendCard(card);
+              setCardComposer(null);
+              setReply(undefined);
+            })
+          }
         />
-        {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
-      </ActionSheet>
+      )}
     </Page>
   );
 }
@@ -587,6 +685,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     borderRadius: theme.radii.pill,
   },
+  attachmentPanel: {
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: '#DCDDD9',
+    marginHorizontal: -theme.spacing.md,
+    borderTopLeftRadius: theme.radii.lg,
+    borderTopRightRadius: theme.radii.lg,
+  },
+  panelContent: { paddingVertical: theme.spacing.md },
   attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   messageBody: { minHeight: theme.spacing.xl },
   empty: { transform: [{ scaleY: -1 }] },

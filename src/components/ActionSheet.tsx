@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import {
   Animated,
+  KeyboardAvoidingView,
   Easing,
   Modal,
   Platform,
@@ -22,6 +23,7 @@ export function ActionSheet({
   onClose,
   onDismiss,
   compact = false,
+  avoidKeyboard = false,
   children,
 }: PropsWithChildren<{
   visible: boolean;
@@ -29,6 +31,7 @@ export function ActionSheet({
   onClose: () => void;
   onDismiss?: () => void;
   compact?: boolean;
+  avoidKeyboard?: boolean;
 }>) {
   const reduced = useReducedMotion();
   const { t } = useTranslation();
@@ -80,50 +83,60 @@ export function ActionSheet({
             accessibilityLabel={t('compose.close')}
             onPress={onClose}
           />
-          <Animated.View
-            style={[
-              styles.panel,
-              {
-                transform: [
-                  {
-                    translateY: entrance.interpolate({ inputRange: [0, 1], outputRange: [24, 0] }),
-                  },
-                ],
-              },
-            ]}
+          <KeyboardAvoidingView
+            enabled={avoidKeyboard}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboard}
+            pointerEvents="box-none"
           >
-            <ScrollView
-              style={styles.scroll}
-              contentContainerStyle={styles.sheet}
-              keyboardShouldPersistTaps="handled"
-              bounces={false}
+            <Animated.View
+              style={[
+                styles.panel,
+                {
+                  transform: [
+                    {
+                      translateY: entrance.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [24, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
             >
-              {compact ? (
-                <View style={styles.header}>
-                  <View style={styles.closeSpace} />
-                  <AppText variant="bodyMedium" accessibilityRole="header" style={styles.title}>
-                    {title}
-                  </AppText>
-                  <FocusPressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t('common.cancel')}
-                    onPress={onClose}
-                    style={styles.close}
-                  >
-                    <AppIcon name="x" />
-                  </FocusPressable>
-                </View>
-              ) : (
-                <>
-                  <View style={styles.handle} accessible={false} />
-                  <AppText variant="headline" accessibilityRole="header">
-                    {title}
-                  </AppText>
-                </>
-              )}
-              {children}
-            </ScrollView>
-          </Animated.View>
+              <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.sheet}
+                keyboardShouldPersistTaps="handled"
+                bounces={false}
+              >
+                {compact ? (
+                  <View style={styles.header}>
+                    <View style={styles.closeSpace} />
+                    <AppText variant="bodyMedium" accessibilityRole="header" style={styles.title}>
+                      {title}
+                    </AppText>
+                    <FocusPressable
+                      accessibilityRole="button"
+                      accessibilityLabel={t('common.cancel')}
+                      onPress={onClose}
+                      style={styles.close}
+                    >
+                      <AppIcon name="x" />
+                    </FocusPressable>
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.handle} accessible={false} />
+                    <AppText variant="headline" accessibilityRole="header">
+                      {title}
+                    </AppText>
+                  </>
+                )}
+                {children}
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
         </SafeAreaView>
       </SafeAreaProvider>
     </Modal>
@@ -143,6 +156,7 @@ const styles = StyleSheet.create({
   },
   modal: { flex: 1, justifyContent: 'flex-end' },
   scrim: { backgroundColor: theme.colors.scrim },
+  keyboard: { flex: 1, justifyContent: 'flex-end' },
   panel: { maxHeight: '90%', flexShrink: 1 },
   scroll: {
     flexGrow: 0,

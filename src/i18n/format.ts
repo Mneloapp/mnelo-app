@@ -12,9 +12,7 @@ function georgianDate(date: Date, utc = false) {
 export function formatTime(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
-  if (i18n.language === 'ka')
-    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-  return new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(date);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 export function formatDate(value: string) {
   const date = new Date(value);

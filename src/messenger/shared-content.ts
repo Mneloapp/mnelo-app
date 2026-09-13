@@ -1,3 +1,4 @@
+import { richMime } from './rich-message';
 import type { LocalDatabase } from './model';
 
 export type ContentTab = 'media' | 'links' | 'docs';
@@ -77,7 +78,7 @@ export function messageLinks(body: string): string[] {
 const visual = "(f.mime LIKE 'image/%' OR f.mime LIKE 'video/%')";
 const filters: Record<ContentTab, string> = {
   media: `m.kind IN ('image','file') AND ${visual}`,
-  docs: `m.kind='file' AND NOT ${visual}`,
+  docs: `m.kind='file' AND NOT ${visual} AND f.mime!='${richMime}'`,
   links: "m.kind='text' AND (m.body LIKE '%https://%' OR m.body LIKE '%http://%')",
 };
 

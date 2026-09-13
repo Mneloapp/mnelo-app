@@ -45,7 +45,7 @@ export default function ComposeLayout() {
         <Stack.Screen name="new-contact" options={{ title: t('compose.newContact') }} />
         <Stack.Screen name="contact-code" options={{ title: t('messenger.contactCode') }} />
         <Stack.Screen name="my-code" options={{ title: t('messenger.myCode') }} />
-        <Stack.Screen name="scan-contact" options={{ title: t('card.scan') }} />
+        <Stack.Screen name="scan-contact" options={{ headerShown: false }} />
         <Stack.Screen name="find-phone" options={{ title: t('phone.search') }} />
         <Stack.Screen name="dial-number" options={{ title: t('compose.keypad') }} />
         <Stack.Screen name="new-group" options={{ title: t('messenger.newGroup') }} />

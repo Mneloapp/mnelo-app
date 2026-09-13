@@ -35,6 +35,8 @@ test('every English key has explicit Georgian copy and identical interpolation v
     'calls.event',
     'messenger.googleMaps',
     'messenger.appleMaps',
+    'messenger.googleCalendar', // Product name is unchanged across locales.
+    'messenger.eventDatePlaceholder', // Literal ISO date/time input pattern.
   ]);
   for (const [key, value] of Object.entries(english)) {
     expect(georgian[key]?.trim()).toBeTruthy();
@@ -142,4 +144,12 @@ test('Georgian numeric copy works on iOS Hermes without NumberFormat.formatToPar
     if (descriptor) Object.defineProperty(Intl.NumberFormat.prototype, 'formatToParts', descriptor);
     else Reflect.deleteProperty(Intl.NumberFormat.prototype, 'formatToParts');
   }
+});
+
+test.each(['en', 'ka'])('times are always local 24-hour HH:mm in %s', async (locale) => {
+  await i18n.changeLanguage(locale);
+  expect(formatTime(new Date(2026, 8, 13, 0, 5).toISOString())).toBe('00:05');
+  expect(formatTime(new Date(2026, 8, 13, 12, 0).toISOString())).toBe('12:00');
+  expect(formatTime(new Date(2026, 8, 13, 23, 57).toISOString())).toBe('23:57');
+  expect(formatTime('invalid')).toBe('');
 });

@@ -5753,6 +5753,15 @@
       "noticeFiles": ["LICENSE"]
     },
     {
+      "package": "expo-calendar",
+      "version": "57.0.3",
+      "license": "MIT",
+      "direct": true,
+      "developmentOnly": false,
+      "installed": true,
+      "noticeFiles": ["LICENSE"]
+    },
+    {
       "package": "expo-camera",
       "version": "57.0.5",
       "license": "MIT",

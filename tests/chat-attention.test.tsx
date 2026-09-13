@@ -24,6 +24,7 @@ test('Chats keeps search mounted while filters and clear search update the local
       <ChatsScreen />
     </QueryClientProvider>,
   );
+  await fireEvent.press(screen.getByRole('button', { name: 'Show chat search' }));
   const input = screen.getByLabelText('Search chats');
   expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
   await fireEvent.changeText(input, 'Development');

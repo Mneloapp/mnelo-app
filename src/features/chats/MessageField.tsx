@@ -11,10 +11,12 @@ export function MessageField({
   value,
   onChangeText,
   focusKey,
+  onFocus,
 }: {
   value: string;
   onChangeText: (text: string) => void;
   focusKey?: string | undefined;
+  onFocus?: () => void;
 }) {
   const { t } = useTranslation();
   const { fontScale } = useWindowDimensions();
@@ -29,6 +31,7 @@ export function MessageField({
   return (
     <Field
       inputRef={input}
+      onFocus={onFocus}
       label={t('chat.message')}
       hideLabel
       value={value}

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { FlatList, Keyboard, View } from 'react-native';
+import { FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { IconButton, Page, StateView, ui } from '@/components/ui';
-import { SearchField } from '@/components/SearchField';
+import { PullSearch, usePullSearch } from '@/components/PullSearch';
 import { CallContactSearch } from '../components/CallContactSearch';
 import { PeerAvatar } from '../components/ContactCard';
 import { ContactPickerScreen } from './ContactPickerScreen';
@@ -16,8 +16,8 @@ import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 export function CallsScreen() {
   const { engine, view } = useDevice();
   const { t } = useTranslation();
-  const [searchVisible, setSearchVisible] = useState(false);
   const [search, setSearch] = useState('');
+  const searchBar = usePullSearch(search);
   const [selected, setSelected] = useState<CallTarget | null>(null);
   const q = useInfiniteQuery({
     queryKey: ['device', 'call-history'],
@@ -31,7 +31,7 @@ export function CallsScreen() {
   return (
     <Page
       title={t('tabs.calls')}
-      onTitlePress={() => setSearchVisible(true)}
+      onTitlePress={searchBar.reveal}
       titleActionLabel={t('callSearch.open')}
       scroll={false}
       bottomSafe={false}
@@ -46,39 +46,24 @@ export function CallsScreen() {
       }
     >
       <CurrentCall />
-      {searchVisible && (
-        <View style={ui.row}>
-          <View style={ui.flex}>
-            <SearchField
-              label={t('callSearch.placeholder')}
-              value={search}
-              onChangeText={setSearch}
-            />
-          </View>
-          <IconButton
-            icon="x"
-            label={t('common.cancel')}
-            onPress={() => {
-              Keyboard.dismiss();
-              setSearch('');
-              setSearchVisible(false);
-            }}
-          />
-        </View>
-      )}
+      <PullSearch
+        label={t('callSearch.placeholder')}
+        value={search}
+        onChangeText={setSearch}
+        visible={searchBar.visible}
+        onFocusChange={searchBar.focus}
+        onClose={searchBar.close}
+      />
       {search.trim() ? (
         <CallContactSearch search={search} />
       ) : (
         <FlatList
           testID="calls-history"
+          showsVerticalScrollIndicator={false}
           data={q.data?.pages.flat() ?? []}
-          onScroll={(event) => {
-            if (event.nativeEvent.contentOffset.y < -32) setSearchVisible(true);
-          }}
-          scrollEventThrottle={32}
-          alwaysBounceVertical
-          onRefresh={() => setSearchVisible(true)}
-          refreshing={false}
+          {...searchBar.scrollProps}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           keyExtractor={(item) => item.id}
           initialNumToRender={12}
           windowSize={7}

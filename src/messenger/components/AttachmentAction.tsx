@@ -15,7 +15,7 @@ export function AttachmentAction({
   onPress: () => void;
   busy?: boolean;
 }) {
-  const { fontScale } = useWindowDimensions();
+  const { fontScale, width } = useWindowDimensions();
   return (
     <FocusPressable
       accessibilityRole="button"
@@ -23,12 +23,15 @@ export function AttachmentAction({
       accessibilityState={{ disabled: busy, busy }}
       disabled={busy}
       onPress={onPress}
-      style={[styles.action, { width: fontScale > 1.3 ? '50%' : '33.333333%' }]}
+      style={[
+        styles.action,
+        { width: fontScale > 1.3 ? '50%' : width < 360 ? '33.333333%' : '25%' },
+      ]}
     >
       <View style={styles.icon}>
         <AppIcon name={icon} />
       </View>
-      <AppText variant="label" centered>
+      <AppText variant="caption" centered style={{ alignSelf: 'stretch' }}>
         {label}
       </AppText>
     </FocusPressable>
@@ -39,8 +42,8 @@ const styles = StyleSheet.create({
   icon: {
     width: theme.controls.buttonHeight,
     height: theme.controls.buttonHeight,
-    borderRadius: theme.radii.lg,
-    backgroundColor: theme.colors.surfaceSoft,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

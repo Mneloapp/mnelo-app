@@ -1,5 +1,5 @@
-import type { PropsWithChildren } from 'react';
-import { StyleSheet, View } from 'react-native';
+import type { PropsWithChildren, Ref } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { theme } from '@/theme/tokens';
@@ -10,6 +10,9 @@ import { DeliveryLeaf } from './MessageMetadata';
 // Reactions are siblings of the bubble, never part of the message body or its copy action.
 export function MessageBubble({
   own,
+  bubbleRef,
+  onLongPress,
+  accessibilityLabel,
   status,
   sentAt,
   media,
@@ -17,6 +20,9 @@ export function MessageBubble({
   children,
 }: PropsWithChildren<{
   own: boolean;
+  bubbleRef?: Ref<View>;
+  onLongPress?: () => void;
+  accessibilityLabel?: string;
   status: LocalMessage['status'];
   sentAt?: number;
   media?: boolean;
@@ -28,7 +34,23 @@ export function MessageBubble({
   const receipt = own && (status === 'delivered' || status === 'read');
   return (
     <View style={[styles.row, own && styles.own, media && styles.media]}>
-      <View testID="message-bubble" style={[styles.bubble, own && styles.outgoing]}>
+      <Pressable
+        testID="message-bubble"
+        ref={bubbleRef}
+        collapsable={false}
+        style={[styles.bubble, own && styles.outgoing]}
+        onLongPress={onLongPress}
+        delayLongPress={450}
+        accessible={Boolean(onLongPress)}
+        accessibilityRole={onLongPress ? 'button' : undefined}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityActions={
+          onLongPress ? [{ name: 'longpress', label: t('common.more') }] : undefined
+        }
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'longpress') onLongPress?.();
+        }}
+      >
         <View style={[styles.body, media && styles.mediaBody]}>{children}</View>
         {(sentAt !== undefined || receipt) && (
           <View style={styles.metadata} testID="message-metadata">
@@ -40,7 +62,7 @@ export function MessageBubble({
             {receipt && <DeliveryLeaf status={status} />}
           </View>
         )}
-      </View>
+      </Pressable>
       {counts.size > 0 && (
         <View testID="message-reactions" style={[styles.reactions, own && styles.ownReactions]}>
           {[...counts].map(([emoji, count]) => (
@@ -71,7 +93,7 @@ const styles = StyleSheet.create({
   own: { alignSelf: 'flex-end', marginRight: 0, marginLeft: theme.spacing.xl },
   media: { width: '86%' },
   bubble: {
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.lg,
     padding: theme.spacing.md,
     flexDirection: 'row',

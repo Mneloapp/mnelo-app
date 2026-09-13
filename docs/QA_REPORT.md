@@ -856,3 +856,11 @@ Tests: `npm run check` PASS — 312 Jest tests in 63 suites, 3 server tests, 132
 Native checks: See BUILD_LOG.md for the actual unsigned iOS compilation result. No new signed distribution artifact or device installation is inferred from an export.
 Known limitations: User reports only one iPhone is on build 11. The changes in this section are not in the already uploaded build 11. Both phones need the next build for these UI fixes and a compatible delivery version before end-to-end testing. iPhone Photos sharing, native inset/font/gesture behavior, QR and voice/video/background flows still need physical acceptance. Existing recovery/cryptography/release limitations remain.
 Commit: Recorded by the Git commit containing this section; build-11 corresponding-source tag remains unchanged.
+
+## September 13 — Build 20 interaction regression and native package evidence
+
+Full check passes 521 tests: 384 Jest / 71 suites, 3 server, 134 device. Actual component review covers Georgian QR with all centered actions visible, paginated photo selection/thumbnail strip, keypad, incoming-share recipient preview and lime text-send reverting to microphone. Profile picker dismissal, phonebook permission/cancellation, quick-call identity recheck, explicit sharing/cancel and partial retry are covered by automated tests with native services mocked.
+
+Signed iOS 0.1.0 (20), its receiving-share extension, App Store export and Apple upload pass. Source tag [ios-0.1.0-20](https://github.com/Mneloapp/mnelo-app/tree/ios-0.1.0-20), [CI](https://github.com/Mneloapp/mnelo-app/actions/runs/34775148117), exact package hashes and secret scans are recorded in BUILD_LOG and artifacts/build20-evidence.json. Preview fixture bytes/entry points are excluded from the product. Apple tester availability is recorded in the final delivery checkpoint. None of this substitutes for a physical library-picker, Photos/Files/Maps cold/warm share, gesture/zoom, camera/audio or two-phone acceptance run. Expo's iOS receiving bridge remains experimental, and an interrupted partial share is not claimed crash-deduplicated.
+
+Build 20 delivery result: Apple processing Complete; Mnelo Development Testing; Mnelo Preview Waiting for Review. The pending build 18 was replaced without expiring it. No new physical-device acceptance is inferred from those distribution states.

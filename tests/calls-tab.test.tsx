@@ -71,6 +71,9 @@ test('pulling the call list down reveals search, and cancelling restores the com
   await show(<CallsScreen />);
   await screen.findByText('No calls yet. Start a voice or video call with a saved contact.');
   expect(screen.queryByRole('search')).toBeNull();
+  await fireEvent(screen.getByTestId('calls-history'), 'scrollBeginDrag', {
+    nativeEvent: { contentOffset: { x: 0, y: 0 } },
+  });
   await fireEvent(screen.getByTestId('calls-history'), 'scroll', {
     nativeEvent: {
       contentOffset: { x: 0, y: -45 },

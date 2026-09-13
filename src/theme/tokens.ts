@@ -1,11 +1,11 @@
 export const theme = {
   colors: {
-    background: '#FAFAF7',
+    background: '#F0F1EE',
     surface: '#FFFFFF',
     surfaceSoft: '#F3F4F1',
     textPrimary: '#1A1A1A',
-    textSecondary: '#6B7280',
-    // The canonical gray is below 4.5:1 on soft/message surfaces.
+    textSecondary: '#626974',
+    // Secondary text retains contrast on the gray canvas and soft surfaces.
     textSecondaryOnSoft: '#626974',
     black: '#111111',
     accent: '#D7FF3F',

@@ -3,13 +3,14 @@ import { FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Avatar, Button, Field, IconButton, Page, Row, StateView, ui } from '@/components/ui';
+import { Avatar, Button, Field, IconButton, Page, StateView, ui } from '@/components/ui';
+import { useDayBoundary } from '@/hooks/useDayBoundary';
 import { AppText } from '@/components/AppText';
 import { useDevice } from '../DeviceProvider';
 import { Check, useLocalAction } from './shared';
 import { useComposer } from './composer-navigation';
-import { SearchField } from '@/components/SearchField';
-import { CountBadge } from '@/components/CountBadge';
+import { PullSearch, usePullSearch } from '@/components/PullSearch';
+import { ChatHistoryRow } from '../components/ChatHistoryRow';
 import { ChatFilters } from './ChatFilters';
 import type { ChatCursor, ChatFilter } from '../engine';
 import { callOutcomeCopy, readCallRecord } from '../call-record';
@@ -20,6 +21,8 @@ export function ChatsScreen() {
   const { view } = useDevice();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
+  const searchBar = usePullSearch(search);
+  const today = useDayBoundary();
   const [filter, setFilter] = useState<ChatFilter>('all');
   const q = useInfiniteQuery({
     queryKey: ['device', 'chats', filter, search.trim()],
@@ -32,6 +35,8 @@ export function ChatsScreen() {
   return (
     <Page
       title={t('tabs.chats')}
+      onTitlePress={searchBar.reveal}
+      titleActionLabel={t('messenger.openChatSearch')}
       scroll={false}
       bottomSafe={false}
       contentStyle={ui.flex}
@@ -44,9 +49,19 @@ export function ChatsScreen() {
         />
       }
     >
-      <SearchField label={t('messenger.searchChats')} value={search} onChangeText={setSearch} />
+      <PullSearch
+        label={t('messenger.searchChats')}
+        value={search}
+        onChangeText={setSearch}
+        visible={searchBar.visible}
+        onFocusChange={searchBar.focus}
+        onClose={searchBar.close}
+      />
       <ChatFilters value={filter} onChange={setFilter} />
       <FlatList
+        testID="chats-list"
+        showsVerticalScrollIndicator={false}
+        {...searchBar.scrollProps}
         ListHeaderComponent={<ContactRequests />}
         data={rows}
         keyExtractor={(row) => row.id}
@@ -68,29 +83,20 @@ export function ChatsScreen() {
         initialNumToRender={12}
         windowSize={7}
         renderItem={({ item }) => (
-          <Row
-            title={item.title}
+          <ChatHistoryRow
+            chat={item}
+            now={today}
             subtitle={
               item.previewKind === 'call'
                 ? t(callOutcomeCopy[readCallRecord(item.preview).status])
                 : item.preview
             }
-            left={
+            avatar={
               item.kind === 'direct' && item.peer ? (
                 <PeerAvatar peer={item.peer} name={item.title} />
               ) : (
                 <Avatar name={item.title} />
               )
-            }
-            right={
-              <CountBadge
-                count={item.unread}
-                label={t('messenger.unreadCount', { count: item.unread })}
-              />
-            }
-            accessibilityLabel={
-              item.title +
-              (item.unread ? '. ' + t('messenger.unreadCount', { count: item.unread }) : '')
             }
             onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
           />

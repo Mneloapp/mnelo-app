@@ -1,4 +1,5 @@
 import { wakeCapability } from './wake-protocol';
+import { readRichMedia, voteEmoji } from './rich-message';
 import { z } from 'zod';
 import {
   contactSchema,
@@ -1445,44 +1446,113 @@ export class DeviceMessenger {
             emoji,
           )
         ).length > 0;
-      if (current)
-        await this.db.run(
-          'DELETE FROM reactions WHERE message_id=? AND peer=? AND emoji=?',
-          id,
-          own,
-          emoji,
-        );
-      else await this.db.run('INSERT INTO reactions VALUES(?,?,?)', id, own, emoji);
-      const peers = await this.db.all<{ public_key: string }>(
-        'SELECT m.public_key FROM members m JOIN contacts c ON c.public_key=m.public_key WHERE m.chat_id=? AND c.blocked=0 AND m.public_key!=?',
-        row.chat_id,
-        own,
-      );
-      const revision =
-        ((
-          await this.db.all<{ revision: number }>(
-            'SELECT revision FROM reaction_versions WHERE message_id=? AND peer=? AND emoji=?',
-            id,
-            own,
-            emoji,
-          )
-        )[0]?.revision ?? 0) + 1;
-      if (revision > 2147483647) throw new Error('REACTION_LIMIT');
+      await this.writeReaction(id, row.chat_id, own, emoji, !current);
+    });
+    this.changed();
+    await this.flush().catch(() => undefined);
+  }
+  // This helper is called only within the serialized local transaction.
+  private async writeReaction(
+    id: string,
+    chat: string,
+    own: string,
+    emoji: string,
+    active: boolean,
+  ) {
+    if (!active)
       await this.db.run(
-        'INSERT INTO reaction_versions VALUES(?,?,?,?) ON CONFLICT(message_id,peer,emoji) DO UPDATE SET revision=excluded.revision',
+        'DELETE FROM reactions WHERE message_id=? AND peer=? AND emoji=?',
         id,
         own,
         emoji,
-        revision,
       );
-      for (const member of peers)
-        await this.stageControl(member.public_key, {
-          type: 'reaction',
+    else await this.db.run('INSERT INTO reactions VALUES(?,?,?)', id, own, emoji);
+    const peers = await this.db.all<{ public_key: string }>(
+      'SELECT m.public_key FROM members m JOIN contacts c ON c.public_key=m.public_key WHERE m.chat_id=? AND c.blocked=0 AND m.public_key!=?',
+      chat,
+      own,
+    );
+    const revision =
+      ((
+        await this.db.all<{ revision: number }>(
+          'SELECT revision FROM reaction_versions WHERE message_id=? AND peer=? AND emoji=?',
           id,
+          own,
           emoji,
-          active: !current,
-          revision,
-        });
+        )
+      )[0]?.revision ?? 0) + 1;
+    if (revision > 2147483647) throw new Error('REACTION_LIMIT');
+    await this.db.run(
+      'INSERT INTO reaction_versions VALUES(?,?,?,?) ON CONFLICT(message_id,peer,emoji) DO UPDATE SET revision=excluded.revision',
+      id,
+      own,
+      emoji,
+      revision,
+    );
+    for (const member of peers)
+      await this.stageControl(member.public_key, {
+        type: 'reaction',
+        id,
+        emoji,
+        active,
+        revision,
+      });
+  }
+  async vote(id: string, index: number) {
+    const own = this.own().key;
+    await this.transaction(async () => {
+      const row = (
+        await this.db.all<Media & { chat: string; left_group: number }>(
+          "SELECT f.name,f.mime,f.bytes,f.duration,m.chat_id AS chat,c.left_group FROM messages m JOIN media f ON f.id=m.media_id JOIN chats c ON c.id=m.chat_id WHERE m.id=? AND m.kind='file'",
+          id,
+        )
+      )[0];
+      const card = readRichMedia(row);
+      if (
+        !row ||
+        card?.type !== 'poll' ||
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= card.options.length
+      )
+        throw new Error('POLL_INVALID');
+      const members = await this.db.all<{ public_key: string }>(
+        'SELECT public_key FROM members WHERE chat_id=?',
+        row.chat,
+      );
+      if (
+        row.left_group ||
+        members.length < 2 ||
+        !members.some((member) => member.public_key === own)
+      )
+        throw new Error('CHAT_FORBIDDEN');
+      if (
+        (
+          await this.db.all(
+            'SELECT m.public_key FROM members m JOIN contacts c ON c.public_key=m.public_key WHERE m.chat_id=? AND c.blocked=1',
+            row.chat,
+          )
+        ).length
+      )
+        throw new Error('CONTACT_BLOCKED');
+      const existing = await this.db.all<{ emoji: string }>(
+        'SELECT emoji FROM reactions WHERE message_id=? AND peer=?',
+        id,
+        own,
+      );
+      const selected = voteEmoji[index]!;
+      if (!card.multiple)
+        for (const option of existing) {
+          if (option.emoji !== selected && voteEmoji.some((emoji) => emoji === option.emoji))
+            await this.writeReaction(id, row.chat, own, option.emoji, false);
+        }
+      await this.writeReaction(
+        id,
+        row.chat,
+        own,
+        selected,
+        !existing.some((option) => option.emoji === selected),
+      );
     });
     this.changed();
     await this.flush().catch(() => undefined);

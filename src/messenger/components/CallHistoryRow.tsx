@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { AppIcon } from '@/components/AppIcon';
 import { FocusPressable } from '@/components/FocusPressable';
-import { formatTime } from '@/i18n/format';
+import { formatDate, formatTime } from '@/i18n/format';
 import { theme } from '@/theme/tokens';
 import type { LocalCall } from '../model';
 import { callOutcomeCopy } from '../call-record';
@@ -55,7 +55,7 @@ export function CallHistoryRow({
       style={styles.row}
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${call.name}. ${detail}. ${date.toLocaleString(locale)}`}
+      accessibilityLabel={`${call.name}. ${detail}. ${formatDate(date.toISOString())}, ${formatTime(date.toISOString())}`}
     >
       {avatar}
       <View style={styles.content}>

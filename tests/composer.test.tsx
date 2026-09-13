@@ -22,6 +22,7 @@ const mockEngine = {
   ]),
   trustContact: jest.fn(async () => 'direct-id'),
   trustPhoneContact: jest.fn(async () => 'direct-id'),
+  contactDisplayNames: jest.fn(async () => new Map<string, string>()),
 };
 const mockMesh = { focus: jest.fn(), online: jest.fn(() => false) };
 jest.mock('@/messenger/DeviceProvider', () => ({

@@ -2,6 +2,8 @@ import {
   managePhonebookAccess,
   savedPhoneName,
   savedPhoneNames,
+  ensurePhonebookAccess,
+  addPhoneContact,
 } from '@/messenger/phonebook.native';
 import { Contact, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
 import { Linking } from 'react-native';
@@ -10,7 +12,7 @@ jest.mock('expo-contacts', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: true })),
   requestPermissionsAsync: jest.fn(),
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
-  Contact: { getAllDetails: jest.fn(), presentAccessPicker: jest.fn() },
+  Contact: { getAllDetails: jest.fn(), presentAccessPicker: jest.fn(), create: jest.fn() },
 }));
 test('no contact read without permission, and local formatting matches the complete phone only', async () => {
   jest
@@ -103,4 +105,71 @@ test('denied access opens Settings instead of repeating an ineffective request',
   expect(settings).toHaveBeenCalledTimes(1);
   expect(requestPermissionsAsync).not.toHaveBeenCalled();
   settings.mockRestore();
+});
+
+test('first use requests system access once even when two contact surfaces mount together', async () => {
+  let permission = { status: 'undetermined', granted: false, canAskAgain: true };
+  jest.mocked(getPermissionsAsync).mockImplementation(async () => permission as never);
+  jest.mocked(requestPermissionsAsync).mockImplementationOnce(async () => {
+    permission = { status: 'granted', granted: true, canAskAgain: true };
+    return permission as never;
+  });
+  await Promise.all([ensurePhonebookAccess(), ensurePhonebookAccess()]);
+  await ensurePhonebookAccess();
+  expect(requestPermissionsAsync).toHaveBeenCalledTimes(1);
+});
+
+test.each([
+  { status: 'denied', granted: false, canAskAgain: false },
+  { status: 'granted', granted: true, accessPrivileges: 'limited' },
+  { status: 'granted', granted: true, accessPrivileges: 'all' },
+])('default access respects the existing system decision: %j', async (permission) => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue(permission as never);
+  await ensurePhonebookAccess();
+  expect(requestPermissionsAsync).not.toHaveBeenCalled();
+  expect(Contact.presentAccessPicker).not.toHaveBeenCalled();
+});
+
+test('an explicit save writes the complete phone and name once, and concurrent taps share the save', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ status: 'granted', granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  jest.mocked(Contact.create).mockResolvedValue({ id: 'created' } as never);
+  const changed = jest.fn();
+  const remove = observePhonebook(changed);
+  expect(
+    await Promise.all([
+      addPhoneContact('+995555010101', 'ჩემი მეგობარი'),
+      addPhoneContact('+995555010101', 'ჩემი მეგობარი'),
+    ]),
+  ).toEqual([true, true]);
+  expect(Contact.create).toHaveBeenCalledTimes(1);
+  expect(Contact.create).toHaveBeenCalledWith({
+    givenName: 'ჩემი მეგობარი',
+    phones: [{ label: 'mobile', number: '+995555010101' }],
+  });
+  expect(changed).toHaveBeenCalledTimes(1);
+  remove();
+});
+
+test('an existing contact without a name still prevents a duplicate phone entry', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValue([{ fullName: '', phones: [{ number: '555 01 01 01' }] }] as never);
+  expect(await addPhoneContact('+995555010101', 'Mnelo name')).toBe(true);
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('denied access and a native save failure never report a successful phone save', async () => {
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false } as never);
+  await expect(addPhoneContact('+995555010101', 'Name')).rejects.toThrow(
+    'PHONE_CONTACTS_PERMISSION',
+  );
+  expect(Contact.create).not.toHaveBeenCalled();
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  jest.mocked(Contact.create).mockRejectedValueOnce(new Error('Device save failed'));
+  await expect(addPhoneContact('+995555010101', 'Name')).rejects.toThrow('Device save failed');
 });

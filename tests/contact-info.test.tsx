@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { ContactProfileScreen } from '@/messenger/screens/ContactProfileScreen';
 import { Page } from '@/components/ui';
+import { Contact, getPermissionsAsync } from 'expo-contacts';
+import { phonebookChanged } from '@/messenger/phonebook-events';
 
 const mockPeer = 'b'.repeat(64);
 let mockBlocked = false;
@@ -45,7 +47,7 @@ jest.mock('@/messenger/DeviceProvider', () => ({
     calls: mockCalls,
     view: {
       contacts: async () => [
-        { key: mockPeer, name: 'My phonebook name', phone: '+15555550102', blocked: mockBlocked },
+        { key: mockPeer, name: 'My phonebook name', phone: '+12025550102', blocked: mockBlocked },
       ],
     },
   }),
@@ -64,7 +66,7 @@ beforeEach(() => {
 });
 test('contact info shows local phonebook identity and returns to the same conversation without rewriting the alias', async () => {
   await show();
-  expect(screen.getByText('+15555550102')).toBeOnTheScreen();
+  expect(screen.getByText('+12025550102')).toBeOnTheScreen();
   expect(mockCalls.start).not.toHaveBeenCalled();
   expect(mockEngine.clearLocalHistory).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Message' }));
@@ -126,4 +128,31 @@ test('shared-content row opens the current direct conversation library without s
     params: { id: 'direct-chat' },
   });
   expect(mockCalls.start).not.toHaveBeenCalled();
+});
+
+test('Contact info saves to phone Contacts only on tap and reacts to a later deletion from Contacts', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ status: 'granted', granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  jest.mocked(Contact.create).mockImplementationOnce(async () => {
+    jest
+      .mocked(Contact.getAllDetails)
+      .mockResolvedValue([
+        { fullName: 'My phonebook name', phones: [{ number: '+12025550102' }] },
+      ] as never);
+    return { id: 'saved-contact' } as never;
+  });
+  await show();
+  expect(Contact.create).not.toHaveBeenCalled();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Save to phone Contacts' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Save to phone Contacts' })).toBeNull(),
+  );
+  expect(Contact.create).toHaveBeenCalledWith({
+    givenName: 'My phonebook name',
+    phones: [{ label: 'mobile', number: '+12025550102' }],
+  });
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  await act(async () => phonebookChanged());
+  await screen.findByRole('button', { name: 'Save to phone Contacts' });
+  expect(Contact.create).toHaveBeenCalledTimes(1);
 });

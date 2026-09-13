@@ -4,6 +4,17 @@ export async function phonebookAccess(): Promise<PhonebookAccess> {
   return 'unavailable';
 }
 export async function managePhonebookAccess() {}
+export async function ensurePhonebookAccess() {}
+export async function hasPhoneContact(_number: string, _ownNumber?: string) {
+  return false;
+}
+export async function addPhoneContact(
+  _number: string,
+  _name: string,
+  _ownNumber?: string,
+): Promise<boolean> {
+  throw new Error('PHONE_CONTACTS_UNAVAILABLE');
+}
 export function observeNativePhonebook(_listener: () => void) {
   return () => {};
 }

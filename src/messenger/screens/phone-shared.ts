@@ -14,6 +14,8 @@ const errors: Record<string, keyof typeof phoneEn> = {
   PHONE_REGISTRATION_REQUIRED: 'permission',
   IDENTITY_RECOVERY_REQUIRED: 'recovery',
   FIXTURE_PHONE_REQUIRED: 'fixtureOnly',
+  PHONE_CONTACTS_PERMISSION: 'contactsPermissionRequired',
+  PHONE_CONTACTS_UNAVAILABLE: 'contactsUnavailable',
 };
 export function usePhoneAction() {
   const lock = useRef(false);

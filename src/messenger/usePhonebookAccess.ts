@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
-import { phonebookAccess } from './phonebook';
+import { ensurePhonebookAccess, phonebookAccess } from './phonebook';
 import { observePhonebook } from './phonebook-events';
 import type { PhonebookAccess } from './phonebook-access';
 
@@ -20,6 +20,7 @@ export function usePhonebookAccess() {
         });
     };
     refresh();
+    void ensurePhonebookAccess().then(refresh).catch(refresh);
     const changes = observePhonebook(refresh);
     const foreground = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();

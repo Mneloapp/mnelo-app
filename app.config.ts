@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '15',
+    buildNumber: '16',
     supportsTablet: false,
     associatedDomains: ['applinks:mnelo.com', 'applinks:www.mnelo.com'],
     infoPlist: { UIBackgroundModes: ['audio', 'voip', 'remote-notification'] },
@@ -75,7 +75,6 @@ const config: ExpoConfig = {
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.SYSTEM_ALERT_WINDOW',
-      'android.permission.WRITE_CONTACTS',
     ],
   },
   plugins: [
@@ -179,10 +178,10 @@ const config: ExpoConfig = {
     [
       'expo-contacts',
       {
-        contactsPermission:
-          'Choose a contact to invite to Mnelo. Your address book is not uploaded.',
+        contactsPermission: nativeEnglish.ios.NSContactsUsageDescription,
       },
     ],
+    './plugins/with-contact-permissions.cjs',
     [
       'expo-image-picker',
       {

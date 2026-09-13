@@ -11,29 +11,25 @@ export function PhonebookAccess({ grouped = false }: { grouped?: boolean }) {
   const access = usePhonebookAccess();
   const action = useLocalAction();
   const { t } = useTranslation();
-  if (access === 'unavailable') return null;
+  if (access === 'unavailable' || access === 'available') return null;
   const Container = grouped ? InfoGroup : View;
   return (
     <Container>
       <SheetAction
-        icon={access === 'available' ? 'refresh-cw' : 'users'}
+        icon="users"
         label={t(
           access === 'limited'
             ? 'phone.selectContacts'
             : access === 'settings'
               ? 'phone.openContactsSettings'
-              : access === 'available'
-                ? 'phone.refreshContactNames'
-                : 'phone.contactNames',
+              : 'phone.contactNames',
         )}
         disabled={action.busy}
         onPress={() => void action.run(managePhonebookAccess)}
       />
-      {access !== 'available' && (
-        <AppText variant="caption" tone="secondary">
-          {t(access === 'limited' ? 'phone.limitedContactsHint' : 'phone.contactNamesHint')}
-        </AppText>
-      )}
+      <AppText variant="caption" tone="secondary">
+        {t(access === 'limited' ? 'phone.limitedContactsHint' : 'phone.contactNamesHint')}
+      </AppText>
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
     </Container>
   );

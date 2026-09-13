@@ -9,6 +9,24 @@ import { Linking, Platform } from 'react-native';
 import { phonebookChanged } from './phonebook-events';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { PhonebookAccess } from './phonebook-access';
+import { internationalPhone } from './phone-protocol';
+
+let permissionRequest: Promise<void> | undefined;
+// Contextual first use only. Denied/limited access is never expanded automatically.
+export async function ensurePhonebookAccess() {
+  if (!permissionRequest) {
+    permissionRequest = (async () => {
+      const permission = await getPermissionsAsync();
+      if (permission.status === 'undetermined' && permission.canAskAgain !== false) {
+        await requestPermissionsAsync();
+        phonebookChanged();
+      }
+    })().finally(() => {
+      permissionRequest = undefined;
+    });
+  }
+  await permissionRequest;
+}
 
 export async function phonebookAccess(): Promise<PhonebookAccess> {
   const permission = await getPermissionsAsync();
@@ -44,8 +62,41 @@ export async function savedPhoneNames(
   numbers: readonly string[],
   ownNumber?: string,
 ): Promise<Map<string, string>> {
-  const names = new Map<string, string>();
-  if (!numbers.length || !(await phonebookPermission())) return names;
+  const contacts = await matchedPhoneContacts(numbers, ownNumber);
+  return new Map(
+    [...contacts].flatMap(([phone, contact]) => (contact.name ? [[phone, contact.name]] : [])),
+  );
+}
+
+const pendingSaves = new Map<string, Promise<boolean>>();
+export async function hasPhoneContact(number: string, ownNumber?: string) {
+  return (await matchedPhoneContacts([number], ownNumber)).has(number);
+}
+export async function addPhoneContact(number: string, name: string, ownNumber?: string) {
+  internationalPhone.parse(number);
+  const pending = pendingSaves.get(number);
+  if (pending) return pending;
+  const save = savePhoneContact(number, name, ownNumber).finally(() => pendingSaves.delete(number));
+  pendingSaves.set(number, save);
+  return save;
+}
+async function savePhoneContact(number: string, name: string, ownNumber?: string) {
+  await ensurePhonebookAccess();
+  if (!(await phonebookPermission())) throw new Error('PHONE_CONTACTS_PERMISSION');
+  if ((await matchedPhoneContacts([number], ownNumber)).has(number)) {
+    phonebookChanged();
+    return true;
+  }
+  if (!(await phonebookPermission())) throw new Error('PHONE_CONTACTS_PERMISSION');
+  const givenName = name.trim() === number ? '' : name.trim();
+  await Contact.create({ givenName, phones: [{ label: 'mobile', number }] });
+  phonebookChanged();
+  return true;
+}
+
+async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: string) {
+  const matches = new Map<string, { name: string | null }>();
+  if (!numbers.length || !(await phonebookPermission())) return matches;
   const wanted = new Set(numbers);
   const country = parsePhoneNumberFromString(ownNumber ?? numbers[0] ?? '')?.country;
   // Only matched names live in memory. Never upload or persist the address book.
@@ -55,7 +106,6 @@ export async function savedPhoneNames(
       offset,
     });
     for (const row of rows) {
-      if (!row.fullName?.trim()) continue;
       for (const phone of row.phones ?? []) {
         const number =
           phone.number &&
@@ -68,19 +118,19 @@ export async function savedPhoneNames(
               extract: false,
             },
           )?.number;
-        if (number && wanted.has(number) && !names.has(number))
-          names.set(
-            number,
-            row.fullName
-              .trim()
-              .normalize('NFC')
-              .slice(0, 60)
-              .replace(/[\uD800-\uDBFF]$/, ''),
-          );
+        if (number && wanted.has(number) && !matches.has(number))
+          matches.set(number, {
+            name:
+              row.fullName
+                ?.trim()
+                .normalize('NFC')
+                .slice(0, 60)
+                .replace(/[\uD800-\uDBFF]$/, '') || null,
+          });
       }
     }
     // Recheck even the last page: revocation must discard any earlier matches.
     if (!(await phonebookPermission())) return new Map();
-    if (rows.length < 200 || names.size === wanted.size) return names;
+    if (rows.length < 200 || matches.size === wanted.size) return matches;
   }
 }

@@ -1,5 +1,9 @@
 export const phoneEn = {
-  contactNames: 'Use names from my contacts',
+  contactNames: 'Allow access to contacts',
+  saveToPhone: 'Save to phone Contacts',
+  saveToPhoneHint: 'Save this person in your phone Contacts and Mnelo.',
+  contactsPermissionRequired: 'Allow Contacts access to save this person on your phone.',
+  contactsUnavailable: 'Phone Contacts are available in the mobile app.',
   selectContacts: 'Choose contacts for Mnelo',
   openContactsSettings: 'Allow access to contacts',
   refreshContactNames: 'Refresh contact names',
@@ -83,7 +87,11 @@ export const phoneEn = {
     'Your private identity is created on this device. Next, verify your mobile number to make it easier for people to find you.',
 } as const;
 export const phoneKa: Record<keyof typeof phoneEn, string> = {
-  contactNames: 'სახელების გამოყენება ჩემი კონტაქტებიდან',
+  contactNames: 'კონტაქტებზე წვდომის დაშვება',
+  saveToPhone: 'ტელეფონის კონტაქტებში შენახვა',
+  saveToPhoneHint: 'შეინახე ეს ადამიანი ტელეფონის კონტაქტებსა და Mnelo-ში.',
+  contactsPermissionRequired: 'ტელეფონში შესანახად დაუშვი კონტაქტებზე წვდომა.',
+  contactsUnavailable: 'ტელეფონის კონტაქტები ხელმისაწვდომია მობილურ აპში.',
   selectContacts: 'კონტაქტების არჩევა Mnelo-სთვის',
   openContactsSettings: 'კონტაქტებზე წვდომის დაშვება',
   refreshContactNames: 'კონტაქტების სახელების განახლება',

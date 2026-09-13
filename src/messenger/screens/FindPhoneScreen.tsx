@@ -12,7 +12,7 @@ import { usePhoneService, usePhoneAction } from './phone-shared';
 import { CallActions, type CallTarget } from './CallActions';
 import { NumberKeypad } from './NumberKeypad';
 import { useComposer } from './composer-navigation';
-import { savedPhoneName } from '../phonebook';
+import { addPhoneContact, savedPhoneName } from '../phonebook';
 import { observePhonebook } from '../phonebook-events';
 import { PhonebookAccess } from '../components/PhonebookAccess';
 
@@ -40,6 +40,8 @@ export function FindPhoneScreen({
   const [found, setFound] = useState<string | null | undefined>();
   const [lookupRevision, setLookupRevision] = useState(0);
   const [name, setName] = useState('');
+  const [mneloName, setMneloName] = useState('');
+  const [phoneNameDraft, setPhoneNameDraft] = useState<string>();
   const [pinned, setPinned] = useState(false);
   const [details, setDetails] = useState(false);
   const [deviceName, setDeviceName] = useState<{ key: string; phone: string; name: string } | null>(
@@ -89,11 +91,13 @@ export function FindPhoneScreen({
   const displayName =
     deviceName?.key === found && deviceName?.phone === normalized
       ? deviceName.name
-      : name || normalized || '';
+      : mneloName || normalized || '';
   const ready = Boolean(client && status.data?.registered);
   function clearResult() {
     setFound(undefined);
     setName('');
+    setMneloName('');
+    setPhoneNameDraft(undefined);
     setDeviceName(null);
     setDetails(false);
     generation.current++;
@@ -132,7 +136,10 @@ export function FindPhoneScreen({
       const result = await client.execute({ action: 'lookup', phone: normalized });
       if (!mounted.current || generation.current !== requested) return;
       if (result.key === undefined) throw new Error('PHONE_REQUEST_FAILED');
-      const contacts = await engine.contacts();
+      const [contacts, names] = await Promise.all([
+        engine.contacts(),
+        engine.contactDisplayNames(),
+      ]);
       if (!mounted.current || generation.current !== requested) return;
       const bound = contacts.find((item) => item.phone === normalized);
       if (bound && result.key && bound.key !== result.key)
@@ -141,6 +148,7 @@ export function FindPhoneScreen({
       setFound(contact?.blocked ? null : result.key);
       setLookupRevision((revision) => revision + 1);
       setName(contact?.blocked ? '' : (contact?.name ?? normalized));
+      setMneloName(contact?.blocked ? '' : (result.key && names.get(result.key)) || normalized);
       setPinned(Boolean(contact && !contact.blocked));
       if (keypad && contact && !contact.blocked && contact.key !== identity?.key)
         await dialVoice(contact);
@@ -150,7 +158,10 @@ export function FindPhoneScreen({
     void action.run(async () => {
       if (!found || !normalized || found === identity?.key) return;
       // Recheck local blocking at the action boundary, not only when the lookup returned.
-      const contact = (await engine.contacts()).find((item) => item.key === found);
+      const contacts = await engine.contacts();
+      const bound = contacts.find((item) => item.phone === normalized);
+      if (bound && bound.key !== found) throw new Error('PHONE_IDENTITY_CHANGED');
+      const contact = contacts.find((item) => item.key === found);
       if (contact?.blocked) {
         clearResult();
         setFound(null);
@@ -158,6 +169,14 @@ export function FindPhoneScreen({
       }
       const savedName =
         name.trim() && name.trim() !== normalized ? name.trim() : contact?.name || normalized;
+      Keyboard.dismiss();
+      if (saveOnly) {
+        const requested = generation.current;
+        const phoneName = phoneNameDraft ?? displayName;
+        if (!(await addPhoneContact(normalized, phoneName, enrollment?.phone))) return;
+        if (!mounted.current || generation.current !== requested) return;
+        if ((await engine.contacts()).find((item) => item.key === found)?.blocked) return;
+      }
       const id = await engine.trustPhoneContact({ key: found, phone: normalized, name: savedName });
       await engine.trustContact({ key: found, name: savedName });
       Keyboard.dismiss();
@@ -259,6 +278,14 @@ export function FindPhoneScreen({
                   {t('phone.profileAfterConnect')}
                 </AppText>
               )}
+              {saveOnly && !deviceName && (
+                <Field
+                  label={t('phone.name')}
+                  value={phoneNameDraft ?? (displayName === normalized ? '' : displayName)}
+                  onChangeText={setPhoneNameDraft}
+                  maxLength={60}
+                />
+              )}
               <Button
                 label={t(
                   keypad
@@ -272,6 +299,11 @@ export function FindPhoneScreen({
                 busy={action.busy}
                 onPress={continueWithContact}
               />
+              {saveOnly && (
+                <AppText variant="caption" tone="secondary">
+                  {t('phone.saveToPhoneHint')}
+                </AppText>
+              )}
               {!pinned && (
                 <AppText variant="caption" tone="secondary">
                   {t('phone.mutualContact')}
@@ -284,12 +316,14 @@ export function FindPhoneScreen({
               />
               {details && (
                 <>
-                  <Field
-                    label={t('phone.name')}
-                    value={name}
-                    onChangeText={setName}
-                    maxLength={60}
-                  />
+                  {!saveOnly && (
+                    <Field
+                      label={t('phone.name')}
+                      value={name}
+                      onChangeText={setName}
+                      maxLength={60}
+                    />
+                  )}
                   <AppText selectable variant="caption">
                     {'mnelo1:' + found}
                   </AppText>

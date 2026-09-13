@@ -456,6 +456,18 @@ export class DeviceMessenger {
       ...(row.phone ? { phone: row.phone } : {}),
     }));
   }
+  async contactDisplayNames(): Promise<Map<string, string>> {
+    await this.tail;
+    const rows = await this.db.all<{ public_key: string; display_name: string }>(
+      `SELECT c.public_key, COALESCE(
+        NULLIF(TRIM(COALESCE(p.first_name,'') || ' ' || COALESCE(p.last_name,'')),''),
+        CASE WHEN p.username!='' THEN '@' || p.username END,
+        n.phone, c.name) AS display_name
+      FROM contacts c LEFT JOIN contact_profiles p USING(public_key)
+      LEFT JOIN contact_numbers n USING(public_key) WHERE c.blocked=0`,
+    );
+    return new Map(rows.map((row) => [row.public_key, row.display_name]));
+  }
   // First-use number lookup pins the returned key locally; it is not a claim of
   // out-of-band verification. A later directory response may never replace it.
   async trustPhoneContact(input: { key: string; phone: string; name?: string }) {

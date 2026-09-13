@@ -26,6 +26,7 @@ const mockClient = {
 const mockEngine = {
   currentIdentity: () => ({ key: ownKey, secret: 'test-only', name: 'Development Alice' }),
   contacts: jest.fn(async (): Promise<Contact[]> => []),
+  contactDisplayNames: jest.fn(async () => new Map<string, string>()),
   trustContact: jest.fn(async () => 'development-direct-chat'),
   trustPhoneContact: jest.fn(async () => 'development-direct-chat'),
 };

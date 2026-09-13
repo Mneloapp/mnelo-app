@@ -5,7 +5,7 @@ import { PhoneScreen } from '@/messenger/screens/PhoneScreen';
 import { PhonePrivacySection } from '@/messenger/screens/PhonePrivacySection';
 import { FindPhoneScreen } from '@/messenger/screens/FindPhoneScreen';
 import type { PhoneCommand, PhoneResponse } from '@/messenger/phone-protocol';
-import { Contact, getPermissionsAsync } from 'expo-contacts';
+import { Contact, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
 import { phonebookChanged } from '@/messenger/phonebook-events';
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
@@ -25,6 +25,7 @@ const mockEngine = {
   completePhoneEnrollment: jest.fn(async () => undefined),
   rememberPhone: jest.fn(async () => undefined),
   contacts: jest.fn(async () => []),
+  contactDisplayNames: jest.fn(async () => new Map([['b'.repeat(64), 'Mnelo profile name']])),
   trustContact: jest.fn(async () => 'development-chat'),
   trustPhoneContact: jest.fn(async () => 'development-chat'),
 };
@@ -76,6 +77,12 @@ beforeEach(() => {
   mockHasIdentity = true;
   mockReview = false;
   mockService = 'http://127.0.0.1:8087';
+  mockEngine.contactDisplayNames.mockResolvedValue(new Map());
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValue({ status: 'denied', granted: false, canAskAgain: false } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  jest.mocked(Contact.create).mockResolvedValue({ id: 'new-contact' } as never);
 });
 test('registration splits a full-number paste and never claims success after an invalid OTP', async () => {
   await show(<PhoneScreen />);
@@ -171,9 +178,73 @@ test('a found number previews without trusting, and one explicit Message action 
       name: '+12025550102',
     }),
   );
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('first contact lookup asks for access automatically and uses the saved phone name without another switch', async () => {
+  mockRegistered = true;
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValue({ status: 'undetermined', granted: false, canAskAgain: true } as never);
+  jest.mocked(requestPermissionsAsync).mockImplementationOnce(async () => {
+    const permission = { status: 'granted', granted: true, accessPrivileges: 'all' };
+    jest.mocked(getPermissionsAsync).mockResolvedValue(permission as never);
+    return permission as never;
+  });
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValue([
+      { fullName: 'My phone friend', phones: [{ number: '+12025550102' }] },
+    ] as never);
+  await show(<FindPhoneScreen initialNumber="+12025550102" />);
+  await waitFor(() => expect(requestPermissionsAsync).toHaveBeenCalledTimes(1));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+  await screen.findByText('My phone friend');
+  expect(screen.queryByRole('button', { name: 'Allow access to contacts' })).toBeNull();
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('a missing phonebook entry uses the registered profile name; declining permission still allows messaging', async () => {
+  mockRegistered = true;
+  mockEngine.contactDisplayNames.mockResolvedValue(new Map([['b'.repeat(64), 'Registered name']]));
+  await show(<FindPhoneScreen initialNumber="+12025550102" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+  await screen.findByText('Registered name');
+  expect(requestPermissionsAsync).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Message' }));
+  await waitFor(() => expect(mockEngine.trustPhoneContact).toHaveBeenCalled());
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('Add contact with denied permission stays on the form without pretending either contact was saved', async () => {
+  mockRegistered = true;
+  await show(<FindPhoneScreen nativeHeader saveOnly initialNumber="+12025550102" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add a contact' }));
+  await screen.findByText('Allow Contacts access to save this person on your phone.');
+  expect(Contact.create).not.toHaveBeenCalled();
+  expect(mockEngine.trustPhoneContact).not.toHaveBeenCalled();
+  expect(router.dismissTo).not.toHaveBeenCalled();
+});
+
+test('a failed native save keeps the editable name and does not add a Mnelo contact or dismiss', async () => {
+  mockRegistered = true;
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Contact.create).mockRejectedValueOnce(new Error('Native write failed'));
+  await show(<FindPhoneScreen nativeHeader saveOnly initialNumber="+12025550102" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+  await fireEvent.changeText(await screen.findByLabelText('Save contact as'), 'My friend');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add a contact' }));
+  await screen.findByRole('alert');
+  expect(screen.getByLabelText('Save contact as')).toHaveDisplayValue('My friend');
+  expect(mockEngine.trustPhoneContact).not.toHaveBeenCalled();
+  expect(router.dismissTo).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add a contact' }));
+  await waitFor(() => expect(mockEngine.trustPhoneContact).toHaveBeenCalledTimes(1));
 });
 test('saving a phone contact returns to picker and allows optional name/security details', async () => {
   mockRegistered = true;
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ status: 'granted', granted: true } as never);
   await show(<FindPhoneScreen nativeHeader saveOnly initialNumber="+12025550102" />);
   await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
   await screen.findByText('On Mnelo');
@@ -185,9 +256,13 @@ test('saving a phone contact returns to picker and allows optional name/security
   expect(mockEngine.trustPhoneContact).toHaveBeenCalledWith({
     key: 'b'.repeat(64),
     phone: '+12025550102',
-    name: 'Development Bob',
+    name: '+12025550102',
   });
   expect(router.push).not.toHaveBeenCalled();
+  expect(Contact.create).toHaveBeenCalledWith({
+    givenName: 'Development Bob',
+    phones: [{ label: 'mobile', number: '+12025550102' }],
+  });
 });
 
 test('existing phone search replaces the Mnelo alias with the phonebook name and refreshes it without another server search', async () => {
@@ -211,7 +286,8 @@ test('existing phone search replaces the Mnelo alias with the phonebook name and
       .mockResolvedValue([
         { fullName: 'განახლებული მეგობარი', phones: [{ number: '555010101' }] },
       ] as never);
-    await fireEvent.press(screen.getByRole('button', { name: 'Refresh contact names' }));
+    expect(screen.queryByRole('button', { name: 'Refresh contact names' })).toBeNull();
+    await act(async () => phonebookChanged());
     await screen.findByText('განახლებული მეგობარი');
     expect(
       mockClient.execute.mock.calls.filter(([command]) => command.action === 'lookup'),
@@ -228,7 +304,7 @@ test('existing phone search replaces the Mnelo alias with the phonebook name and
       .mocked(getPermissionsAsync)
       .mockResolvedValue({ granted: false, canAskAgain: false } as never);
     await act(async () => phonebookChanged());
-    await screen.findByText('Old Mnelo alias');
+    await screen.findByText('+995555010101');
   } finally {
     mockEngine.contacts.mockResolvedValue([]);
     jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: false } as never);
@@ -256,7 +332,7 @@ test('a person omitted from limited Contacts access can be selected and their sa
   try {
     await show(<FindPhoneScreen initialNumber="+995555010101" />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
-    await screen.findByText('Old Mnelo alias');
+    await screen.findByText('+995555010101');
     await fireEvent.press(screen.getByRole('button', { name: 'Choose contacts for Mnelo' }));
     await screen.findByText('ტელეფონში შენახული სახელი');
     expect(Contact.presentAccessPicker).toHaveBeenCalledTimes(1);

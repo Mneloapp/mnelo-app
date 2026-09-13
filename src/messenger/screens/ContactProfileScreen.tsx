@@ -14,6 +14,7 @@ import { Check, useLocalAction } from './shared';
 import type { ContactInvitation } from '../contact-link';
 import { SheetAction } from '@/components/SheetAction';
 import { PhonebookAccess } from '../components/PhonebookAccess';
+import { SavePhoneContact } from '../components/SavePhoneContact';
 import {
   ContactHero,
   ContactAction,
@@ -95,7 +96,7 @@ function InvitationPreview({ invitation }: { invitation: ContactInvitation | nul
 }
 export function ContactProfileScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
-  const { engine, view, identity, calls, mesh } = useDevice();
+  const { engine, view, identity, calls, mesh, enrollment } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const currentCall = useCurrentCall();
@@ -183,6 +184,14 @@ export function ContactProfileScreen() {
             </InfoGroup>
           ) : null}
           {contact.phone && !contact.blocked && <PhonebookAccess grouped />}
+          {contact.phone && !contact.blocked && (
+            <SavePhoneContact
+              key={contact.phone}
+              phone={contact.phone}
+              name={contact.name}
+              ownNumber={enrollment?.phone}
+            />
+          )}
           {profile && (profile.email || profile.website) ? (
             <InfoGroup>
               <CardDetails profile={profile} />

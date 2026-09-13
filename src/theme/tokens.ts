@@ -66,7 +66,7 @@ export const theme = {
   },
   motion: { welcomeMinimumMs: 700 },
   opacity: { disabled: 0.45, pressed: 0.72 },
-  avatar: { small: 32, normal: 48, large: 88, profile: 112 },
+  avatar: { small: 32, normal: 48, large: 88, profile: 112, call: 192 },
   controls: {
     navigationMaxScale: 2,
     navigationHomeClearance: 18,

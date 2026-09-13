@@ -365,6 +365,9 @@ export const ka = {
     previewUnavailable: 'ეს მოქმედება სატესტო ინტერფეისში მიუწვდომელია.',
   },
   calls: {
+    controlCamera: 'კამერა',
+    controlMute: 'მიკროფონი',
+    controlEnd: 'დასრულება',
     voice: 'ხმოვანი ზარი',
     video: 'ვიდეოზარი',
     remoteAudio: 'ზარის ხმა',

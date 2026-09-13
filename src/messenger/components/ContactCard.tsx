@@ -18,7 +18,7 @@ export const PeerAvatar = memo(function PeerAvatar({
 }: {
   peer: string;
   name: string;
-  size?: 'small' | 'large';
+  size?: 'small' | 'large' | 'call';
 }) {
   const { engine } = useDevice();
   const query = useQuery({

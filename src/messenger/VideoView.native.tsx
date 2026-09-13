@@ -4,6 +4,7 @@ export function VideoView({ stream, local = false }: { stream: MediaStream; loca
     <RTCView
       streamURL={(stream as unknown as NativeStream).toURL()}
       mirror={local}
+      zOrder={local ? 1 : 0}
       objectFit="cover"
       style={{ flex: 1 }}
     />

@@ -357,6 +357,9 @@ export const en = {
     previewUnavailable: 'This action is unavailable in the interface preview.',
   },
   calls: {
+    controlCamera: 'Camera',
+    controlMute: 'Mute',
+    controlEnd: 'End',
     voice: 'Voice call',
     video: 'Video call',
     remoteAudio: 'Call audio',

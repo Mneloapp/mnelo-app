@@ -353,7 +353,7 @@ export function Avatar({
 }: {
   name: string;
   uri?: string | undefined;
-  size?: 'small' | 'normal' | 'large' | 'profile';
+  size?: 'small' | 'normal' | 'large' | 'profile' | 'call';
 }) {
   const dark = useCallAppearance();
   return (
@@ -365,11 +365,13 @@ export function Avatar({
         size === 'small' && ui.avatarSmall,
         size === 'large' && ui.avatarLarge,
         size === 'profile' && ui.avatarProfile,
+        size === 'call' && ui.avatarCall,
         dark && ui.callSurface,
       ]}
     >
       {uri ? (
         <Image
+          testID="profile-photo"
           source={{ uri }}
           resizeMode="cover"
           style={{ width: '100%', height: '100%', borderRadius: t.radii.pill }}
@@ -630,6 +632,7 @@ export const ui = StyleSheet.create({
   },
   avatarLarge: { width: t.avatar.large, height: t.avatar.large },
   avatarProfile: { width: t.avatar.profile, height: t.avatar.profile },
+  avatarCall: { width: t.avatar.call, height: t.avatar.call },
   avatarSmall: { width: t.avatar.small, height: t.avatar.small },
   row: {
     flexDirection: 'row',

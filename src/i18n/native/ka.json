@@ -1,0 +1,15 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Mnelo",
+    "CFBundleName": "Mnelo",
+    "NSCameraUsageDescription": "კამერა გამოიყენება მხოლოდ მაშინ, როცა Mnelo-ში ვიდეოზარს, ფოტოს გადაღებას ან კონტაქტის QR კოდის სკანირებას აირჩევ.",
+    "NSMicrophoneUsageDescription": "მიკროფონი გამოიყენება მხოლოდ მაშინ, როცა Mnelo-ში დარეკვას ან ხმოვანი შეტყობინების ჩაწერას აირჩევ.",
+    "NSPhotoLibraryUsageDescription": "აირჩიე ფოტო Mnelo-ს პროფილზე ან საუბარში გასაზიარებლად.",
+    "NSContactsUsageDescription": "აირჩიე კონტაქტი Mnelo-ში მოსაწვევად. შენი მისამართების წიგნი არ იტვირთება.",
+    "NSLocationWhenInUseUsageDescription": "შენი მიმდინარე მდებარეობა ამ საუბარს მხოლოდ შენი სურვილით გაუზიარე.",
+    "NSMotionUsageDescription": "Mnelo მოძრაობისა და ფიზიკური აქტივობის მონაცემებს არ იყენებს. შეგიძლია ამ ნებართვაზე უარი თქვა და მიმოწერისა და ზარების ყველა ფუნქციით ისარგებლო."
+  },
+  "android": {
+    "app_name": "Mnelo"
+  }
+}

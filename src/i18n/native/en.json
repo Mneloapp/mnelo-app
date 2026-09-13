@@ -1,0 +1,15 @@
+{
+  "ios": {
+    "CFBundleDisplayName": "Mnelo",
+    "CFBundleName": "Mnelo",
+    "NSCameraUsageDescription": "Use the camera for a Mnelo video call, photo or contact QR scan when you choose.",
+    "NSMicrophoneUsageDescription": "Use the microphone for Mnelo calls and voice messages when you choose.",
+    "NSPhotoLibraryUsageDescription": "Choose a photo to share on your Mnelo profile or in a conversation.",
+    "NSContactsUsageDescription": "Choose a contact to invite to Mnelo. Your address book is not uploaded.",
+    "NSLocationWhenInUseUsageDescription": "Share your current location with this conversation only when you choose.",
+    "NSMotionUsageDescription": "Mnelo does not use motion or fitness data. You can deny this permission and continue using all messaging and calling features."
+  },
+  "android": {
+    "app_name": "Mnelo"
+  }
+}

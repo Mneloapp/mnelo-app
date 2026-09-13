@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["MneloVaultModule"] },
+  "android": { "modules": ["com.mnelo.vault.MneloVaultModule"] }
+}

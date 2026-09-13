@@ -1,0 +1,8 @@
+{
+  "unclassifiedActiveFormerName": [],
+  "iosBundle": ["com.mnelo.app"],
+  "iosDisplayName": "Mnelo",
+  "iosSchemes": ["mnelo", "com.mnelo.app", "exp+mnelo"],
+  "androidIdentifiers": ["com.mnelo.app", "com.mnelo.app"],
+  "generatedStaleFound": []
+}

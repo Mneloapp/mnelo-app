@@ -1,0 +1,23 @@
+Mnelo — a simple, device-owned messenger
+Copyright (c) 2026 Mnelo contributors
+
+The owner authorized open-source distribution on September 13, 2026.
+Except where an existing third-party license or notice applies, Mnelo's
+original application, native bindings, server code, scripts and documentation
+are licensed under GNU AGPL version 3 only (SPDX: AGPL-3.0-only). See LICENSE.
+The application is provided without warranty, to the extent permitted by law.
+
+This project includes work derived from the Expo template. Its original MIT
+copyright and license are preserved in docs/licenses/Expo-Template-MIT.txt.
+Third-party components retain their original licenses and copyright notices;
+this declaration does not relicense them or revoke rights to earlier versions.
+See docs/licenses/README.md and docs/OPEN_SOURCE.md for scope and provenance.
+
+The Mnelo name, domain and marks identify the official service. This software
+license grants no trademark rights or endorsement. Forks may use and modify
+the software under its license, but must not impersonate the official service.
+No claim of registered trademark status is made here.
+
+Source: https://github.com/Mneloapp/mnelo-app
+Security reports: see SECURITY.md. Never include personal messages, passwords,
+private keys, SMS codes, push tokens or private backups in a public issue.

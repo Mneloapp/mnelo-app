@@ -1,0 +1,12 @@
+{
+  "PRODUCT_BUNDLE_IDENTIFIER": "ge.connecto.app",
+  "PRODUCT_NAME": "Connecto",
+  "CONFIGURATION": "Debug",
+  "SDK_NAME": "iphonesimulator26.2",
+  "SDK_VERSION": "26.2",
+  "IPHONEOS_DEPLOYMENT_TARGET": "16.4",
+  "XCODE_VERSION_ACTUAL": "2620",
+  "SWIFT_VERSION": "5.0",
+  "CODE_SIGN_STYLE": null,
+  "teamConfigured": false
+}

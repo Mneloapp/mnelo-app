@@ -1,0 +1,33 @@
+{
+  "date": "2026-09-09",
+  "sourcePackage": "expo-modules-jsi@57.0.8",
+  "currentPackage": "expo-modules-jsi@57.1.0",
+  "sourceIntegrity": "Original npm tarball verified against the historical committed lockfile",
+  "header": "apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h",
+  "sha256": "ab3e6488b7e527210ecc1c8c58318c1e0ac5db3a489ddcc8ed5a11eaf6f7e5fb",
+  "headerUnchanged": true,
+  "xcode": "26.6 (17F113)",
+  "swift": "6.3.3",
+  "sdk": "iphonesimulator26.5",
+  "target": "arm64-apple-ios16.4-simulator",
+  "scope": "Swift/C++ import of the original header and RuntimeScheduler constructor typecheck",
+  "exitCode": 0,
+  "warnings": 2,
+  "warningLines": [53, 61],
+  "suppressedDiagnostics": false,
+  "fullAppBuild": false,
+  "notes": "The former annotation error is a warning under Swift 6.3.3. Both the isolated header probe and complete original simulator framework compile pass; full app results are reported separately.",
+  "originalFrameworkBuild": {
+    "exitCode": 0,
+    "durationSeconds": 18,
+    "script": "Unmodified original package apple/scripts/build-xcframework.sh",
+    "slice": "ios-arm64_x86_64-simulator",
+    "reactNativeHeaders": "0.86.3",
+    "suppressedDiagnostics": false,
+    "warningCategories": [
+      "RuntimeScheduler reference annotations",
+      "JSI umbrella header omissions",
+      "deprecated dynamic_lookup linker option"
+    ]
+  }
+}

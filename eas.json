@@ -1,0 +1,49 @@
+{
+  "cli": { "appVersionSource": "remote", "requireCommit": true },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "environment": "development",
+      "node": "24.18.0",
+      "env": { "EXPO_PUBLIC_APP_ENV": "development" },
+      "android": { "buildType": "apk" }
+    },
+    "development-simulator": {
+      "extends": "development",
+      "ios": { "simulator": true }
+    },
+    "preview": {
+      "distribution": "internal",
+      "environment": "preview",
+      "node": "24.18.0",
+      "env": { "EXPO_PUBLIC_APP_ENV": "preview" },
+      "android": { "buildType": "apk" }
+    },
+    "testflight": {
+      "distribution": "store",
+      "developmentClient": false,
+      "environment": "preview",
+      "node": "24.18.0",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview",
+        "EXPO_PUBLIC_RELAY_URL": "wss://relay-dev.mnelo.com/",
+        "EXPO_PUBLIC_PHONE_IDENTITY_URL": "https://identity-dev.mnelo.com"
+      },
+      "autoIncrement": true,
+      "ios": { "buildConfiguration": "Release" }
+    },
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "node": "24.18.0",
+      "env": { "EXPO_PUBLIC_APP_ENV": "production" },
+      "autoIncrement": true,
+      "android": { "buildType": "app-bundle" }
+    }
+  },
+  "submit": {
+    "testflight": { "ios": { "ascAppId": "6811153275" } },
+    "production": { "ios": { "ascAppId": "6811153275" } }
+  }
+}

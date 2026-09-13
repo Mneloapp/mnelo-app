@@ -1,0 +1,58 @@
+{
+	admin off
+	persist_config off
+	log {
+		output discard
+	}
+	servers {
+		protocols h1 h2
+	}
+}
+
+# No access log directive. Global runtime logs are also discarded because proxy
+# errors can include request metadata. Inspect TLS/service health without payload logs.
+relay-dev.mnelo.com {
+	@socket {
+		path /
+		method GET
+		header Upgrade websocket
+	}
+	handle @socket {
+		reverse_proxy 127.0.0.1:8084
+	}
+	handle {
+		respond "MNELO_RELAY_ENDPOINT" 404
+	}
+}
+
+# Enable this only with the admitted-tester service configured. The trusted source
+# header is REPLACED with the actual socket address, never copied from X-Forwarded-For.
+identity-dev.mnelo.com {
+	@delivery {
+		path /delivery
+		method POST
+	}
+	handle @delivery {
+		request_body {
+			max_size 250000
+		}
+		reverse_proxy 127.0.0.1:8086 {
+			header_up X-Mnelo-Client-IP {http.request.remote.host}
+		}
+	}
+	@phone {
+		path /challenge /execute
+		method POST
+	}
+	handle @phone {
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8086 {
+			header_up X-Mnelo-Client-IP {http.request.remote.host}
+		}
+	}
+	handle {
+		respond "MNELO_IDENTITY_ENDPOINT" 404
+	}
+}

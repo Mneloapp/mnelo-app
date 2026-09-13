@@ -1,0 +1,24 @@
+Fresh native identity migration build; Xcode exit 65. Repository path prefix removed.
+
+❌  (node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h:53:26)
+
+  51 |    the real react::RuntimeScheduler.
+  52 |    */
+> 53 |   SWIFT_RETURNS_RETAINED RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept
+     |                          ^ 'RuntimeScheduler' cannot be annotated with either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED because it is not returning a SWIFT_SHARED_REFERENCE type
+  54 |       : nativeScheduler(scheduler), scheduleFn(fn) {}
+  55 |
+  56 |   /**
+
+❌  (node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h:61:26)
+
+  59 |    no React scheduler.
+  60 |    */
+> 61 |   SWIFT_RETURNS_RETAINED RuntimeScheduler() {}
+     |                          ^ 'RuntimeScheduler' cannot be annotated with either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED because it is not returning a SWIFT_SHARED_REFERENCE type
+  62 |
+  63 |   RuntimeScheduler(const RuntimeScheduler &) = delete;
+  64 |
+
+
+2 compiler errors, 1 generated Dev Launcher script warning.

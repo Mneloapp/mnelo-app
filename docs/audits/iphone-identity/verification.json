@@ -1,0 +1,54 @@
+{
+  "codesign": "PASS",
+  "bundleIdentifier": "com.mnelo.messenger",
+  "displayName": "Mnelo",
+  "profileName": "iOS Team Provisioning Profile: com.mnelo.messenger",
+  "selectedIphoneIncluded": true,
+  "pushEnvironment": "development",
+  "development": true,
+  "profileExpires": "2027-09-11 15:26:19",
+  "build": "PASS",
+  "compilerErrors": 0,
+  "warningLines": 2141,
+  "date": "2026-09-11",
+  "device": "iPhone 17 Pro Max",
+  "deviceOS": "26.6.1",
+  "xcode": "26.6 (17F113)",
+  "configuration": "Debug development client",
+  "nativeInstall": "PASS",
+  "nativeLaunch": "PASS",
+  "visualCheck": "Welcome rendered on the physical iPhone; screenshot inspected",
+  "runtimeLimitations": [
+    "No physical interactive acceptance beyond initial screen",
+    "SMS provider not configured",
+    "Relay and phone endpoints blank for this process; offline UI inspection only",
+    "Background fetch/remote-notification delegate warnings retained; no capability added to silence them",
+    "React Native logging initialization and dropped scroll-end diagnostics retained"
+  ],
+  "doctor": {
+    "passed": 20,
+    "total": 21,
+    "status": "maintenance patches recommended for 25 dependencies; current lock retained"
+  },
+  "installedSDKCompatibility": {
+    "checked": 36,
+    "mismatches": 0
+  },
+  "qa": {
+    "typeScript": "PASS",
+    "lint": "PASS",
+    "format": "PASS",
+    "jestSuites": 36,
+    "jestTests": 182,
+    "deviceIntegrationTests": 37,
+    "historicalServerUtilityTests": 3,
+    "mobileExports": ["ios", "android"],
+    "gitleaks": [
+      "history PASS, zero findings",
+      "source PASS, zero findings",
+      "fresh bundles PASS, zero findings"
+    ]
+  },
+  "googlePlayRegistration": "not performed",
+  "easRegistration": "not performed"
+}

@@ -1,0 +1,9 @@
+<resources>
+  <string name="mnelo_call_incoming">Incoming Mnelo call</string>
+  <string name="mnelo_call_active">Mnelo call</string>
+  <string name="mnelo_message_new">New message</string>
+  <string name="mnelo_call_missed">Missed call</string>
+  <string name="mnelo_call_answer">Answer</string>
+  <string name="mnelo_call_decline">Decline</string>
+  <string name="mnelo_call_end">End call</string>
+</resources>

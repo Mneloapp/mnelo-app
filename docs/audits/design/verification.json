@@ -1,0 +1,115 @@
+{
+  "date": "2026-09-09",
+  "baseCommit": "621087af155f66289667430387d206826046ce4b",
+  "scope": "Presentation refinement; final approved brand assets pending",
+  "sourceChat": {
+    "id": "6a9c83ee-7068-83eb-870b-2e854d3fb30b",
+    "title": "ღამის კლუბის ტევადობა",
+    "textRead": true,
+    "approvedRenderRetrieved": false
+  },
+  "ios": {
+    "xcode": "26.6 (17F113)",
+    "sdk": "iPhoneSimulator26.5",
+    "device": "iPhone 17 Pro",
+    "buildSucceeded": true,
+    "warningLines": 3626,
+    "errorLines": 0,
+    "installedAndRendered": true,
+    "physicalDeviceTested": false
+  },
+  "android": {
+    "bundleExported": true,
+    "newApkBuilt": false,
+    "visualRetested": false
+  },
+  "screenshots": [
+    {
+      "file": "artifacts/design/chats-empty.png",
+      "bytes": 164688,
+      "sha256": "f0e7bdc6ab3fd8e81639f45b5d4113228f92553c46731b17542a50b643a9892d"
+    },
+    {
+      "file": "artifacts/design/connect-ka-large.png",
+      "bytes": 303958,
+      "sha256": "73c9100141caa527846b68261c775923c634bbd44d65e2af773567e4009cb615"
+    },
+    {
+      "file": "artifacts/design/connect-ka.png",
+      "bytes": 269995,
+      "sha256": "24a865cba67bc2ffb10d304dc8dd07bdc219bad5286059004aa73fdde1d239d2"
+    },
+    {
+      "file": "artifacts/design/connect-keyboard.png",
+      "bytes": 304572,
+      "sha256": "8742213d208864ae61d0a86e4a8efc707f286a4627ce622b4ee8cb9ae23cd038"
+    },
+    {
+      "file": "artifacts/design/me.png",
+      "bytes": 230996,
+      "sha256": "b5a7e158d00b78848539bae2f4f576a027201739a3be5d03d2e7212d2a7d2b68"
+    },
+    {
+      "file": "artifacts/design/otp-error.png",
+      "bytes": 248880,
+      "sha256": "472c4d2275301593f162959c7d4773998882de9baf7ada50cd2a52a0cbf7a005"
+    },
+    {
+      "file": "artifacts/design/request.png",
+      "bytes": 242714,
+      "sha256": "3667dd942a6800c600a2607528a540a858da670ed7001b6c306c33b760b66362"
+    },
+    {
+      "file": "artifacts/design/results.png",
+      "bytes": 273578,
+      "sha256": "acd83656ea869425027404bfcc46b4a6fb4dddd3394844d2e77a067e942e58d1"
+    },
+    {
+      "file": "artifacts/design/welcome.png",
+      "bytes": 153133,
+      "sha256": "09a1c10c7d92a9ccfc015edeb17905fe110402eb899b8bcdf13264c3b292891e"
+    },
+    {
+      "file": "artifacts/design/connect-en.png",
+      "bytes": 216148,
+      "sha256": "bfa5af1ca8a6c40eee5ed7cf8d1d7707e39f991b97ec1b04d0f0afb99916192c"
+    }
+  ],
+  "checks": {
+    "typescript": "PASS",
+    "lint": "PASS",
+    "format": "PASS",
+    "jest": {
+      "passed": 164,
+      "suites": 32
+    },
+    "serverTests": {
+      "passed": 3
+    },
+    "expoDoctor": {
+      "passed": 21,
+      "total": 21
+    },
+    "compatibility": "PASS",
+    "iosExport": "PASS",
+    "androidExport": "PASS",
+    "secrets": {
+      "history": 0,
+      "source": 0,
+      "bundles": 0
+    },
+    "npmAudit": {
+      "moderate": 16,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "nativeIdentityChanged": false,
+  "databaseMigrations": [],
+  "finalSimulatorState": {
+    "screen": "Connect",
+    "language": "en",
+    "preferredContentSize": "large",
+    "authenticatedDevelopmentUser": true
+  }
+}

@@ -1,0 +1,380 @@
+{
+  "description": "Historical pre-rename inventory under Connecto, the former working name. Mnelo is the official product name. Entries record the original line positions, before edits.",
+  "records": [
+    {
+      "file": "README.md",
+      "line": 1,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 13,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 13,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 14,
+      "matched": "connecto.ge",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 15,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 16,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 16,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 17,
+      "matched": "ge.connecto.app",
+      "classification": "must rename",
+      "dispositionAfterRename": "intentionally retained pending external-registration verification; preferred final value com.mnelo.app"
+    },
+    {
+      "file": "README.md",
+      "line": 25,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "README.md",
+      "line": 123,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "app.config.ts",
+      "line": 27,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "app.config.ts",
+      "line": 28,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "app.config.ts",
+      "line": 30,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "app.config.ts",
+      "line": 35,
+      "matched": "ge.connecto.app",
+      "classification": "must rename",
+      "dispositionAfterRename": "intentionally retained pending external-registration verification; preferred final value com.mnelo.app"
+    },
+    {
+      "file": "app.config.ts",
+      "line": 39,
+      "matched": "ge.connecto.app",
+      "classification": "must rename",
+      "dispositionAfterRename": "intentionally retained pending external-registration verification; preferred final value com.mnelo.app"
+    },
+    {
+      "file": "assets/README.md",
+      "line": 3,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "assets/README.md",
+      "line": 3,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/DEPENDENCY_AUDIT.md",
+      "line": 13,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/DEPENDENCY_AUDIT.md",
+      "line": 19,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 12,
+      "matched": "ge.connecto.app",
+      "classification": "must rename",
+      "dispositionAfterRename": "intentionally retained pending external-registration verification; preferred final value com.mnelo.app"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 13,
+      "matched": "connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 14,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 32,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 32,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 42,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 47,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/IPHONE_DEVELOPMENT.md",
+      "line": 50,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 5,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 112,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 118,
+      "matched": "ge.connecto.app",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 118,
+      "matched": "connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 118,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 178,
+      "matched": "ge.connecto.app",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_1_REPORT.md",
+      "line": 182,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_REPORT.md",
+      "line": 11,
+      "matched": "connecto-app",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_REPORT.md",
+      "line": 12,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/PHASE_0_REPORT.md",
+      "line": 59,
+      "matched": "ge.connecto.app",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/RELEASE.md",
+      "line": 16,
+      "matched": "ge.connecto.app",
+      "classification": "must rename",
+      "dispositionAfterRename": "intentionally retained pending external-registration verification; preferred final value com.mnelo.app"
+    },
+    {
+      "file": "docs/SECURITY.md",
+      "line": 37,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/UX_FLOW.md",
+      "line": 5,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "docs/audits/phase-0.1/ios-build-failure.txt",
+      "line": 17,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/audits/phase-0.1/ios-build-failure.txt",
+      "line": 17,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/audits/phase-0.1/ios-build-settings.json",
+      "line": 2,
+      "matched": "ge.connecto.app",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "docs/audits/phase-0.1/ios-build-settings.json",
+      "line": 3,
+      "matched": "Connecto",
+      "classification": "migration/history reference",
+      "dispositionAfterRename": "preserved with an explicit former working-name historical label"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 2,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "package-lock.json",
+      "line": 8,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "package.json",
+      "line": 2,
+      "matched": "connecto-app",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "src/i18n/en.ts",
+      "line": 2,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "src/i18n/en.ts",
+      "line": 9,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "src/i18n/ka.ts",
+      "line": 9,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "src/i18n/ka.ts",
+      "line": 16,
+      "matched": "Connecto",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    },
+    {
+      "file": "tests/launch.test.tsx",
+      "line": 17,
+      "matched": "CONNECTO",
+      "classification": "must rename",
+      "dispositionAfterRename": "renamed to current Mnelo identity"
+    }
+  ],
+  "baselineCommit": "c71c634",
+  "generatedCacheArtifactGroups": {
+    "ios/": "Ignored native project, Pods and generated metadata; regenerate from app config.",
+    "android/": "Ignored native project and template debug keystore; regenerate from app config.",
+    ".expo/": "Ignored Expo cache and generated routes.",
+    "artifacts/": "Ignored historical build outputs, source maps, private local diagnostics and rename inventory."
+  },
+  "intentionallyRetained": {
+    "gitHistory": "Old commit messages and historical identities are immutable evidence.",
+    "parentWorkspaceDirectory": "The Connecto parent directory is the former working-name workspace location retained to avoid breaking the active task binding; repository folder is mnelo-app."
+  }
+}

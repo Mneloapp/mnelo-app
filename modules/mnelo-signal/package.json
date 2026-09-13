@@ -1,0 +1,7 @@
+{
+  "name": "mnelo-signal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native Signal Protocol integration for Mnelo",
+  "license": "AGPL-3.0-only"
+}

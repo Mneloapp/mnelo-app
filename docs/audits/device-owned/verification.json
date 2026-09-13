@@ -1,0 +1,73 @@
+{
+  "date": "2026-09-10",
+  "implementationCommit": "a2a028427a7087278a7e4a214a610a258954e4e1",
+  "branch": "refactor/device-owned-messenger",
+  "releaseStatus": "NOT READY",
+  "stack": {
+    "expo": "57.0.21",
+    "react-native": "0.86.3",
+    "react": "19.2.3",
+    "expo-router": "57.0.20",
+    "expo-dev-client": "57.0.18",
+    "expo-sqlite": "57.0.2",
+    "@noble/curves": "2.4.0",
+    "@noble/ciphers": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "@livekit/react-native-webrtc": "144.1.2",
+    "ws": "8.21.3"
+  },
+  "qa": {
+    "jest": {
+      "passed": 173,
+      "suites": 34
+    },
+    "currentIntegration": {
+      "passed": 17
+    },
+    "historicalServerUtilities": {
+      "passed": 3
+    },
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "format": "PASS",
+    "expoDoctor": "21/21 PASS with installed CocoaPods PATH and RUBYOPT",
+    "expoCompatibility": "PASS",
+    "webRTCRealTransportAssertions": 16,
+    "gitleaksHistorySourceBundles": "0 findings",
+    "audit": {
+      "moderateAffectedEntries": 16,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "native": {
+    "iosBuild": "PASS — Xcode 26.6 Simulator Debug",
+    "iosBoot": "PASS — iPhone 17 Pro iOS 26.5 simulator",
+    "iosToBrowser": "Bidirectional text including Georgian; receiver ACK/read; accepted voice call, remote audio track, mute and hangup",
+    "iosStorage": {
+      "database_exists": true,
+      "size": 94208,
+      "plaintext_sqlite_header": false,
+      "opens_without_key": false
+    },
+    "androidBuild": "PASS — ARM64 development APK; 7m40s",
+    "androidBoot": "PASS — emulator-5554",
+    "androidStorage": {
+      "database_exists": true,
+      "size": 94208,
+      "plaintext_sqlite_header": false,
+      "path": "no_backup/mnelo-private/history-v1.db"
+    },
+    "physicalIPhone": "NOT TESTED for this architecture",
+    "physicalAndroid": "NOT TESTED"
+  },
+  "limits": [
+    "Independent protocol/security review pending",
+    "No hosted no-retention wss/TURN deployment",
+    "No background/killed-app guarantee",
+    "Automatic Drive/iCloud sync not implemented; encrypted manual export/restore exists",
+    "No physical two-phone or native video-quality claim",
+    "Multi-device key rotation/sync and remaining resilience/security work open"
+  ],
+  "gitHistoryRewritten": false
+}

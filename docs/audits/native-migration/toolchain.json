@@ -1,0 +1,13 @@
+{
+  "expo": "57.0.20",
+  "react-native": "0.86.3",
+  "react": "19.2.3",
+  "expo-router": "57.0.19",
+  "expo-dev-client": "57.0.18",
+  "expo-modules-core": "57.0.16",
+  "expo-modules-jsi": "57.0.8",
+  "developerDirectory": "/Applications/Xcode.app/Contents/Developer",
+  "swift": "Apple Swift version 6.2.3 (swiftlang-6.2.3.3.21 clang-1700.6.3.2)\nTarget: arm64-apple-macosx26.0",
+  "xcode": "Xcode 26.2\nBuild version 17C52",
+  "podLockVersion": "1.16.2"
+}

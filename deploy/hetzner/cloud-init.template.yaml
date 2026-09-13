@@ -1,0 +1,77 @@
+#cloud-config
+# New, empty Ubuntu development VM only. Render the two PUBLIC values before use.
+# Never put provider tokens, private keys, phone records or mobile data in user-data.
+hostname: mnelo-dev-01
+manage_etc_hosts: true
+disable_root: true
+ssh_pwauth: false
+users:
+  - name: mnelo-admin
+    groups: [sudo]
+    shell: /bin/bash
+    lock_passwd: true
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - '@@ADMIN_PUBLIC_KEY@@'
+package_update: true
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - ufw
+  - unattended-upgrades
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-mnelo.conf
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+      AllowUsers mnelo-admin
+      AllowAgentForwarding no
+      X11Forwarding no
+      MaxAuthTries 3
+  - path: /etc/systemd/journald.conf.d/zz-mnelo.conf
+    permissions: '0644'
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=32M
+      ForwardToSyslog=no
+  - path: /etc/systemd/coredump.conf.d/60-mnelo.conf
+    permissions: '0644'
+    content: |
+      [Coredump]
+      Storage=none
+      ProcessSizeMax=0
+  - path: /etc/security/limits.d/60-mnelo.conf
+    permissions: '0644'
+    content: |
+      * hard core 0
+      root hard core 0
+  - path: /etc/systemd/system.conf.d/60-mnelo.conf
+    permissions: '0644'
+    content: |
+      [Manager]
+      DefaultLimitCORE=0
+  - path: /etc/sysctl.d/60-mnelo-privacy.conf
+    permissions: '0644'
+    content: |
+      kernel.core_pattern=/dev/null
+      fs.suid_dumpable=0
+runcmd:
+  - [ufw, default, deny, incoming]
+  - [ufw, default, allow, outgoing]
+  - [ufw, allow, from, '@@ADMIN_IPV4@@', to, any, port, '22', proto, tcp]
+  - [ufw, --force, enable]
+  - [ufw, logging, 'off']
+  - [swapoff, --all]
+  - [systemctl, disable, --now, rsyslog]
+  - [systemctl, mask, apport.service, apport-autoreport.service]
+  - [sysctl, --system]
+  - [sshd, -t]
+  - [systemctl, restart, ssh]
+  - [systemctl, restart, systemd-journald]
+# Service deployment, retention inspection and required reboot are separate verified steps.
+# Leave all application/TURN ports closed until authenticated services have been validated.

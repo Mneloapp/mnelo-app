@@ -1,0 +1,9 @@
+<resources>
+  <string name="mnelo_call_incoming">შემოსული Mnelo ზარი</string>
+  <string name="mnelo_call_active">Mnelo ზარი</string>
+  <string name="mnelo_message_new">ახალი შეტყობინება</string>
+  <string name="mnelo_call_missed">გამოტოვებული ზარი</string>
+  <string name="mnelo_call_answer">პასუხი</string>
+  <string name="mnelo_call_decline">უარყოფა</string>
+  <string name="mnelo_call_end">დასრულება</string>
+</resources>

@@ -1,0 +1,23 @@
+Phase 0.1 actual simulator build diagnostic (2026-09-07)
+Xcode 26.2 (17C52), Swift 6.2.3
+expo 57.0.20 -> expo-modules-core 57.0.16 -> expo-modules-jsi 57.0.8
+Repository path prefix removed; diagnostic text preserved.
+
+❌  (node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h:61:26)
+
+  59 |    no React scheduler.
+  60 |    */
+> 61 |   SWIFT_RETURNS_RETAINED RuntimeScheduler() {}
+     |                          ^ 'RuntimeScheduler' cannot be annotated with either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED because it is not returning a SWIFT_SHARED_REFERENCE type
+  62 |
+  63 |   RuntimeScheduler(const RuntimeScheduler &) = delete;
+  64 |
+
+⚠️  Script has ambiguous dependencies causing it to run on every build.
+   To fix, go to: Xcode » Connecto/Connecto » Build Phases » '[Expo Dev Launcher] Strip Local Network Keys for Release'
+   Either: Uncheck "Based on dependency analysis", or select output files to trigger the script
+
+
+› 1 error(s), and 1 warning(s)
+
+CommandError: Failed to build iOS project. "xcodebuild" exited with error code 65.

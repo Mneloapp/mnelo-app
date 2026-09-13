@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["MneloSignalModule"] },
+  "android": { "modules": ["com.mnelo.signal.MneloSignalModule"] }
+}

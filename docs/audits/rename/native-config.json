@@ -1,0 +1,20 @@
+{
+  "context": "Current Mnelo config; former working-name native identifiers intentionally retained pending external-registration verification.",
+  "ios": {
+    "displayName": "Mnelo",
+    "bundleIdentifierSettings": ["ge.connecto.app"],
+    "urlSchemes": ["mnelo", "ge.connecto.app", "exp+mnelo"],
+    "xcodeProject": "Mnelo",
+    "selectedDevelopmentTeam": false
+  },
+  "android": {
+    "appName": "Mnelo",
+    "applicationId": "ge.connecto.app",
+    "namespace": "ge.connecto.app",
+    "urlSchemes": ["mnelo", "exp+mnelo"]
+  },
+  "prebuild": {
+    "exitCode": 0,
+    "platforms": ["ios", "android"]
+  }
+}

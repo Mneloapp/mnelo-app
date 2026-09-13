@@ -1,0 +1,16 @@
+node_modules/
+.expo/
+ios/
+android/
+dist/
+coverage/
+artifacts/
+.local/
+package-lock.json
+
+# Historical source snapshots are not compiled or edited as active product code.
+legacy/
+
+modules/**/android/build/
+modules/**/android/.gradle/
+modules/**/android/.cxx/

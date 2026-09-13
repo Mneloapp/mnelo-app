@@ -1,0 +1,306 @@
+{
+  "date": "2026-09-09",
+  "sourceCommit": "14312ca",
+  "identity": {
+    "name": "Mnelo",
+    "bundleIdentifier": "com.mnelo.app",
+    "scheme": "mnelo"
+  },
+  "toolchain": {
+    "xcode": "26.6 (17F113)",
+    "swift": "6.3.3",
+    "sdk": "iOS / Simulator 26.5",
+    "publishedSdk57MinimumXcode": "26.4",
+    "empiricallyPassingXcode": "26.6",
+    "cocoaPods": "1.16.2"
+  },
+  "simulator": {
+    "model": "iPhone 17 Pro",
+    "os": "26.5 (23F77)",
+    "architecture": "arm64"
+  },
+  "builds": {
+    "unsignedDiagnostic": {
+      "status": "succeeded",
+      "exitCode": 0,
+      "durationSeconds": 837.79,
+      "errors": 0,
+      "warnings": 955,
+      "warningCategories": {
+        "ActorIsolatedCall": 1,
+        "DeprecatedDeclaration": 81,
+        "Deprecations": 45,
+        "Documentation Issue": 8,
+        "ExistentialAny": 6,
+        "Format String Issue": 1,
+        "No-usage": 5,
+        "Nullability Issue": 49,
+        "Semantic Issue": 43,
+        "SendableClosureCaptures": 16,
+        "SendingRisksDataRace": 3,
+        "Swift Compiler Warning": 629,
+        "Unused Entity Issue": 4,
+        "Value Conversion Issue": 10,
+        "Warning": 53,
+        "WeakMutability": 1
+      },
+      "runtime": "FAIL: missing simulated Keychain entitlement, -34018"
+    },
+    "signedDevelopmentClient": {
+      "status": "succeeded",
+      "exitCode": 0,
+      "durationSeconds": 44.56,
+      "errors": 0,
+      "warnings": 519,
+      "warningCategories": {
+        "DeprecatedDeclaration": 70,
+        "Deprecations": 47,
+        "Documentation Issue": 8,
+        "ExistentialAny": 1,
+        "Format String Issue": 1,
+        "No-usage": 3,
+        "Nullability Issue": 53,
+        "Semantic Issue": 43,
+        "SendableClosureCaptures": 7,
+        "Swift Compiler Warning": 227,
+        "Unused Entity Issue": 4,
+        "Value Conversion Issue": 10,
+        "Warning": 45
+      },
+      "signing": "Normal simulator ad-hoc; codesign deep/strict verify PASS",
+      "runtime": "PASS",
+      "artifact": "artifacts/ios-26.6-derived/Build/Products/Debug-iphonesimulator/Mnelo.app"
+    },
+    "standaloneLocalDiagnostic": {
+      "status": "succeeded",
+      "exitCode": 0,
+      "durationSeconds": 447.33,
+      "wallSeconds": 450.93,
+      "errors": 0,
+      "warnings": 1032,
+      "warningCategories": {
+        "ActorIsolatedCall": 1,
+        "DeprecatedDeclaration": 81,
+        "Deprecations": 45,
+        "Documentation Issue": 8,
+        "ExistentialAny": 6,
+        "No-usage": 5,
+        "Nullability Issue": 49,
+        "Semantic Issue": 43,
+        "SendableClosureCaptures": 16,
+        "SendingRisksDataRace": 3,
+        "Swift Compiler Warning": 628,
+        "Unused Entity Issue": 12,
+        "Value Conversion Issue": 10,
+        "Warning": 124,
+        "WeakMutability": 1
+      },
+      "signing": "Normal simulator ad-hoc; codesign deep/strict verify PASS",
+      "runtime": "PASS: embedded JavaScript, no Metro listener",
+      "bundleBytes": 7210007,
+      "bundleSha256": "9ee66ecb44ff1f5dfeb5425ceffe55a9691a7bc1a78fcd26b40de1998bb82eb9"
+    }
+  },
+  "nativeChecks": {
+    "welcome": "PASS",
+    "invalidLocalOtp": "PASS: invalid/expired message",
+    "realLocalSupabaseOtp": "PASS",
+    "secureStoreProcessRestartRestore": "PASS",
+    "threeTabs": "PASS",
+    "profile": "PASS: development database profile",
+    "connectInterpretation": "PASS: Electrical installation / Vake / September 9",
+    "connectResults": "PASS: three development database candidates, actual evidence",
+    "keyboard": "English/Georgian rendered, software input and dismissal exercised; full keyboard QA pending",
+    "physicalDevice": "NOT TESTED: paired phone disconnected",
+    "developmentClientRestored": "PASS: local Metro, Chats, preserved authenticated session",
+    "pushConfiguration": "Expected configured-build-required state; no push delivery tested"
+  },
+  "limitations": [
+    "Simulator build is not an IPA or physical-device provisioning",
+    "No EAS account used or cloud build created",
+    "No real SMS, APNs/FCM or physical voice/video QA",
+    "Upstream native warnings retained; no diagnostic suppression",
+    "Temporary layout probe reverted; application source unchanged"
+  ],
+  "runtimeLog": {
+    "scope": "Current signed Development Client process, 20-minute bounded capture",
+    "entries": 8198,
+    "errorLevelEntries": 104,
+    "faultLevelEntries": 1,
+    "targetedFatalJsOrKeychainMatches": 0,
+    "observedWarnings": [
+      "Missing simulator haptic pattern resources",
+      "Transient network connection refusals",
+      "UIKit UIScene future lifecycle requirement",
+      "UIKit focus / accessibility / text-input diagnostics"
+    ],
+    "zeroWarningClaim": false
+  },
+  "nativeInput": {
+    "cold": {
+      "phase": "cold",
+      "uriBytes": 6153,
+      "uriDescription": "mnelo scheme, malformed percent-encoded query repeated 2048 times; no private data",
+      "openUrlExitCode": 0,
+      "dispatchSeconds": 0.257,
+      "embeddedBundle": true,
+      "metroListening": false,
+      "nativeUiVerified": true,
+      "screen": "Chats, then Me / Development Nika",
+      "interaction": "Me tab responded"
+    },
+    "warm": {
+      "phase": "warm",
+      "uriBytes": 6153,
+      "openUrlExitCode": 0,
+      "dispatchSeconds": 0.363,
+      "embeddedBundle": true,
+      "metroListening": false,
+      "processPreserved": true,
+      "nativeUiVerified": true,
+      "screen": "Chats, then Connect",
+      "interaction": "Connect tab responded"
+    }
+  },
+  "artifacts": {
+    "development": {
+      "path": "artifacts/ios/mnelo-development-simulator.app.zip",
+      "bytes": 31875507,
+      "sha256": "fdb2466d34ded46348d8a4a6cf86fd7b81893164d3ac146c88f36a84bf9af7a7",
+      "architecture": "arm64",
+      "target": "iOS Simulator only; not installable on physical iPhone"
+    },
+    "local-diagnostic": {
+      "path": "artifacts/ios/mnelo-local-diagnostic-simulator.app.zip",
+      "bytes": 19717413,
+      "sha256": "3226cf7410e5f9835bda349c49ff8d99e94965eb04c18943839c82a14084fe32",
+      "architecture": "arm64",
+      "target": "iOS Simulator only; not installable on physical iPhone"
+    }
+  },
+  "standaloneRuntimeLog": {
+    "scope": "Standalone signed process after cold and warm inputs",
+    "entries": 1194,
+    "errorLevelEntries": 8,
+    "faultLevelEntries": 1,
+    "targetedFatalJsOrKeychainMatches": 0,
+    "warnings": [
+      "UIKit UIScene future lifecycle requirement",
+      "Expo NativeResponse errorReceived/start callback state warning",
+      "Simulator focus/accessibility/Foundation/network diagnostics"
+    ],
+    "zeroWarningClaim": false
+  },
+  "checks": {
+    "applicationCheck": "PASS",
+    "jestTests": 164,
+    "jestSuites": 32,
+    "serverStreamTests": 3,
+    "doctor": "21/21 PASS",
+    "dependencyCompatibility": "PASS",
+    "exports": ["ios PASS", "android PASS"],
+    "secrets": {
+      "history": 0,
+      "source": 0,
+      "mobileExports": 0,
+      "iosEmbeddedBundleAndStrings": 0,
+      "androidEmbeddedBundleAndStrings": 0
+    },
+    "npmAudit": {
+      "moderate": 16,
+      "high": 0,
+      "critical": 0
+    },
+    "backendBaseline": "Unchanged Phase 26: 19 suites / 22 scenarios, 57 pgTAP checks, 62 migrations replayed twice; not rerun for documentation/native compilation."
+  },
+  "androidFollowup": {
+    "sourceCommit": "14312ca",
+    "prebuildExit": 0,
+    "newToolchainInstalled": false,
+    "builds": {
+      "diagnostic": {
+        "path": "artifacts/android/mnelo-local-diagnostic-arm64.apk",
+        "bytes": 60159989,
+        "sha256": "97d0c597019ef67360fe18c296780e7a3b2c5e8dd7a747f6beba3dfa6fb94ead",
+        "sourceCommit": "14312ca",
+        "signatureExit": 0,
+        "zipAlignmentExit": 0,
+        "metadataLines": [
+          "package: name='com.mnelo.app' versionCode='1' versionName='0.1.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'",
+          "sdkVersion:'24'",
+          "targetSdkVersion:'36'",
+          "application-label:'Mnelo'",
+          "native-code: 'arm64-v8a'"
+        ],
+        "embeddedBundleBytes": 6129824,
+        "embeddedBundleSha256": "56fb7f2736605df3a13f12798e3f0d0324478f126c8c9f0be503ed1dd15690fc",
+        "exitCode": 0,
+        "wallSeconds": 869.55,
+        "gradleTasks": 904
+      },
+      "development": {
+        "path": "artifacts/android/mnelo-development-arm64.apk",
+        "bytes": 105371750,
+        "sha256": "90aa19c69c583d91eb9b494d37c0648077605307ccc9264b61ac092704c130b8",
+        "sourceCommit": "14312ca",
+        "signatureExit": 0,
+        "zipAlignmentExit": 0,
+        "exitCode": 0,
+        "wallSeconds": 647.38,
+        "gradleTasks": 533
+      }
+    },
+    "nativeInput": {
+      "cold": {
+        "phase": "cold",
+        "uriBytes": 6153,
+        "exitCode": 0,
+        "statusOk": true,
+        "dispatchSeconds": 1.432,
+        "metroTunnel": false,
+        "nativeScreenViewed": true,
+        "postLinkTapRetested": false,
+        "screen": "Authenticated Chats, local test notice, no system dialog"
+      },
+      "warm": {
+        "phase": "warm",
+        "uriBytes": 6153,
+        "exitCode": 0,
+        "statusOk": true,
+        "dispatchSeconds": 0.069,
+        "processPreserved": true,
+        "metroTunnel": false,
+        "nativeScreenViewed": true,
+        "postLinkTapRetested": false,
+        "screen": "Authenticated Chats after transition; no system dialog"
+      }
+    },
+    "nativeElfLibraries": 24,
+    "minimumElfAlignmentBytes": 16384,
+    "pageSizeRuntimeTested": false,
+    "initialEmulatorFailure": "System UI, keyboard, Google services and phone-service ANRs predated Mnelo launch during concurrent compilation. First corrected cold dispatch returned Status: timeout; not a PASS.",
+    "recovery": "Stopped only task emulators, completed compilation, rebooted preserved Android AVD alone. Current boot has no ANR/crash events.",
+    "standaloneRuntimeLog": {
+      "lines": 210,
+      "targetedFatalOrReactNativeErrors": 0
+    },
+    "developmentClient": "Installed current APK with explicit loopback tunnels; authenticated Chats screenshot viewed",
+    "limitations": [
+      "ARM64 local builds with debug signing, not Play or cloud artifacts",
+      "Full post-link tap / A\u2013G interactive regression not rerun on these APKs; previous September 8 evidence stays dated",
+      "CUA does not expose the standalone emulator executable; native SDK install/launch/screenshot diagnostics were used",
+      "No physical audio/push/background/16-KiB runtime acceptance"
+    ]
+  },
+  "historicalPackageVerification": {
+    "99fd6fe": {
+      "expo": "~57.0.20",
+      "reactNative": "0.86.3"
+    },
+    "ae8d345": {
+      "expo": "~57.0.20",
+      "reactNative": "0.86.3"
+    },
+    "method": "git show each committed package.json; SDK 57 predates the native audit"
+  }
+}

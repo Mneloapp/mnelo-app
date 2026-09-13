@@ -1,0 +1,154 @@
+{
+  "date": "2026-09-09",
+  "scope": "Approved visual identity; final full visual/device acceptance open",
+  "baseCommit": "3d495bce539d871b5bd07920f470b241215145ef",
+  "commit": "Containing commit: feat: implement approved mnelo visual identity",
+  "sourceConversation": "Private owner-provided design discussion; link omitted",
+  "sources": [
+    {
+      "path": "docs/design/references/acid-lime-flow-exploration.png",
+      "bytes": 1610429,
+      "sha256": "bb386cc8d9f4c2ccc676fe988f669524080bdcebc43c74388b508a5d1a894b2f"
+    },
+    {
+      "path": "docs/design/references/approved-icon-evolution.png",
+      "bytes": 1503942,
+      "sha256": "4ecafe01e89f21255d269ba29494cc889409795386df3504269a2ded77f28506"
+    },
+    {
+      "path": "docs/design/references/approved-light-styleboard.png",
+      "bytes": 1512328,
+      "sha256": "544edbbceab89f30f86c75cd7b287380681394868bd65793fd15fe4bcb2aa3dc"
+    }
+  ],
+  "stack": {
+    "expo": "57.0.21",
+    "react-native": "0.86.3",
+    "react": "19.2.3",
+    "expo-router": "57.0.20",
+    "expo-dev-client": "57.0.18",
+    "expo-modules-core": "57.0.17",
+    "expo-modules-jsi": "57.1.0",
+    "sharp": "0.35.4"
+  },
+  "checks": {
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "prettier": "PASS",
+    "jestTests": 164,
+    "jestSuites": 32,
+    "serverTests": 3,
+    "brandExports": 14,
+    "expoDoctor": "21/21 PASS",
+    "compatibility": "PASS",
+    "iosExport": "PASS",
+    "androidExport": "PASS",
+    "secretScanFindings": 0,
+    "activeFormerIdentityMatches": 0,
+    "backendTests": "Not rerun; unchanged dated baseline",
+    "physicalDevices": "NOT RUN"
+  },
+  "ios": {
+    "configuration": "Debug Development Client, ad-hoc signed simulator; JavaScript from loopback Metro",
+    "build": "PASS",
+    "path": "artifacts/ios-26.6-derived/Build/Products/Debug-iphonesimulator/Mnelo.app",
+    "xcode": "26.6 (17F113)",
+    "simulator": "iPhone 17 Pro / iOS 26.5",
+    "bundleIdentifier": "com.mnelo.app",
+    "displayName": "Mnelo",
+    "minimumOS": "16.4",
+    "sdk": "iphonesimulator26.5",
+    "compilerErrors": 0,
+    "warningLines": 1980,
+    "signature": "PASS",
+    "installAndRender": "PASS",
+    "appLibraryIcon": "Visually inspected"
+  },
+  "android": {
+    "configuration": "Debug Development Client, arm64-v8a, generated debug signing",
+    "build": "PASS",
+    "gradleDuration": "5m20s",
+    "tasks": 533,
+    "artifact": {
+      "path": "artifacts/android/mnelo-development-arm64.apk",
+      "bytes": 105408299,
+      "sha256": "d3a7191958d2efaa0dd6a459af35bb2c54a9331462cf63371dac75bba0fd4c33"
+    },
+    "signature": "PASS",
+    "zipAlignment16KiB": "PASS",
+    "emulator": "Pixel 7 / API 36 Google Play ARM64",
+    "installAndWelcomeRender": "PASS",
+    "interactiveFlow": "NOT RUN in this pass; emulator absent from supported native UI inventory"
+  },
+  "audit": {
+    "info": 0,
+    "low": 0,
+    "moderate": 16,
+    "high": 0,
+    "critical": 0,
+    "total": 16
+  },
+  "screenshots": [
+    {
+      "path": "artifacts/design/identity-android-boot.png",
+      "bytes": 79024,
+      "sha256": "cbf9f16c08bf362994d5a9572ee272c49faf9ae8fc036fabbfc31abdbb423a8a"
+    },
+    {
+      "path": "artifacts/design/identity-attachments.png",
+      "bytes": 210848,
+      "sha256": "d9b7fa7f72c72d0acda2a82bdf01f330676b4704ad8eba0f6be8a5b9e596a271"
+    },
+    {
+      "path": "artifacts/design/identity-chat-keyboard-cleared.png",
+      "bytes": 331163,
+      "sha256": "4dc271249bea0e6692c0e46c7851bf2bf5c957b49cdd27b02107cb91a5c94b3c"
+    },
+    {
+      "path": "artifacts/design/identity-chat-keyboard-expanded.png",
+      "bytes": 340710,
+      "sha256": "5ac8f861bc4094325050652caf1dfd4cef4b7811843bcae39cad9d3a7373a83b"
+    },
+    {
+      "path": "artifacts/design/identity-chats-populated.png",
+      "bytes": 178154,
+      "sha256": "14ff8440d7f4387dd581675cc92bba528a9d6c173915f321946845d1f7c607e7"
+    },
+    {
+      "path": "artifacts/design/identity-connect.png",
+      "bytes": 215670,
+      "sha256": "9b7b39d3d4c2675228cc089f3815d4720addc31dd58c3eb23e58fc322ceddb17"
+    },
+    {
+      "path": "artifacts/design/identity-ios-icon.png",
+      "bytes": 2272316,
+      "sha256": "ab9c3de946dd1545b60f788921668481f61a56049b6cff87054995e466065f9c"
+    },
+    {
+      "path": "artifacts/design/identity-message-actions.png",
+      "bytes": 214004,
+      "sha256": "46bf8329750c7ee0ea05150216dc3ce10fba04ee6b6f9cfd15dce8a8aefe924f"
+    },
+    {
+      "path": "artifacts/design/identity-reply.png",
+      "bytes": 325545,
+      "sha256": "8793ed9108d7693e5502b5c63dc0cb45b70d76e820c37a6a1add62a9552daaf3"
+    },
+    {
+      "path": "artifacts/design/identity-welcome.png",
+      "bytes": 187955,
+      "sha256": "47b8261abcbe25694e26dc9ba1e044486a3d2a756e04c13f41416672a90fbf97"
+    }
+  ],
+  "brandReview": {
+    "path": "artifacts/design/brand-review.png",
+    "bytes": 81894,
+    "sha256": "c1f6249ce80f52c09009e4e2c68a0adbe7f48c930770e144f6d8a2882c1ff92e"
+  },
+  "temporaryPreviewEnvironment": "Removed; original .env.local unchanged",
+  "nativeLock": {
+    "path": "ios/Podfile.lock",
+    "bytes": 102154,
+    "sha256": "a98673451e8b4173b09d5f02e9a31f7b5c76894951b5b5e57b9eea29dd6124d7"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "status": "draft-owner-review-required",
+  "name": "Mnelo",
+  "domain": "https://mnelo.com",
+  "iosBundleIdentifier": "com.mnelo.messenger",
+  "androidApplicationId": "com.mnelo.messenger",
+  "scheme": "mnelo",
+  "version": "0.1.0",
+  "localBuildNumber": "1",
+  "languages": ["en", "ka"],
+  "privacyPolicyUrl": null,
+  "termsUrl": null,
+  "supportUrl": null,
+  "accountDeletionRequestUrl": null,
+  "supportContact": null,
+  "legalEntity": null,
+  "ageRating": null,
+  "storeIds": { "apple": null, "google": null },
+  "finalArtworkApproved": false
+}

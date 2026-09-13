@@ -1,0 +1,51 @@
+[Unit]
+Description=Mnelo development encrypted packet forwarding
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=mnelo-turn
+Group=mnelo-turn
+RuntimeDirectory=mnelo-turn
+RuntimeDirectoryMode=0700
+ExecStart=/opt/coturn-4.18.0/bin/turnserver -c /etc/mnelo-turn/turnserver.conf
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+UMask=0077
+LimitCORE=0
+LimitNOFILE=4096
+MemoryMax=512M
+MemorySwapMax=0
+TasksMax=32
+CPUQuota=150%
+OOMPolicy=kill
+StandardOutput=null
+StandardError=null
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateDevices=yes
+InaccessiblePaths=/tmp /var/tmp /dev/shm /var/lib/mnelo-identity
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_UNIX AF_INET
+SocketBindDeny=any
+SocketBindAllow=tcp:3478
+SocketBindAllow=udp:3478
+SocketBindAllow=udp:49160-49759
+
+[Install]
+WantedBy=multi-user.target

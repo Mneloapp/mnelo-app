@@ -1,0 +1,7 @@
+{
+  "name": "mnelo-vault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native device-only storage directory for Mnelo",
+  "license": "AGPL-3.0-only"
+}

@@ -1,0 +1,36 @@
+[
+  {
+    "platform": "ios",
+    "dictionaries": [
+      {
+        "source": "src/i18n/en.ts",
+        "mneloPresent": true,
+        "formerBrandPresent": false,
+        "provisionalPositioningPresent": true
+      },
+      {
+        "source": "src/i18n/ka.ts",
+        "mneloPresent": true,
+        "formerBrandPresent": false,
+        "provisionalPositioningPresent": true
+      }
+    ]
+  },
+  {
+    "platform": "android",
+    "dictionaries": [
+      {
+        "source": "src/i18n/en.ts",
+        "mneloPresent": true,
+        "formerBrandPresent": false,
+        "provisionalPositioningPresent": true
+      },
+      {
+        "source": "src/i18n/ka.ts",
+        "mneloPresent": true,
+        "formerBrandPresent": false,
+        "provisionalPositioningPresent": true
+      }
+    ]
+  }
+]

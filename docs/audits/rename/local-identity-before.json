@@ -1,0 +1,51 @@
+{
+  "provisioningProfiles": [
+    {
+      "matchesFormerBundle": false,
+      "matchesNewBundle": false,
+      "wildcard": false,
+      "provisionedDeviceCount": 0,
+      "expired": false
+    },
+    {
+      "matchesFormerBundle": false,
+      "matchesNewBundle": false,
+      "wildcard": true,
+      "provisionedDeviceCount": 1,
+      "expired": false
+    }
+  ],
+  "expoAuth": {
+    "stateFilePresent": true,
+    "authRecordPresent": false
+  },
+  "expoTokenEnvironmentPresent": false,
+  "easCliAvailable": false,
+  "signing": {
+    "appleDevelopmentCount": 1,
+    "appleDistributionCount": 0
+  },
+  "credentialsJsonPresent": false,
+  "googleServicesJsonPresent": false,
+  "easProjectIdEnvironmentPresent": false,
+  "localEnvFileNames": [".env.example"],
+  "androidSigning": {
+    "userDebugKeystorePresent": false,
+    "generatedTemplateDebugKeystorePresent": true,
+    "repositoryReleaseSigningFiles": []
+  },
+  "deviceProfileComparison": {
+    "deviceUdidAvailableForPrivateComparison": true,
+    "profiles": [
+      {
+        "wildcard": false,
+        "containsPreviouslyInspectedPhone": false
+      },
+      {
+        "wildcard": true,
+        "containsPreviouslyInspectedPhone": true
+      }
+    ]
+  },
+  "scope": "Sanitized local inspection only; does not assert absence of records in Apple, Expo/EAS or Google Play accounts."
+}

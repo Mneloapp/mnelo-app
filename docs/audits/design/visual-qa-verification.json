@@ -1,0 +1,203 @@
+{
+  "date": "2026-09-09",
+  "baseCommit": "4ff7f2dfcffb95247e7c68a0b9eb04ee8cc62b69",
+  "branch": "main",
+  "commit": "Containing commit: fix: resolve native visual qa regressions",
+  "scope": "Native visual QA with isolated local backend; full Android interaction/physical acceptance remains open",
+  "checks": {
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "prettier": "PASS",
+    "jestTests": 173,
+    "jestSuites": 34,
+    "serverTests": 3,
+    "brandExports": 14,
+    "expoDoctor": "21/21 PASS",
+    "compatibility": "PASS",
+    "iosExport": "PASS",
+    "androidExport": "PASS",
+    "secretFindings": 0,
+    "backendFullSuite": "Not rerun; real native local UI/API flows separately documented",
+    "physicalDevices": "NOT RUN",
+    "manualVoiceOverTalkBack": "NOT RUN"
+  },
+  "ios": {
+    "xcode": "26.6 (17F113)",
+    "sdk": "iOS Simulator 26.5",
+    "bundleIdentifier": "com.mnelo.app",
+    "build": "PASS: incremental Debug, ad-hoc simulator signing",
+    "artifact": "artifacts/ios-26.6-derived/Build/Products/Debug-iphonesimulator/Mnelo.app",
+    "compilerErrors": 0,
+    "warningLines": 3,
+    "signature": "PASS",
+    "simulators": [
+      {
+        "name": "iPhone 17 Pro",
+        "id": "3A981CD5-4BF5-4460-9F44-64A788301505",
+        "points": "402x874",
+        "locale": "en"
+      },
+      {
+        "name": "Mnelo Visual QA Small / iPhone SE 3",
+        "id": "B5890ACC-3FD5-4114-8CCD-158CC4B39959",
+        "points": "375x667",
+        "locale": "en/ka",
+        "text": "normal and five accessibility increments, restored"
+      }
+    ]
+  },
+  "android": {
+    "build": "PASS: incremental Debug ARM64",
+    "duration": "26s",
+    "tasks": {
+      "total": 533,
+      "executed": 19,
+      "upToDate": 514
+    },
+    "artifact": {
+      "path": "artifacts/android/mnelo-development-arm64.apk",
+      "bytes": 105408299,
+      "sha256": "d3a7191958d2efaa0dd6a459af35bb2c54a9331462cf63371dac75bba0fd4c33"
+    },
+    "signature": "PASS",
+    "zipAlignment16KiB": "PASS (no fresh ELF or 16-KiB runtime claim)",
+    "emulator": "Pixel 7 / API 36 Google Play ARM64",
+    "render": "Restored real local account and populated inbox from current Metro",
+    "interaction": "BLOCKED: emulator not addressable through native UI controller; Invalid app: qemu-system-aarch64"
+  },
+  "localFlows": {
+    "outage": "50-second auto-resumed API interruption; Pending/Reconnecting -> Sent; database message count 1",
+    "upload": "40-second auto-resumed API interruption; disabled selection/cancel/caption while pending; upload completed",
+    "georgianConnect": "Raw request -> interpretation -> 3 actual results -> profile -> request sent",
+    "calls": "Actual local signaling and one native LiveKit participant; no remote RTC media participant",
+    "deletion": "Disposable signup account -> Processing -> Deleted -> Continue; Auth confirms disposableGone=true, primaryRetained=true"
+  },
+  "bundles": [
+    {
+      "platform": "ios",
+      "path": "dist/_expo/static/js/ios/entry-8c15233cda0341da3b1b44cc8b1440b1.hbc",
+      "bytes": 7270782,
+      "sha256": "7d68a9267eab8d12aeb8c8c50f8c2fec3298413c7e168f52f4ba1410d6407a36"
+    },
+    {
+      "platform": "android",
+      "path": "dist/_expo/static/js/android/entry-511f94bee49b73e6ca73c59a081117e1.hbc",
+      "bytes": 7566398,
+      "sha256": "a33feea0227d0155201e3b6333c796a1be70ec431266bb2847bc7766f6aacf5d"
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "docs/audits/design/visual-qa/se-chats-before.png",
+      "bytes": 162634,
+      "sha256": "a1d0eb2acfeb3b46ecee94f8365226cbd8ce2138035bb92187cf8048df69ae0a",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/se-chat-media-after.png",
+      "bytes": 122449,
+      "sha256": "fe24e4e3a27b16aea54154605955c3f67d3d887cd8d34c43c4b3864b24ea9332",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/se-large-chat-after.png",
+      "bytes": 149771,
+      "sha256": "5c6e58562fcd70391a0cee6454088d21382d78b367cf724bdb2dcc8efd32be26",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/se-large-inbox-after.png",
+      "bytes": 160941,
+      "sha256": "4cd3b41ecfdaa0b221c27b981000d49d2a34b597d84b2442d02e0f926d522870",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/hermes-crash-before.png",
+      "bytes": 157285,
+      "sha256": "379fdf63c835856696f75807c9dcdc01241c0eb0444fd4a2128c31e8a04a75d4",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/hermes-results-after.png",
+      "bytes": 188008,
+      "sha256": "fbc9b5ad813ddf3308bc85af491fd7667f775b1b7f8cb06fa7cd728e08fb2dab",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-country-before.png",
+      "bytes": 204577,
+      "sha256": "7e4e04345c69bd5b5335b19872b5d5ac6ad3588dc5c916c715ff02173d8ce5aa",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-country-after.png",
+      "bytes": 198691,
+      "sha256": "b8b9dca23b6c8e6fb3358776fba28405c9c95d189daec38d574b35a0cdf620a0",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-connect-after.png",
+      "bytes": 214953,
+      "sha256": "fd4c8204c58a3d66b3a5574bda149f0d7b1a0199441c9f897f6aaebbb1d4222b",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-voice-controls.png",
+      "bytes": 177937,
+      "sha256": "5a3ac5616317189014788e082d8e945b25478ba3b7c73c7b1e3094a9599a9b24",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/se-contacts-denied-after.png",
+      "bytes": 181577,
+      "sha256": "ed50e8deed6fecb50fefe8b801d1b04ac6cbe26040979d9d452339efc6d97794",
+      "width": 750,
+      "height": 1334
+    },
+    {
+      "path": "docs/audits/design/visual-qa/android-current.png",
+      "bytes": 283877,
+      "sha256": "882ded36979ebba6a8f8487e10f3140697b28afbf901561dfb3a0ac009470da4",
+      "width": 1080,
+      "height": 2400
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-deletion-processing.png",
+      "bytes": 194444,
+      "sha256": "f9418a2681cea50b3d26da44763c2c8241bfed27aa3eb1a6e006fdcc7e082550",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-deletion-complete.png",
+      "bytes": 219139,
+      "sha256": "931b707418f1da63a79861929c7bf38bebb303a27bf950cce5409f97cf00f6b5",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-signup-empty-inbox.png",
+      "bytes": 170773,
+      "sha256": "db8d0207d16590bc6c0c0d94b547a123f65955514a4cee0a2bba5d0c76270778",
+      "width": 1206,
+      "height": 2622
+    },
+    {
+      "path": "docs/audits/design/visual-qa/pro-pending-message.png",
+      "bytes": 266432,
+      "sha256": "d1f5278880cc0d93bb5681b48509165b95731e341088883e6da1281b3b592bab",
+      "width": 1206,
+      "height": 2622
+    }
+  ]
+}

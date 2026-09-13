@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["MneloCallsModule"],
+    "appDelegateSubscribers": ["MneloCallsSubscriber"]
+  },
+  "android": {
+    "modules": ["com.mnelo.calls.MneloCallsModule"]
+  }
+}

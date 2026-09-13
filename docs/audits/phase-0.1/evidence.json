@@ -1,0 +1,592 @@
+{
+  "auditDate": "2026-09-07",
+  "baselineCommit": "99fd6fe",
+  "sdk": "57.0.0",
+  "stack": [
+    {
+      "name": "@expo/env",
+      "declared": "2.4.3",
+      "installed": "2.4.3",
+      "locked": "2.4.3",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "@expo/ui",
+      "declared": "~57.0.16",
+      "installed": "57.0.16",
+      "locked": "57.0.16",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "@hookform/resolvers",
+      "declared": "5.9.1",
+      "installed": "5.9.1",
+      "locked": "5.9.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "@react-native-community/netinfo",
+      "declared": "12.0.1",
+      "installed": "12.0.1",
+      "locked": "12.0.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "@tanstack/react-query",
+      "declared": "5.102.8",
+      "installed": "5.102.8",
+      "locked": "5.102.8",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "@testing-library/react-native",
+      "declared": "14.0.1",
+      "installed": "14.0.1",
+      "locked": "14.0.1",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "@types/jest",
+      "declared": "29.5.14",
+      "installed": "29.5.14",
+      "locked": "29.5.14",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "@types/node",
+      "declared": "24.13.3",
+      "installed": "24.13.3",
+      "locked": "24.13.3",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "@types/react",
+      "declared": "~19.2.2",
+      "installed": "19.2.18",
+      "locked": "19.2.18",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "eslint",
+      "declared": "9.39.5",
+      "installed": "9.39.5",
+      "locked": "9.39.5",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "eslint-config-expo",
+      "declared": "~57.0.2",
+      "installed": "57.0.2",
+      "locked": "57.0.2",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "eslint-config-prettier",
+      "declared": "10.1.8",
+      "installed": "10.1.8",
+      "locked": "10.1.8",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "expo",
+      "declared": "~57.0.20",
+      "installed": "57.0.20",
+      "locked": "57.0.20",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-constants",
+      "declared": "~57.0.17",
+      "installed": "57.0.17",
+      "locked": "57.0.17",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-dev-client",
+      "declared": "~57.0.18",
+      "installed": "57.0.18",
+      "locked": "57.0.18",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-doctor",
+      "declared": "1.20.4",
+      "installed": "1.20.4",
+      "locked": "1.20.4",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "expo-linking",
+      "declared": "~57.0.9",
+      "installed": "57.0.9",
+      "locked": "57.0.9",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-localization",
+      "declared": "~57.0.1",
+      "installed": "57.0.1",
+      "locked": "57.0.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-router",
+      "declared": "~57.0.19",
+      "installed": "57.0.19",
+      "locked": "57.0.19",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-secure-store",
+      "declared": "~57.0.3",
+      "installed": "57.0.3",
+      "locked": "57.0.3",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-splash-screen",
+      "declared": "~57.0.8",
+      "installed": "57.0.8",
+      "locked": "57.0.8",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-status-bar",
+      "declared": "~57.0.1",
+      "installed": "57.0.1",
+      "locked": "57.0.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "expo-system-ui",
+      "declared": "~57.0.3",
+      "installed": "57.0.3",
+      "locked": "57.0.3",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "i18next",
+      "declared": "26.4.2",
+      "installed": "26.4.2",
+      "locked": "26.4.2",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "jest",
+      "declared": "~29.7.0",
+      "installed": "29.7.0",
+      "locked": "29.7.0",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "jest-expo",
+      "declared": "~57.0.5",
+      "installed": "57.0.5",
+      "locked": "57.0.5",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "prettier",
+      "declared": "3.9.6",
+      "installed": "3.9.6",
+      "locked": "3.9.6",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "react",
+      "declared": "19.2.3",
+      "installed": "19.2.3",
+      "locked": "19.2.3",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-dom",
+      "declared": "19.2.3",
+      "installed": "19.2.3",
+      "locked": "19.2.3",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-hook-form",
+      "declared": "7.87.0",
+      "installed": "7.87.0",
+      "locked": "7.87.0",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-i18next",
+      "declared": "17.0.13",
+      "installed": "17.0.13",
+      "locked": "17.0.13",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native",
+      "declared": "0.86.3",
+      "installed": "0.86.3",
+      "locked": "0.86.3",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native-gesture-handler",
+      "declared": "~2.32.0",
+      "installed": "2.32.0",
+      "locked": "2.32.0",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native-reanimated",
+      "declared": "4.5.1",
+      "installed": "4.5.1",
+      "locked": "4.5.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native-safe-area-context",
+      "declared": "~5.7.0",
+      "installed": "5.7.0",
+      "locked": "5.7.0",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native-screens",
+      "declared": "~4.26.0",
+      "installed": "4.26.2",
+      "locked": "4.26.2",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "react-native-worklets",
+      "declared": "0.10.1",
+      "installed": "0.10.1",
+      "locked": "0.10.1",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "tsx",
+      "declared": "4.23.13",
+      "installed": "4.23.13",
+      "locked": "4.23.13",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "typescript",
+      "declared": "~6.0.3",
+      "installed": "6.0.3",
+      "locked": "6.0.3",
+      "direct": true,
+      "devDependency": true
+    },
+    {
+      "name": "zod",
+      "declared": "4.5.4",
+      "installed": "4.5.4",
+      "locked": "4.5.4",
+      "direct": true,
+      "devDependency": false
+    },
+    {
+      "name": "zustand",
+      "declared": "5.0.15",
+      "installed": "5.0.15",
+      "locked": "5.0.15",
+      "direct": true,
+      "devDependency": false
+    }
+  ],
+  "nativeModules": [
+    {
+      "name": "@expo/dom-webview",
+      "version": "57.0.1",
+      "pods": ["ExpoDomWebView"],
+      "direct": false
+    },
+    {
+      "name": "@expo/log-box",
+      "version": "57.0.4",
+      "pods": ["ExpoLogBox"],
+      "direct": false
+    },
+    {
+      "name": "@expo/ui",
+      "version": "57.0.16",
+      "pods": ["ExpoUI"],
+      "direct": true
+    },
+    {
+      "name": "@react-native-community/netinfo",
+      "version": "12.0.1",
+      "pods": ["react-native-netinfo"],
+      "direct": true
+    },
+    {
+      "name": "@react-native-masked-view/masked-view",
+      "version": "0.3.2",
+      "pods": ["RNCMaskedView"],
+      "direct": false
+    },
+    {
+      "name": "expo",
+      "version": "57.0.20",
+      "pods": ["Expo"],
+      "direct": true
+    },
+    {
+      "name": "expo-asset",
+      "version": "57.0.16",
+      "pods": ["ExpoAsset"],
+      "direct": false
+    },
+    {
+      "name": "expo-constants",
+      "version": "57.0.17",
+      "pods": ["EXConstants"],
+      "direct": true
+    },
+    {
+      "name": "expo-dev-client",
+      "version": "57.0.18",
+      "pods": ["expo-dev-client"],
+      "direct": true
+    },
+    {
+      "name": "expo-dev-launcher",
+      "version": "57.0.19",
+      "pods": ["expo-dev-launcher"],
+      "direct": false
+    },
+    {
+      "name": "expo-dev-menu",
+      "version": "57.0.18",
+      "pods": ["expo-dev-menu"],
+      "direct": false
+    },
+    {
+      "name": "expo-dev-menu-interface",
+      "version": "57.0.0",
+      "pods": ["expo-dev-menu-interface"],
+      "direct": false
+    },
+    {
+      "name": "expo-file-system",
+      "version": "57.0.6",
+      "pods": ["ExpoFileSystem"],
+      "direct": false
+    },
+    {
+      "name": "expo-font",
+      "version": "57.0.3",
+      "pods": ["ExpoFont"],
+      "direct": false
+    },
+    {
+      "name": "expo-glass-effect",
+      "version": "57.0.1",
+      "pods": ["ExpoGlassEffect"],
+      "direct": false
+    },
+    {
+      "name": "expo-json-utils",
+      "version": "57.0.1",
+      "pods": ["EXJSONUtils"],
+      "direct": false
+    },
+    {
+      "name": "expo-keep-awake",
+      "version": "57.0.1",
+      "pods": ["ExpoKeepAwake"],
+      "direct": false
+    },
+    {
+      "name": "expo-linking",
+      "version": "57.0.9",
+      "pods": ["ExpoLinking"],
+      "direct": true
+    },
+    {
+      "name": "expo-localization",
+      "version": "57.0.1",
+      "pods": ["ExpoLocalization"],
+      "direct": true
+    },
+    {
+      "name": "expo-manifests",
+      "version": "57.0.1",
+      "pods": ["EXManifests"],
+      "direct": false
+    },
+    {
+      "name": "expo-modules-core",
+      "version": "57.0.16",
+      "pods": ["ExpoModulesCore", "ExpoModulesWorklets"],
+      "direct": false
+    },
+    {
+      "name": "expo-modules-jsi",
+      "version": "57.0.8",
+      "pods": ["ExpoModulesJSI"],
+      "direct": false
+    },
+    {
+      "name": "expo-router",
+      "version": "57.0.19",
+      "pods": ["ExpoRouter"],
+      "direct": true
+    },
+    {
+      "name": "expo-secure-store",
+      "version": "57.0.3",
+      "pods": ["ExpoSecureStore"],
+      "direct": true
+    },
+    {
+      "name": "expo-splash-screen",
+      "version": "57.0.8",
+      "pods": ["ExpoSplashScreen"],
+      "direct": true
+    },
+    {
+      "name": "expo-symbols",
+      "version": "57.0.2",
+      "pods": ["ExpoSymbols"],
+      "direct": false
+    },
+    {
+      "name": "expo-system-ui",
+      "version": "57.0.3",
+      "pods": ["ExpoSystemUI"],
+      "direct": true
+    },
+    {
+      "name": "expo-updates-interface",
+      "version": "57.0.1",
+      "pods": ["EXUpdatesInterface"],
+      "direct": false
+    },
+    {
+      "name": "react-native-gesture-handler",
+      "version": "2.32.0",
+      "pods": ["RNGestureHandler"],
+      "direct": true
+    },
+    {
+      "name": "react-native-reanimated",
+      "version": "4.5.1",
+      "pods": ["RNReanimated"],
+      "direct": true
+    },
+    {
+      "name": "react-native-safe-area-context",
+      "version": "5.7.0",
+      "pods": ["react-native-safe-area-context"],
+      "direct": true
+    },
+    {
+      "name": "react-native-screens",
+      "version": "4.26.2",
+      "pods": ["RNScreens"],
+      "direct": true
+    },
+    {
+      "name": "react-native-worklets",
+      "version": "0.10.1",
+      "pods": ["RNWorklets"],
+      "direct": true
+    }
+  ],
+  "sourceHashes": {
+    "package.json": "8357132f5b5b4ceebef1d64a1ee1b32e51f9331b8ad223267ab02e9339a48d58",
+    "package-lock.json": "ea358fc19b1d8531598bdc87edfe3930d29c1edfb50b85687df61d84bd36614f",
+    "ios/Podfile": "01db0392ad67e0daae3cfbc1abcbc557eb130922b25ef382c3faedfcc08278c0",
+    "ios/Podfile.lock": "76bf7f6c38f35c2c46190c214bb894d7a3c38e75956dfcab9b1d6d4ed8ecd511",
+    "node_modules/expo/package.json": "d97bc36cd82ac49740844e4f8d250f56df724e3cc6f9d415fb53664d0796f985",
+    "node_modules/expo-modules-core/package.json": "dd5532d1b4aab8338cd0c7d65223250c7d046f347e227e82a3fe2daee79a7bd3",
+    "node_modules/expo-modules-jsi/package.json": "fcd1e40772e526867a7b472842400aaf48ee6d83af2269311dc21eba394c3f8f",
+    "node_modules/expo-modules-jsi/apple/Package.swift": "7f340c3ef8ef7718c3b60d935fc0bc98882a013eb67620683f58c1832198dcd9",
+    "node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h": "ab3e6488b7e527210ecc1c8c58318c1e0ac5db3a489ddcc8ed5a11eaf6f7e5fb"
+  },
+  "bundleExposure": {
+    "android": {
+      "totalSources": 1423,
+      "queryString": ["/node_modules/query-string/index.js"],
+      "decoder": ["/node_modules/decode-uri-component/index.js"],
+      "xcode": [],
+      "expoCli": ["/node_modules/@expo/cli/build/metro-require/require.js"],
+      "vulnerableUuidPackage": [],
+      "expoInternalUuid": [
+        "/node_modules/expo-modules-core/src/uuid/index.ts",
+        "/node_modules/expo-modules-core/src/uuid/lib/bytesToUuid.ts",
+        "/node_modules/expo-modules-core/src/uuid/uuid.types.ts"
+      ]
+    },
+    "ios": {
+      "totalSources": 1289,
+      "queryString": ["/node_modules/query-string/index.js"],
+      "decoder": ["/node_modules/decode-uri-component/index.js"],
+      "xcode": [],
+      "expoCli": ["/node_modules/@expo/cli/build/metro-require/require.js"],
+      "vulnerableUuidPackage": [],
+      "expoInternalUuid": [
+        "/node_modules/expo-modules-core/src/uuid/index.ts",
+        "/node_modules/expo-modules-core/src/uuid/lib/bytesToUuid.ts",
+        "/node_modules/expo-modules-core/src/uuid/uuid.types.ts"
+      ]
+    }
+  },
+  "decoderProbe": [
+    {
+      "name": "ordinary query",
+      "inputBytes": 18,
+      "exit": 0,
+      "errorCode": null,
+      "signal": null,
+      "elapsedMs": 26
+    },
+    {
+      "name": "synthetic malformed query",
+      "inputBytes": 6146,
+      "exit": null,
+      "errorCode": "ETIMEDOUT",
+      "signal": "SIGKILL",
+      "elapsedMs": 1506
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+# Development relay, coturn 4.18.0. Render the secret only on the host.
+listening-ip=46.225.169.127
+relay-ip=46.225.169.127
+listening-port=3478
+min-port=49160
+max-port=49759
+realm=relay-dev.mnelo.com
+server-name=relay-dev.mnelo.com
+use-auth-secret
+static-auth-secret=REPLACE_ON_HOST
+no-auth-pings
+no-dynamic-ip-list
+no-dynamic-realms
+no-tls
+# DTLS listener, CLI, web-admin, Prometheus and mobility are OFF by default in 4.18.
+# WebRTC DTLS/SRTP inside the forwarded packets is unaffected by listener settings.
+no-tcp-relay
+no-multicast-peers
+denied-peer-ip=0.0.0.0-255.255.255.255
+denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+# Both phones use relay-only ICE. Permit forwarding only between allocations on
+# this relay, never an arbitrary public/private UDP destination.
+allowed-peer-ip=46.225.169.127
+user-quota=40
+total-quota=400
+max-bps=1048576
+bps-capacity=10485760
+relay-threads=2
+max-allocate-timeout=15
+stale-nonce=600
+unauthorized-ratelimit
+unauthorized-ratelimit-rps=10
+no-stdout-log
+log-file=/dev/null
+simple-log
+pidfile=/run/mnelo-turn/turn.pid

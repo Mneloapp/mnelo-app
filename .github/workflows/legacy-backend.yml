@@ -1,0 +1,29 @@
+name: Mnelo legacy backend checks (historical)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  legacy-database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run db:start > /tmp/mnelo-local-start.log 2>&1
+      - run: npm run db:reset > /tmp/mnelo-local-reset.log 2>&1
+      - run: npm run db:lint
+      - run: npm run check:db-types
+      - run: npm run db:test
+      - run: npm run check:edge
+      - run: npm run calls:start
+      - run: npm run functions:serve > /tmp/mnelo-functions.log 2>&1 &
+      - run: npm run test:integration
+      - if: always()
+        run: npm run calls:stop
+      - if: always()
+        run: npm run db:stop

@@ -1,0 +1,469 @@
+{
+  "scope": "Current reviewable source and documentation; generated artifacts, dependencies and Git internals excluded. This report itself is excluded from the scan to avoid recursion.",
+  "resolvedExpo": {
+    "name": "Mnelo",
+    "slug": "mnelo",
+    "scheme": "mnelo",
+    "website": "https://mnelo.com",
+    "iosBundle": "ge.connecto.app",
+    "androidPackage": "ge.connecto.app",
+    "cloudProjectLinked": false,
+    "nativeIdentifierDisposition": "Intentionally retained pending external-registration verification"
+  },
+  "dependencyGraphUnchanged": true,
+  "staleNameScan": {
+    "unclassifiedCount": 0,
+    "activeUserFacingFormerBrandCount": 0,
+    "counts": {
+      "migration/history reference": 76,
+      "intentionally retained": 13
+    },
+    "records": [
+      {
+        "file": "docs/PRODUCT_IDENTITY.md",
+        "line": 3,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PRODUCT_IDENTITY.md",
+        "line": 15,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/PRODUCT_IDENTITY.md",
+        "line": 43,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/PRODUCT_IDENTITY.md",
+        "line": 49,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/PRODUCT_IDENTITY.md",
+        "line": 63,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/RENAME_REPORT.md",
+        "line": 3,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/RENAME_REPORT.md",
+        "line": 37,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/RENAME_REPORT.md",
+        "line": 43,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/RENAME_REPORT.md",
+        "line": 78,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/phase-0.1/README.md",
+        "line": 3,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/native-config.json",
+        "line": 5,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/audits/rename/native-config.json",
+        "line": 6,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/audits/rename/native-config.json",
+        "line": 12,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/audits/rename/native-config.json",
+        "line": 13,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 2,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 7,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 14,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 21,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 28,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 35,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 42,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 49,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 56,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 63,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 70,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 77,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 84,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 91,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 98,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 105,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 112,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 119,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 126,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 133,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 140,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 147,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 154,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 161,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 168,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 175,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 182,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 189,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 196,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 203,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 210,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 217,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 224,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 231,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 238,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 245,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 252,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 259,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 266,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 273,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 280,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 287,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 294,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 301,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 308,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 315,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 322,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 329,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 336,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 343,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 350,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 357,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 364,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/rename/stale-name-inventory.json",
+        "line": 378,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "README.md",
+        "line": 19,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "app.config.ts",
+        "line": 37,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "app.config.ts",
+        "line": 41,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/IPHONE_DEVELOPMENT.md",
+        "line": 12,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 3,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 7,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 114,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 120,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 120,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 120,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 180,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_1_REPORT.md",
+        "line": 184,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_REPORT.md",
+        "line": 3,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_REPORT.md",
+        "line": 13,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_REPORT.md",
+        "line": 14,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/PHASE_0_REPORT.md",
+        "line": 61,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/RELEASE.md",
+        "line": 18,
+        "classification": "intentionally retained"
+      },
+      {
+        "file": "docs/audits/phase-0.1/ios-build-failure.txt",
+        "line": 17,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/phase-0.1/ios-build-failure.txt",
+        "line": 17,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/phase-0.1/ios-build-settings.json",
+        "line": 2,
+        "classification": "migration/history reference"
+      },
+      {
+        "file": "docs/audits/phase-0.1/ios-build-settings.json",
+        "line": 3,
+        "classification": "migration/history reference"
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "file": "assets/fonts/DMSans-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/googlefonts/dm-fonts/4412393b7d2de9fe7a92064c2dce9b5af5d7fd26/Sans/fonts/ttf/DMSans-Regular.ttf",
+    "bytes": 78256,
+    "sha256": "a95a338942aa357145427be7c963ff691f9fe859c3512d9c0483e1914d57a208"
+  },
+  {
+    "file": "assets/fonts/DMSans-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/googlefonts/dm-fonts/4412393b7d2de9fe7a92064c2dce9b5af5d7fd26/Sans/fonts/ttf/DMSans-Medium.ttf",
+    "bytes": 78124,
+    "sha256": "26af1a05d62906ffc3316ee6b4cbaf7ae86a1e607c5b9d89c64ec37f85063fbf"
+  },
+  {
+    "file": "assets/fonts/DMSans-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/googlefonts/dm-fonts/4412393b7d2de9fe7a92064c2dce9b5af5d7fd26/Sans/fonts/ttf/DMSans-SemiBold.ttf",
+    "bytes": 78404,
+    "sha256": "52897fabe96fa9dfe59b52681b57493f6bdce268ca3add5b82d701460ecc100d"
+  },
+  {
+    "file": "assets/fonts/FiraGO-Regular.ttf",
+    "source": "https://raw.githubusercontent.com/bBoxType/FiraGO/5bbcb9d066ab563686ed1de1e6f62eec0148e82d/Fonts/FiraGO_TTF_1001/Roman/FiraGO-Regular.ttf",
+    "bytes": 804888,
+    "sha256": "495901c0c608ea265f4c31aa2a4c7a313e5cc2a3dd610da78a447fe8e07454a2"
+  },
+  {
+    "file": "assets/fonts/FiraGO-Medium.ttf",
+    "source": "https://raw.githubusercontent.com/bBoxType/FiraGO/5bbcb9d066ab563686ed1de1e6f62eec0148e82d/Fonts/FiraGO_TTF_1001/Roman/FiraGO-Medium.ttf",
+    "bytes": 806400,
+    "sha256": "5f753a48c7dff5b7af294e76624febb28c41071a5a65c0fd8a024ea9d1491e8a"
+  },
+  {
+    "file": "assets/fonts/FiraGO-SemiBold.ttf",
+    "source": "https://raw.githubusercontent.com/bBoxType/FiraGO/5bbcb9d066ab563686ed1de1e6f62eec0148e82d/Fonts/FiraGO_TTF_1001/Roman/FiraGO-SemiBold.ttf",
+    "bytes": 806684,
+    "sha256": "b47f1eaf02deaf16051a897f84f275326476306eb198f1cbceb5b1f5882021b1"
+  }
+]

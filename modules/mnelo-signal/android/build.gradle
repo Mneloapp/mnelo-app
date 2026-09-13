@@ -1,0 +1,19 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.mnelo.signal'
+version = '1.0.0'
+
+android {
+  namespace 'com.mnelo.signal'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+  packaging {
+    resources.excludes += ['libsignal_jni*.dylib', 'signal_jni*.dll', 'libsignal_jni*.so']
+  }
+}
+dependencies {
+  implementation 'org.signal:libsignal-client:0.102.2'
+  implementation 'org.signal:libsignal-android:0.102.2'
+}

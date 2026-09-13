@@ -1,0 +1,2 @@
+-- No automatic development users. Use the guarded local seed command when implemented.
+-- Database test fixtures run in rolled-back transactions; cloud projects must never receive test OTP configuration.

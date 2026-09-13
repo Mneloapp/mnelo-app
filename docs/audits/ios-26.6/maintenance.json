@@ -1,0 +1,29 @@
+{
+  "date": "2026-09-09",
+  "expoSdk": "57.0.0",
+  "selectedXcode": "26.6 (17F113)",
+  "swift": "6.3.3",
+  "versions": {
+    "expo": "57.0.21",
+    "expo-router": "57.0.20",
+    "@expo/ui": "57.0.17",
+    "expo-modules-core": "57.0.17",
+    "expo-modules-jsi": "57.1.0",
+    "expo-dev-client": "57.0.18",
+    "react-native": "0.86.3",
+    "react": "19.2.3",
+    "expo-glass-effect": "57.0.2",
+    "babel-preset-expo": "57.0.11"
+  },
+  "verification": {
+    "jestTests": 164,
+    "jestSuites": 32,
+    "serverStreamTests": 3,
+    "doctor": "21/21",
+    "dependencyCompatibility": "PASS",
+    "mobileExports": ["ios", "android"],
+    "secretFindings": 0,
+    "npmModerateFindings": 16
+  },
+  "nativeCompilation": "Pending iOS platform component installation; no native build success claimed"
+}

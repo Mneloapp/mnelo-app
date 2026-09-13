@@ -1,0 +1,37 @@
+# Mnelo testing
+
+> September 12 profile/QR coverage adds avatar/picker cleanup, hostile QR inputs, camera consent, invitation auth/block checks, old backups and optional-channel bounds. QR tests decode the actual geometry, not a mock QR. Use EXPO_NO_DOTENV=1 with the new Metro exclusion when running isolated local fixtures; SDK 57 otherwise loads root env files through its development virtual module. [Acceptance checklist](PROFILE_CARDS_QR.md).
+
+Run `npm run check`, then Expo Doctor with the installed CocoaPods PATH, compatibility, mobile export, secret scan and native builds. Do not replace new tests with old Supabase/RLS results.
+
+`tests/messenger` tests the actual local SQL engine with isolated Node SQLite in-memory databases, Ed25519/AES-GCM primitives, real WebSocket relay sockets and active-import/environment boundaries. The in-memory test database is not evidence of native encryption; the simulator SQLCipher database must be checked separately.
+
+Phone coverage adds real HTTP client/server verification using fictional OTPs, negative signatures/replay/ownership/expiry/rate-limit tests, hidden-number lookup, minimal registry columns, no silent key replacement and local display-cache erasure/backup exclusion. `tests/phone-screens.test.tsx` tests invalid OTP, enrollment-gated search and explicit key confirmation. Infobip, Twilio and Vonage adapter tests mock external HTTP contracts; they do not prove SMS delivery. Vonage coverage requires the exact completed request, rejects malformed/provider failures and checks explicit provider selection without fallback. Infobip tests additionally reject unsafe remote configuration, redirects/custom credential destinations, wrong PIN identity and truthy non-boolean approval; the read-only live readiness command sends no SMS. Service regressions cover failed-resend preservation and concurrent replacement attempts. Local setup and provider prerequisites are in [PHONE_IDENTITY](PHONE_IDENTITY.md).
+
+`tests/dial-number.test.tsx` covers the Calls number-entry path: unavailable/enrollment-gated service, explicit normalized lookup without SMS, pinned-contact voice dispatch, new-key confirmation, offline peer, blocked/self/missing results, stale-result invalidation and a block applied after lookup. The call service is mocked here; these tests verify UI authorization/action wiring, not real media transport. Tab accessibility tests retain inactive-screen exclusion while native layout remains measured. Visually check equal header baselines, first/repeated tab selection, composer close/back behavior, search keyboard and in-app number keypad in English/Georgian; physical-device responsiveness remains separate from simulator checks.
+
+`tests/composer.test.tsx` covers direct contact selection, local-only search/clear, explicit whole-number actions, post-render blocking, originating-tab dismissal and keypad entry/deletion. Calls tests exercise inline voice/video actions; phone-screen coverage ensures adding a contact returns to the picker without starting a chat/call. Native route checks must include Chats → compose → contact → conversation → Back; Calls → plus → Keypad → Back → close; New contact → code/number → Back; Me → Contacts → close. Neither mocked call dispatch nor a bundled route proves a real two-device call.
+
+`tests/messenger/browser/harness.ts` is an isolated real WebRTC development harness. It generates test identities in memory and synthetic audio/video, checks text, chunked media, calls, rejection and blocking, and can bridge to a native simulator using public codes. It does not replace physical microphone/camera/network QA and is never imported into app routes.
+
+Native checks must verify startup with SQLCipher, persistence after restart, no plaintext database header, inability to read the database without a key, backup exclusion and two-sided delivery/deletion. Missing keys must preserve the database and fail closed.
+
+The old integration/RLS tests are preserved for historical audit continuity. The manual `legacy backend checks` CI job exercises them separately; they are not required to provision an obsolete backend for the current messenger.
+
+Report actual counts, commands, failures/fixes, platforms and artifacts in [QA_REPORT](QA_REPORT.md). Do not publish screenshots containing recovery/private identity keys.
+
+## Chat attention regression coverage
+
+`tests/chat-attention.test.tsx`, `tab-badges.test.tsx`, `visible-read.test.tsx`, `device-call-attention.test.ts` and `device-alerts.test.ts` cover persistent search/filter combination, clear, separate badge updates, font metrics, foreground/focus acknowledgement, ring timeout/withdrawal/decline, generic OS payloads and permission denial without push registration. These use mocked native/call adapters and do not prove actual notification transport. `tests/messenger/device.integration.ts` uses real SQLite/engine logic for duplicate/blocked messages, unread counts, acknowledgement race boundaries, independent local deletion, backup restoration, Unicode search beyond 100 chats and bounded pagination. Native QA must separately verify input glyphs, keyboard, small/large fonts, delivered alerts, badge counts and background/terminated states on both platforms.
+
+## Phone-first enrollment and local profile (2026-09-11)
+
+`tests/enrollment.test.ts`, `tests/route-guards.test.ts`, `tests/phone-screens.test.tsx`, `tests/local-profile-screen.test.tsx` and current device integration tests cover: keys without OTP stay locked; successful verification persists; fixtures/other service origins cannot unlock production; wrong OTP does not navigate; number changes retain the old enrollment on failure; stale verification cannot enroll a different identity; optional names and normalized local usernames; version-2 database/original backup compatibility; restore without enrollment; unlink/erase clearing local enrollment. Existing signed server authorization tests remain mandatory.
+
+Native QA uses a fresh simulator and an in-memory fictional-number service on a separate origin. Check `configuredPhoneService()` inside the running development client before requesting a code. SDK 57's installed `expo/virtual/env` development transform merges `.env` files over process environment; command-prefix variables and `EXPO_NO_DOTENV` alone did not override the saved development endpoint. A temporary, ignored `.env.development.local` isolated the test; it was removed before restoring the normal server. Do not share a real registry/origin with a fixture or change provider configuration to make UI QA pass.
+
+Test a cold app reopen with the identity service stopped: enrolled Chats and local profile must remain available. This is service-offline validation, not physical airplane-mode, real SMS delivery, SMS autofill or notification delivery proof. Capture ordinary/large Georgian input metrics and preserve the original simulator's history.
+
+## Hosted development checks — September 12
+
+`tests/messenger/hosting.integration.ts` adds seven negative/behavioral cases for tester admission, restart-resistant budgets, atomic hourly/daily caps, clock rollback and proxy address boundaries. The compiled deployed-service checks validate real HTTPS/WSS without requesting SMS or writing a user account. See [commands, actual results and limits](DEVELOPMENT_HOSTING.md). A remote synthetic pass is not physical iPhone or WebRTC media acceptance.

@@ -1,0 +1,86 @@
+{
+  "mark-primary": {
+    "width": 384,
+    "height": 384,
+    "bytes": 5076,
+    "sha256": "0ec2bcbedda5b6b5669420a033556326ab626bba332098523b4c61c888234317"
+  },
+  "mark-dark": {
+    "width": 384,
+    "height": 384,
+    "bytes": 4665,
+    "sha256": "b3dbb68a4ec02a9af3d0e5069914ab4dc2d2edc5906e344bbb989bd06ed1e93b"
+  },
+  "mark-black": {
+    "width": 384,
+    "height": 384,
+    "bytes": 4489,
+    "sha256": "ae53b9d38fecaa22616a442877aa7630c5b115bf3787a7277036c0dd03e69cb4"
+  },
+  "mark-white": {
+    "width": 384,
+    "height": 384,
+    "bytes": 3700,
+    "sha256": "d0b870eab2ca9212e205fa7e6d5f8b1024027dda05ed7f839b791d901a71625b"
+  },
+  "leaf": {
+    "width": 384,
+    "height": 597,
+    "bytes": 10973,
+    "sha256": "1c409fb9e458390f357bd89ca3c69764ce38634535d2031253389d52a331deb0"
+  },
+  "wordmark-primary": {
+    "width": 1200,
+    "height": 280,
+    "bytes": 24346,
+    "sha256": "1dcbab9436ab9ca3c1ef1753d4c3b46fab0162eacdab937ac3147a4f4006804e"
+  },
+  "wordmark-dark": {
+    "width": 1200,
+    "height": 280,
+    "bytes": 20349,
+    "sha256": "12c0cfb423f428346659ef397b992a417cdfbde3364829702e9567377e933756"
+  },
+  "wordmark-black": {
+    "width": 1200,
+    "height": 280,
+    "bytes": 23744,
+    "sha256": "66fab43305974b810153b66869850f41a14eb50fff79003db698d271dc9ac44d"
+  },
+  "wordmark-white": {
+    "width": 1200,
+    "height": 280,
+    "bytes": 19654,
+    "sha256": "5cd503c49696ad48fc731940736897e9da4bec8d4cbb9b9be1b8c9b595cb9fa9"
+  },
+  "app-icon": {
+    "width": 1024,
+    "height": 1024,
+    "bytes": 28476,
+    "sha256": "eae7f4d1a12e20348ccc4a0ccba5e697e6074f86cf2ac8ad374a435b990f6dc9"
+  },
+  "app-icon-dark": {
+    "width": 1024,
+    "height": 1024,
+    "bytes": 18690,
+    "sha256": "b1261cd6cd7f7e1dc6580af2e2c30b4c51ca66a09171a99b7c8e5744c1e514a6"
+  },
+  "android-foreground": {
+    "width": 1024,
+    "height": 1024,
+    "bytes": 12996,
+    "sha256": "4d52bbdccca785e0e7d91513a155333adb1c157d77a1a114c99a733fcb1a9537"
+  },
+  "android-monochrome": {
+    "width": 1024,
+    "height": 1024,
+    "bytes": 9899,
+    "sha256": "ce6e850498b28c3ea8f6d820c4739ddd52ff92d3ca237f5b8fb4ed605a6602b5"
+  },
+  "notification": {
+    "width": 96,
+    "height": 96,
+    "bytes": 777,
+    "sha256": "2c40ac6fa1cef26dd1835840a56ee3ea0ee33f3f9bd45d30acae6eaf5bf2771c"
+  }
+}

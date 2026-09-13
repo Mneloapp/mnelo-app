@@ -4,6 +4,7 @@ import {
   savedPhoneNames,
   ensurePhonebookAccess,
   addPhoneContact,
+  searchPhonebook,
 } from '@/messenger/phonebook.native';
 import { Contact, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
 import { Linking } from 'react-native';
@@ -172,4 +173,43 @@ test('denied access and a native save failure never report a successful phone sa
   jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
   jest.mocked(Contact.create).mockRejectedValueOnce(new Error('Device save failed'));
   await expect(addPhoneContact('+995555010101', 'Name')).rejects.toThrow('Device save failed');
+});
+
+test('call search matches local names and complete normalized phones without requesting extra access', async () => {
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValue({ granted: false, accessPrivileges: 'limited' } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([
+    { fullName: 'მეგობარი', phones: [{ number: '555 01 01 01' }, { number: '+995555010101' }] },
+    { fullName: 'My own number', phones: [{ number: '+995555010104' }] },
+    { fullName: 'Someone else', phones: [{ number: '+12025550101' }] },
+  ] as never);
+  expect(await searchPhonebook('მეგო', '+995555010104')).toEqual([
+    { name: 'მეგობარი', phone: '+995555010101' },
+  ]);
+  expect(await searchPhonebook('+995 555 01 01 01', '+995555010104')).toEqual([
+    { name: 'მეგობარი', phone: '+995555010101' },
+  ]);
+  expect(requestPermissionsAsync).not.toHaveBeenCalled();
+  expect(Contact.presentAccessPicker).not.toHaveBeenCalled();
+});
+test('call search stops on permission revocation or cancellation and caps matches', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue(
+    Array.from({ length: 20 }, (_, i) => ({
+      fullName: 'Friend ' + i,
+      phones: [{ number: '+1202555' + String(1000 + i) }],
+    })) as never,
+  );
+  expect(await searchPhonebook('Friend')).toHaveLength(8);
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValueOnce({ granted: true } as never)
+    .mockResolvedValueOnce({ granted: false } as never);
+  expect(await searchPhonebook('Friend')).toEqual([]);
+  const controller = new AbortController();
+  controller.abort();
+  jest.mocked(Contact.getAllDetails).mockClear();
+  expect(await searchPhonebook('Friend', undefined, controller.signal)).toEqual([]);
+  expect(Contact.getAllDetails).not.toHaveBeenCalled();
 });

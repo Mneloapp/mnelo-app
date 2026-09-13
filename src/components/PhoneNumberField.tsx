@@ -14,12 +14,14 @@ export function PhoneNumberField({
   onChange,
   disabled = false,
   minimal = false,
+  dialpad = false,
   showSoftInputOnFocus = true,
 }: {
   value: PhoneEntry;
   onChange: (value: PhoneEntry) => void;
   disabled?: boolean;
   minimal?: boolean;
+  dialpad?: boolean;
   showSoftInputOnFocus?: boolean;
 }) {
   const { t, i18n } = useTranslation();
@@ -29,7 +31,13 @@ export function PhoneNumberField({
   return (
     <View style={styles.field}>
       {!minimal && <AppText variant="label">{t('phone.nationalInput')}</AppText>}
-      <View style={[styles.control, focused && (Platform.OS === 'web' ? ui.focus : ui.inputFocus)]}>
+      <View
+        style={[
+          styles.control,
+          dialpad && styles.dialpad,
+          focused && (Platform.OS === 'web' ? ui.focus : ui.inputFocus),
+        ]}
+      >
         <CountryPicker
           inline
           value={value.country}
@@ -75,6 +83,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.controlBorder,
     borderRadius: theme.radii.md,
   },
+  dialpad: { borderWidth: 0, backgroundColor: 'transparent' },
   divider: {
     width: theme.controls.borderWidth,
     alignSelf: 'stretch',

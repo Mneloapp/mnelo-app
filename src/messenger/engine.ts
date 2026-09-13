@@ -28,7 +28,7 @@ import {
 } from './local-profile';
 import { readCallRecord, type CallDirection, type CallOutcome } from './call-record';
 import type { DeliveryAtomic } from './delivery/journal';
-import { readSharedContent, type ContentTab } from './shared-content';
+import { readPhotoPage, readSharedContent, type ContentTab } from './shared-content';
 
 export type ChatFilter = 'all' | 'unread' | 'direct' | 'group';
 export type ChatCursor = { activity: number; id: string };
@@ -853,6 +853,10 @@ export class DeviceMessenger {
   async sharedContent(chat: string, tab: ContentTab, before = Number.MAX_SAFE_INTEGER) {
     await this.tail;
     return readSharedContent(this.db, chat, tab, before);
+  }
+  async photoPage(chat: string, cursor: number, direction: 'before' | 'after') {
+    await this.tail;
+    return readPhotoPage(this.db, chat, cursor, direction);
   }
   async reactions(id: string) {
     await this.tail;

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { AppState, Keyboard, View } from 'react-native';
+import { AppState, Keyboard, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { theme } from '@/theme/tokens';
@@ -10,7 +10,7 @@ import { PhoneNumberField } from '@/components/PhoneNumberField';
 import { normalizePhoneEntry, phoneEntryFromNumber, updatePhoneEntry } from '../phone-entry';
 import { usePhoneService, usePhoneAction } from './phone-shared';
 import { CallActions, type CallTarget } from './CallActions';
-import { NumberKeypad } from './NumberKeypad';
+import { NumberKeypad, KeypadCallButton } from './NumberKeypad';
 import { useComposer } from './composer-navigation';
 import { addPhoneContact, savedPhoneName } from '../phonebook';
 import { observePhonebook } from '../phonebook-events';
@@ -32,6 +32,7 @@ export function FindPhoneScreen({
   embedded?: boolean;
 }) {
   const { t } = useTranslation();
+  const { height, fontScale } = useWindowDimensions();
   const { engine, identity, calls, mesh, enrollment } = useDevice();
   const { client, status } = usePhoneService();
   const action = usePhoneAction();
@@ -204,6 +205,17 @@ export function FindPhoneScreen({
         : nativeHeader
           ? { nativeHeader: true }
           : { title: t(dialing ? 'phone.dial' : 'phone.search'), back: true })}
+      {...(!embedded && keypad && !found
+        ? {
+            scroll: height < 650 || fontScale >= 1.3,
+            contentStyle: {
+              flex: 1,
+              justifyContent: 'flex-end' as const,
+              paddingBottom: theme.spacing.xl,
+              gap: theme.spacing.lg,
+            },
+          }
+        : {})}
     >
       <PhonebookAccess />
       {!embedded && !keypad && (
@@ -214,6 +226,7 @@ export function FindPhoneScreen({
           value={phone}
           disabled={action.busy}
           minimal
+          dialpad={keypad}
           showSoftInputOnFocus={!keypad}
           onChange={(value) => {
             setPhone(value);
@@ -236,7 +249,10 @@ export function FindPhoneScreen({
           disabled={action.busy}
         />
       )}
-      {!embedded && (dialing || ready) && !(keypad && found) && (
+      {keypad && !found && (
+        <KeypadCallButton disabled={!normalized || !ready} busy={action.busy} onPress={lookup} />
+      )}
+      {!embedded && !keypad && (dialing || ready) && (
         <Button
           label={t(keypad ? 'messenger.callVoice' : dialing ? 'phone.findToCall' : 'phone.find')}
           disabled={!normalized || !ready}

@@ -1,9 +1,20 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import jpeg from 'jpeg-js';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
 import { EditProfileScreen } from '@/messenger/screens/LocalProfileScreen';
 import { ProfileFieldEditor, ProfileFieldScreen } from '@/messenger/screens/ProfileFieldScreen';
 import { MeScreen } from '@/messenger/screens/MeScreen';
 import { localProfile } from '@/messenger/local-profile';
+let mockDismiss: (() => void) | undefined;
+jest.mock('@/components/ActionSheet', () => {
+  const { ActionSheet: Actual } = jest.requireActual('@/components/ActionSheet');
+  return {
+    ActionSheet: (props: import('react').ComponentProps<typeof Actual>) => {
+      mockDismiss = props.onDismiss;
+      return <Actual {...props} />;
+    },
+  };
+});
 
 const initialProfile = () =>
   localProfile.parse({
@@ -122,6 +133,8 @@ test('photo menu dismisses outside and cancelling the picker keeps the current p
   expect(screen.queryByRole('button', { name: 'Add photo' })).toBeNull();
   await fireEvent.press(screen.getByRole('button', { name: 'Edit photo' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Add photo' }));
+  expect(mockPickPhoto).not.toHaveBeenCalled();
+  await act(async () => mockDismiss?.());
   await waitFor(() => expect(mockPickPhoto).toHaveBeenCalledTimes(1));
   expect(mockSave).not.toHaveBeenCalled();
 });
@@ -135,3 +148,33 @@ test.each(['avatar', ['name'], '__proto__'])(
     expect(mockSave).not.toHaveBeenCalled();
   },
 );
+
+test('removing a profile photo then choosing a new one waits for dismissal and can retry after picker failure', async () => {
+  mockProfile = {
+    ...mockProfile,
+    avatar: Buffer.from(
+      jpeg.encode({ width: 4, height: 4, data: Buffer.alloc(64, 255) }, 60).data,
+    ).toString('base64'),
+  };
+  const page = await render(<EditProfileScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit photo' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Remove photo' }));
+  await waitFor(() => expect(mockSave).toHaveBeenCalledWith({ ...mockProfile, avatar: '' }));
+  mockProfile = { ...mockProfile, avatar: '' };
+  await page.rerender(<EditProfileScreen />);
+  mockPickPhoto.mockRejectedValueOnce(new Error('picker failed'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit photo' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add photo' }));
+  expect(mockPickPhoto).not.toHaveBeenCalled();
+  await act(async () => mockDismiss?.());
+  await waitFor(() => expect(screen.getByRole('alert')).toBeOnTheScreen());
+  mockPickPhoto.mockResolvedValueOnce('new-photo');
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit photo' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add photo' }));
+  await act(async () => mockDismiss?.());
+  await waitFor(() =>
+    expect(mockSave).toHaveBeenLastCalledWith({ ...mockProfile, avatar: 'new-photo' }),
+  );
+  await act(async () => mockDismiss?.());
+  expect(mockPickPhoto).toHaveBeenCalledTimes(2);
+});

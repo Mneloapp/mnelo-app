@@ -74,6 +74,13 @@ function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: 
   if (message.kind === 'image' && ['image/jpeg', 'image/png'].includes(q.data.mime))
     return (
       <ChatPhoto
+        source={{
+          id: message.id,
+          chatId: message.chatId,
+          sequence: message.sequence,
+          sentAt: message.sentAt,
+          attachment: message.attachment!,
+        }}
         onLongPress={onSelect}
         name={q.data.name}
         uri={`data:${q.data.mime};base64,${q.data.bytes}`}
@@ -126,9 +133,10 @@ function Bubble({
   });
   const own = message.sender === identity?.key;
   return (
-    <MessageTimeReveal sentAt={message.sentAt} onReply={onReply}>
+    <MessageTimeReveal onReply={onReply}>
       <MessageBubble
         own={own}
+        sentAt={message.sentAt}
         status={message.status}
         media={Boolean(message.attachment)}
         reactions={reaction.data ?? []}
@@ -389,12 +397,13 @@ export function ChatScreen() {
           {text.trim() ? (
             <IconButton
               icon="send"
+              variant="accent"
               label={t('common.send')}
               busy={action.busy}
               onPress={() =>
                 void action.run(async () => {
                   await engine.send(id, text, reply ? { replyTo: reply } : {});
-                  setText('');
+                  setText((draft) => (draft === text ? '' : draft));
                   setReply(undefined);
                 })
               }
@@ -575,10 +584,10 @@ const styles = StyleSheet.create({
   chatContent: { paddingHorizontal: theme.spacing.md, gap: theme.spacing.sm },
   headerButtons: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceSoft,
+    gap: theme.spacing.xs,
     borderRadius: theme.radii.pill,
   },
   attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  messageBody: { minHeight: theme.spacing.xl, paddingVertical: theme.spacing.xs },
+  messageBody: { minHeight: theme.spacing.xl },
   empty: { transform: [{ scaleY: -1 }] },
 });

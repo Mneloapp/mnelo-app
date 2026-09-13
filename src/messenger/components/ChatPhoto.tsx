@@ -16,6 +16,8 @@ import { AppIcon } from '@/components/AppIcon';
 import { IconButton, ui } from '@/components/ui';
 import { theme } from '@/theme/tokens';
 import { ScreenAppearance } from '@/theme/appearance';
+import { PhotoGallery } from './PhotoGallery';
+import type { PhotoSource } from '../shared-content';
 
 export function ChatPhoto({
   uri,
@@ -25,6 +27,7 @@ export function ChatPhoto({
   busy,
   error,
   square = false,
+  source,
 }: {
   uri: string;
   name: string;
@@ -33,6 +36,7 @@ export function ChatPhoto({
   busy: boolean;
   error: string | null;
   square?: boolean;
+  source?: PhotoSource;
 }) {
   const [open, setOpen] = useState(false);
   const [ratio, setRatio] = useState(1);
@@ -58,15 +62,18 @@ export function ChatPhoto({
           style={[styles.thumbnail, { aspectRatio: square ? 1 : ratio }, square && styles.square]}
         />
       </Pressable>
+      {open && source && (
+        <PhotoGallery source={source} name={name} onClose={() => setOpen(false)} />
+      )}
       <Modal
-        visible={open}
+        visible={open && !source}
         animationType="fade"
         presentationStyle="fullScreen"
         onRequestClose={() => setOpen(false)}
       >
         <SafeAreaProvider>
           <ScreenAppearance.Provider value="call">
-            {open && <StatusBar style="light" />}
+            {open && !source && <StatusBar style="light" />}
             <SafeAreaView
               style={styles.viewer}
               accessibilityViewIsModal

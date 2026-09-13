@@ -1,5 +1,14 @@
-import { useEffect, useState, type PropsWithChildren } from 'react';
-import { Animated, Easing, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import {
+  Animated,
+  Easing,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -11,17 +20,26 @@ export function ActionSheet({
   visible,
   title,
   onClose,
+  onDismiss,
   compact = false,
   children,
 }: PropsWithChildren<{
   visible: boolean;
   title: string;
   onClose: () => void;
+  onDismiss?: () => void;
   compact?: boolean;
 }>) {
   const reduced = useReducedMotion();
   const { t } = useTranslation();
   const [entrance] = useState(() => new Animated.Value(0));
+  const wasVisible = useRef(visible);
+  useEffect(() => {
+    // iOS must finish removing its presented controller before another native picker opens.
+    // Android/web remove this non-animated modal with the visibility commit.
+    if (wasVisible.current && !visible && Platform.OS !== 'ios') onDismiss?.();
+    wasVisible.current = visible;
+  }, [visible, onDismiss]);
   useEffect(() => {
     if (!visible) {
       entrance.setValue(0);
@@ -48,6 +66,7 @@ export function ActionSheet({
       animationType="none"
       accessibilityLabel={title}
       onRequestClose={onClose}
+      onDismiss={onDismiss}
     >
       <SafeAreaProvider>
         <SafeAreaView style={styles.modal} accessibilityViewIsModal onAccessibilityEscape={onClose}>

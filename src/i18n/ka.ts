@@ -8,7 +8,27 @@ type TranslationShape<T> = {
 };
 // Complete Georgian product copy. User-authored content and canonical server data are not rewritten.
 export const ka = {
+  incomingShare: {
+    title: 'გაზიარება Mnelo-თი',
+    choose: 'აირჩიე საუბარი, გადაამოწმე მასალა და გაგზავნე.',
+    search: 'საუბრის ძებნა',
+    empty: 'საუბარი ვერ მოიძებნა. ჯერ გახსენი ჩატი Mnelo-ში.',
+    to: 'მიმღები: {{name}}',
+    invalid:
+      'გააზიარე მაქსიმუმ 10 ელემენტი. თითო ფაილი უნდა იყოს ამ ტელეფონზე და 10 მბ-ზე ნაკლები; ტექსტი — მაქსიმუმ 8 000 სიმბოლო.',
+    failed: 'გაიგზავნა {{sent}} / {{total}}. დარჩენილების გასაგზავნად სცადე ხელახლა.',
+  },
+  callSearch: {
+    open: 'კონტაქტების ძებნა დასარეკად',
+    placeholder: 'სახელი ან ტელეფონის ნომერი',
+    empty: 'Mnelo-ს კონტაქტი ვერ მოიძებნა. ჩაწერე უფრო ზუსტი სახელი ან ნომერი.',
+  },
   library: {
+    photoUnavailable: 'ეს ფოტო ამ მოწყობილობაზე მიუწვდომელია.',
+    selectPhoto: 'ფოტოს ნახვა: {{name}}',
+    photoLoadMore: 'სხვა ფოტოები ვერ ჩაიტვირთა. ხელახლა სცადე.',
+    previousPhoto: 'წინა ფოტო',
+    nextPhoto: 'შემდეგი ფოტო',
     title: 'მედია, ბმულები და ფაილები',
     media: 'მედია',
     links: 'ბმულები',

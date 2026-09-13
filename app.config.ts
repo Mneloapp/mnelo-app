@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '19',
+    buildNumber: '20',
     supportsTablet: false,
     associatedDomains: ['applinks:mnelo.com', 'applinks:www.mnelo.com'],
     infoPlist: { UIBackgroundModes: ['audio', 'voip', 'remote-notification'] },
@@ -140,7 +140,26 @@ const config: ExpoConfig = {
     ],
     'expo-asset',
     'expo-font',
-    'expo-sharing',
+    './plugins/with-incoming-share.cjs',
+    [
+      'expo-sharing',
+      {
+        ios: {
+          enabled: true,
+          extensionBundleIdentifier: 'com.mnelo.messenger.share',
+          appGroupId: 'group.com.mnelo.messenger.sharing',
+          activationRule: {
+            supportsText: true,
+            supportsWebUrlWithMaxCount: 1,
+            supportsImageWithMaxCount: 10,
+            supportsFileWithMaxCount: 10,
+            supportsMovieWithMaxCount: 10,
+            supportsAttachmentsWithMaxCount: 10,
+          },
+        },
+        android: { enabled: true, singleShareMimeTypes: ['*/*'], multipleShareMimeTypes: ['*/*'] },
+      },
+    ],
     'expo-router',
     ['expo-dev-client', { launchMode: 'most-recent' }],
     [

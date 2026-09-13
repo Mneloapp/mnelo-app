@@ -245,6 +245,7 @@ export function IconButton({
   busy?: boolean;
   variant?: 'plain' | 'accent' | 'soft';
 }) {
+  const dark = useCallAppearance();
   return (
     <Pressable
       accessibilityRole="button"
@@ -254,13 +255,18 @@ export function IconButton({
       accessibilityState={{ disabled: disabled || busy, busy }}
       style={({ pressed }) => [
         ui.icon,
-        variant !== 'plain' && ui.iconSurface,
+        ui.iconSurface,
+        dark && ui.callSurface,
         variant === 'accent' && ui.accent,
         (disabled || busy) && ui.disabled,
         pressed && ui.pressed,
       ]}
     >
-      {busy ? <ActivityIndicator color={t.colors.black} /> : <AppIcon name={icon} />}
+      {busy ? (
+        <ActivityIndicator color={dark ? t.colors.callText : t.colors.black} />
+      ) : (
+        <AppIcon name={icon} size={26} />
+      )}
     </Pressable>
   );
 }
@@ -606,12 +612,17 @@ export const ui = StyleSheet.create({
   primaryPressed: { backgroundColor: t.colors.blackPressed },
   accentPressed: { backgroundColor: t.colors.accentPressed },
   icon: {
-    minWidth: t.controls.minTapTarget,
-    minHeight: t.controls.minTapTarget,
+    minWidth: t.controls.minTapTarget + t.spacing.xs,
+    minHeight: t.controls.minTapTarget + t.spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconSurface: { backgroundColor: t.colors.surfaceSoft, borderRadius: t.radii.pill },
+  iconSurface: {
+    backgroundColor: t.colors.surface,
+    borderRadius: t.radii.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: t.colors.border,
+  },
   field: { gap: t.spacing.sm },
   input: {
     ...inputTextStyle,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,23 @@ export function EditProfileScreen() {
   const action = useLocalAction();
   const [photoMenu, setPhotoMenu] = useState(false);
   const [photoError, setPhotoError] = useState(false);
+  const pickAfterDismiss = useRef(false);
+  function photoMenuDismissed() {
+    if (!pickAfterDismiss.current) return;
+    pickAfterDismiss.current = false;
+    void action.run(async () => {
+      setPhotoError(false);
+      let avatar: string | null;
+      try {
+        avatar = await pickProfilePhoto();
+      } catch {
+        setPhotoError(true);
+        return;
+      }
+      if (avatar)
+        await engine.saveProfile({ ...localProfile.parse(engine.currentProfile()), avatar });
+    });
+  }
   const edit = (field: ProfileField) =>
     router.push({ pathname: '/edit-profile-field', params: { field } });
   return (
@@ -79,28 +96,19 @@ export function EditProfileScreen() {
       </ProfileGroup>
       {photoError ? <AppText accessibilityRole="alert">{t('card.photoError')}</AppText> : null}
       {action.error ? <AppText accessibilityRole="alert">{action.error}</AppText> : null}
-      <ActionSheet visible={photoMenu} title={t('card.photo')} onClose={() => setPhotoMenu(false)}>
+      <ActionSheet
+        visible={photoMenu}
+        title={t('card.photo')}
+        onClose={() => setPhotoMenu(false)}
+        onDismiss={photoMenuDismissed}
+      >
         <SheetAction
           icon="image"
           label={t(profile.avatar ? 'card.changePhoto' : 'card.addPhoto')}
           disabled={action.busy}
           onPress={() => {
+            pickAfterDismiss.current = true;
             setPhotoMenu(false);
-            void action.run(async () => {
-              setPhotoError(false);
-              let avatar: string | null;
-              try {
-                avatar = await pickProfilePhoto();
-              } catch {
-                setPhotoError(true);
-                return;
-              }
-              if (avatar)
-                await engine.saveProfile({
-                  ...localProfile.parse(engine.currentProfile()),
-                  avatar,
-                });
-            });
           }}
         />
         {profile.avatar ? (

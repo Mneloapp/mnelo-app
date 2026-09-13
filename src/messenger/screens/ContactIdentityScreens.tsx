@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Share, View } from 'react-native';
+import { Share, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useTranslation } from 'react-i18next';
@@ -11,9 +11,10 @@ import { Check, useLocalAction } from './shared';
 import { useComposer } from './composer-navigation';
 import { ContactQR } from '../components/ContactQR';
 import { cardStyles } from '../components/ContactCard';
-import { SheetAction } from '@/components/SheetAction';
-import { ContactHero, InfoGroup } from '../components/ContactInfo';
-import { avatarUri } from '../profile-avatar';
+import { FocusPressable as Pressable } from '@/components/FocusPressable';
+import { AppIcon, type IconName } from '@/components/AppIcon';
+import { ActionSheet } from '@/components/ActionSheet';
+import { theme } from '@/theme/tokens';
 import { contactLink } from '../contact-link';
 
 export function ContactCodeScreen() {
@@ -74,28 +75,53 @@ export function ContactCodeScreen() {
   );
 }
 export function MyCodeScreen() {
-  const { identity, profile } = useDevice();
+  const { identity } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const [copied, setCopied] = useState(false);
   const [details, setDetails] = useState(false);
+  const { height, fontScale } = useWindowDimensions();
+  const accessibleScroll = fontScale > 1.3 || height < 600;
+  const [cardHeight, setCardHeight] = useState(360);
   return (
-    <Page nativeHeader>
+    <Page nativeHeader scroll={accessibleScroll} contentStyle={styles.page}>
       {identity && (
         <>
-          <ContactHero
-            name={identity.name}
-            uri={avatarUri(profile.avatar)}
-            subtitle={profile.username ? '@' + profile.username : undefined}
-          />
-          <View style={cardStyles.card}>
-            <ContactQR value={contactLink(identity)} label={t('card.qr')} />
-            <AppText centered variant="caption" tone="secondary">
-              {t('card.qrHint')}
-            </AppText>
+          <View
+            style={[
+              cardStyles.card,
+              {
+                flex: accessibleScroll ? undefined : 1,
+                maxHeight: accessibleScroll ? undefined : 380,
+                padding: theme.spacing.xl,
+                alignItems: 'center',
+                justifyContent: 'center',
+              },
+            ]}
+            onLayout={({ nativeEvent }) => setCardHeight(nativeEvent.layout.height)}
+          >
+            <ContactQR
+              value={contactLink(identity)}
+              label={t('card.qr')}
+              maxSize={accessibleScroll ? 220 : Math.max(120, cardHeight - 48)}
+            />
           </View>
-          <InfoGroup>
-            <SheetAction
+          <AppText centered tone="secondary">
+            {t('card.qrHint')}
+          </AppText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('card.scan')}
+            onPress={() => router.push('/scan-contact')}
+            style={({ pressed }) => [styles.scan, pressed && styles.pressed]}
+          >
+            <AppIcon name="maximize" />
+            <AppText centered variant="button">
+              {t('card.scan')}
+            </AppText>
+          </Pressable>
+          <View style={styles.actions}>
+            <CodeAction
               icon="share"
               disabled={action.busy}
               label={t('card.share')}
@@ -107,7 +133,7 @@ export function MyCodeScreen() {
                 })
               }
             />
-            <SheetAction
+            <CodeAction
               icon={copied ? 'check' : 'link'}
               disabled={action.busy}
               label={copied ? t('card.copied') : t('card.copy')}
@@ -118,33 +144,99 @@ export function MyCodeScreen() {
                 })
               }
             />
-            <SheetAction
-              icon="maximize"
-              disabled={action.busy}
-              label={t('card.scan')}
-              onPress={() => router.push('/scan-contact')}
-            />
-          </InfoGroup>
-          <AppText variant="caption" tone="secondary">
-            {t('card.privateHint')}
-          </AppText>
-          <InfoGroup>
-            <SheetAction
-              icon="shield"
-              label={t('card.key')}
-              onPress={() => setDetails((value) => !value)}
-            />
-            {details && (
-              <Section title={t('card.key')}>
-                <AppText selectable variant="caption">
-                  {'mnelo1:' + identity.key}
-                </AppText>
-              </Section>
-            )}
-          </InfoGroup>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setDetails(true)}
+            style={({ pressed }) => [styles.details, pressed && styles.pressed]}
+          >
+            <AppText centered variant="caption" tone="secondary">
+              {t('card.key')}
+            </AppText>
+          </Pressable>
+          <ActionSheet
+            visible={details}
+            title={t('card.key')}
+            onClose={() => setDetails(false)}
+            compact
+          >
+            <AppText variant="caption" tone="secondary">
+              {t('card.privateHint')}
+            </AppText>
+            <Section title={t('card.key')}>
+              <AppText selectable variant="caption">
+                {'mnelo1:' + identity.key}
+              </AppText>
+            </Section>
+          </ActionSheet>
           {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
         </>
       )}
     </Page>
   );
 }
+
+function CodeAction({
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  icon: IconName;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.action, (pressed || disabled) && styles.pressed]}
+    >
+      <View style={styles.actionIcon}>
+        <AppIcon name={icon} size={26} />
+      </View>
+      <AppText centered variant="label">
+        {label}
+      </AppText>
+    </Pressable>
+  );
+}
+const styles = StyleSheet.create({
+  page: { flex: 1, gap: theme.spacing.lg, padding: theme.spacing.xl, justifyContent: 'center' },
+  scan: {
+    minHeight: 56,
+    padding: theme.spacing.md,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radii.pill,
+  },
+  actions: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: theme.spacing.lg,
+  },
+  action: { flex: 1, alignItems: 'center', gap: theme.spacing.sm, padding: theme.spacing.xs },
+  actionIcon: {
+    width: 52,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.pill,
+  },
+  details: {
+    minHeight: theme.controls.minTapTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: theme.opacity.pressed },
+});

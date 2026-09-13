@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
-import { readSharedContent, messageLinks } from '../../src/messenger/shared-content';
+import { readSharedContent, readPhotoPage, messageLinks } from '../../src/messenger/shared-content';
 import { localSchema, type LocalDatabase, type SQLValue } from '../../src/messenger/model';
 
 test('shared content is conversation-scoped, paginates older media, classifies by MIME and never loads bytes', async () => {
@@ -49,6 +49,18 @@ test('shared content is conversation-scoped, paginates older media, classifies b
     (await readSharedContent(db, 'one', 'links', Number.MAX_SAFE_INTEGER)).items.length,
     2,
   );
+  const before = await readPhotoPage(db, 'one', Number.MAX_SAFE_INTEGER, 'before');
+  assert.equal(before.items.length, 40);
+  assert.equal(before.items[0]?.id, 'photo42');
+  const earlier = await readPhotoPage(db, 'one', before.next!, 'before');
+  assert.equal(earlier.items.length, 3);
+  const after = await readPhotoPage(db, 'one', earlier.items[0]!.sequence, 'after');
+  assert.equal(after.items.length, 40);
+  assert.equal(after.items[0]?.id, 'photo3');
+  assert.ok(!JSON.stringify(after).includes('PRIVATE_BYTES'));
+  assert.ok(!after.items.some((item) => ['video', 'pdf', 'otherPhoto'].includes(item.id)));
+  await assert.rejects(readPhotoPage(db, 'one', NaN, 'before'));
+  await assert.rejects(readPhotoPage(db, 'one', 1, 'invalid' as 'after'));
   // Invalid link candidates must not hide an older valid link behind an empty page.
   for (let i = 0; i < 40; i++) add('invalid' + i, 'one', 'text', 'https://');
   const invalid = await readSharedContent(db, 'one', 'links', Number.MAX_SAFE_INTEGER);

@@ -16,7 +16,7 @@ import { ChatPhoto } from '../components/ChatPhoto';
 import type { ContentTab, SharedItem } from '../shared-content';
 import { useLocalAction } from './shared';
 
-function SharedFile({ item, grid }: { item: SharedItem; grid: boolean }) {
+function SharedFile({ item, grid, chatId }: { item: SharedItem; grid: boolean; chatId: string }) {
   const { engine } = useDevice();
   const { t, i18n } = useTranslation();
   const action = useLocalAction();
@@ -53,6 +53,13 @@ function SharedFile({ item, grid }: { item: SharedItem; grid: boolean }) {
     <View style={grid ? styles.gridItem : styles.document}>
       {isImage && photo.data ? (
         <ChatPhoto
+          source={{
+            id: item.id,
+            chatId,
+            sequence: item.sequence,
+            sentAt: item.sentAt,
+            attachment: item.attachment!,
+          }}
           name={item.name ?? t('library.media')}
           uri={`data:${photo.data.mime};base64,${photo.data.bytes}`}
           square
@@ -178,7 +185,7 @@ export function SharedContentScreen() {
             </FocusPressable>
           ) : (
             <View style={tab === 'media' ? { width: `${100 / columns}%` } : undefined}>
-              <SharedFile item={item} grid={tab === 'media'} />
+              <SharedFile item={item} chatId={id} grid={tab === 'media'} />
             </View>
           )
         }

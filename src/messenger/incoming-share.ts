@@ -1,0 +1,130 @@
+import type { SharePayload } from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import { Image, Platform } from 'react-native';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { discardCachedMedia } from '@/features/chats/media-files';
+import type { Media } from './model';
+
+export const shareGroup = 'group.com.mnelo.messenger.sharing';
+export const shareLimit = 10 * 1024 * 1024;
+export type IncomingItem = {
+  id: string;
+  label: string;
+  text?: string;
+  uri?: string;
+  mime: string;
+  image: boolean;
+};
+
+function inside(uri: string, root: string) {
+  try {
+    const path = decodeURIComponent(new URL(uri).pathname);
+    const base = decodeURIComponent(new URL(root).pathname).replace(/\/?$/, '/');
+    return uri.startsWith('file://') && path.startsWith(base) && !path.split('/').includes('..');
+  } catch {
+    return false;
+  }
+}
+export function ownedShareFile(uri: string) {
+  const group = Paths.appleSharedContainers?.[shareGroup];
+  return (
+    inside(uri, Paths.cache.uri) ||
+    Boolean(group && inside(uri, group.uri.replace(/\/?$/, '/') + 'MneloIncoming/'))
+  );
+}
+
+// Treat a Maps/Safari URL as text. Receiving a share never fetches URLs or follows redirects.
+export function incomingItems(payloads: readonly SharePayload[]): IncomingItem[] {
+  if (payloads.length > 10) throw new Error('SHARE_TOO_MANY');
+  return payloads.map((payload, index) => {
+    const id = String(index);
+    if (payload.shareType === 'text' || payload.shareType === 'url') {
+      const text = payload.value.trim();
+      if (!text || text.length > 8000) throw new Error('SHARE_INVALID');
+      if (payload.shareType === 'url') {
+        const url = new URL(text);
+        if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
+          throw new Error('SHARE_INVALID');
+      }
+      return { id, label: text, text, mime: 'text/plain', image: false };
+    }
+    if (
+      !['image', 'file', 'video', 'audio'].includes(payload.shareType) ||
+      !(
+        ownedShareFile(payload.value) ||
+        (Platform.OS === 'android' && payload.value.startsWith('content://'))
+      )
+    )
+      throw new Error('SHARE_INVALID');
+    const file = new File(payload.value);
+    if (!file.exists || !file.size || file.size > shareLimit) throw new Error('SHARE_FILE_SIZE');
+    const mime =
+      payload.mimeType && /^[\w.+-]+\/[\w.+-]+$/.test(payload.mimeType)
+        ? payload.mimeType
+        : 'application/octet-stream';
+    const label =
+      decodeURIComponent(payload.value.split('/').at(-1) ?? 'file')
+        .replace(/[\x00-\x1f\x7f/\\]/g, '_')
+        .slice(-160) || 'file';
+    return {
+      id,
+      label,
+      uri: payload.value,
+      mime,
+      image: payload.shareType === 'image' && mime.startsWith('image/'),
+    };
+  });
+}
+
+export async function prepareIncoming(
+  item: IncomingItem,
+): Promise<{ body: string; kind: 'image' | 'file' | 'text'; media?: Media }> {
+  if (item.text) return { body: item.text, kind: 'text' };
+  if (!item.uri) throw new Error('SHARE_INVALID');
+  let uri = item.uri;
+  let mime = item.mime;
+  let name = item.label;
+  if (item.image) {
+    const { width, height } = await Image.getSize(uri);
+    const context = ImageManipulator.manipulate(uri);
+    try {
+      context.resize(
+        width >= height ? { width: Math.min(1600, width) } : { height: Math.min(1600, height) },
+      );
+      const rendered = await context.renderAsync();
+      try {
+        uri = (await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 })).uri;
+      } finally {
+        rendered.release();
+      }
+    } finally {
+      context.release();
+    }
+    mime = 'image/jpeg';
+    name = item.label.replace(/\.[^.]+$/, '') + '.jpg';
+  }
+  try {
+    const file = new File(uri);
+    if (!file.size || file.size > shareLimit) throw new Error('SHARE_FILE_SIZE');
+    return {
+      body: '',
+      kind: item.image ? 'image' : 'file',
+      media: { name, mime, bytes: await file.base64(), duration: null },
+    };
+  } finally {
+    if (uri !== item.uri) discardCachedMedia(uri);
+  }
+}
+
+export function discardIncoming(payloads: readonly SharePayload[]) {
+  for (const item of payloads) {
+    if (item.shareType === 'url' || item.shareType === 'text' || !ownedShareFile(item.value))
+      continue;
+    try {
+      const file = new File(item.value);
+      if (file.exists) file.delete();
+    } catch {
+      /* Retry expiry cleanup on next share. */
+    }
+  }
+}

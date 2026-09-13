@@ -13,6 +13,34 @@ export type SharedItem = {
   url?: string;
 };
 export type SharedPage = { items: SharedItem[]; next: number | undefined };
+export type PhotoSource = {
+  id: string;
+  chatId: string;
+  sequence: number;
+  sentAt: number;
+  attachment: string;
+};
+
+// Read a bounded metadata window in either direction from the opened photo.
+export async function readPhotoPage(
+  db: LocalDatabase,
+  chat: string,
+  cursor: number,
+  direction: 'before' | 'after',
+): Promise<SharedPage> {
+  if (!['before', 'after'].includes(direction) || !Number.isSafeInteger(cursor))
+    throw new Error('PHOTO_CURSOR_INVALID');
+  const older = direction === 'before';
+  const items = await db.all<SharedItem>(
+    `SELECT m.id,m.sequence,m.sent_at AS sentAt,m.body,m.media_id AS attachment,
+      f.name,f.mime,f.duration FROM messages m JOIN media f ON f.id=m.media_id
+      WHERE m.chat_id=? AND m.sequence${older ? '<' : '>'}? AND m.kind IN ('image','file') AND f.mime LIKE 'image/%'
+      ORDER BY m.sequence ${older ? 'DESC' : 'ASC'} LIMIT 40`,
+    chat,
+    cursor,
+  );
+  return { items, next: items.length === 40 ? items.at(-1)?.sequence : undefined };
+}
 
 // Never fetch previews or follow a link while indexing a private conversation.
 export function messageLinks(body: string): string[] {

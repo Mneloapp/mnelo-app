@@ -34,3 +34,10 @@ export async function savedPhoneNames(
 ): Promise<Map<string, string>> {
   return new Map();
 }
+export async function searchPhonebook(
+  _query: string,
+  _ownNumber?: string,
+  _signal?: AbortSignal,
+): Promise<{ phone: string; name: string }[]> {
+  return [];
+}

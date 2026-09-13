@@ -1,4 +1,4 @@
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { FocusPressable } from '@/components/FocusPressable';
 import { AppText } from '@/components/AppText';
@@ -28,13 +28,10 @@ export function NumberKeypad({
   disabled: boolean;
 }) {
   const { t } = useTranslation();
-  const { fontScale, width } = useWindowDimensions();
+  const { fontScale, width, height } = useWindowDimensions();
   const diameter = Math.max(
     theme.controls.minTapTarget,
-    Math.min(
-      theme.controls.keypadDiameter,
-      (width - theme.spacing.xl * 2 - theme.spacing.md * 2) / 3,
-    ),
+    Math.min(80, (height - 280) / 5, (width - theme.spacing.xl * 2 - theme.spacing.md * 2) / 3),
   );
   const minHeight = Math.max(
     diameter,
@@ -86,12 +83,17 @@ export function NumberKeypad({
             <AppIcon name="delete" />
           ) : (
             <>
-              <AppText latin variant="title" centered>
+              <AppText latin centered style={{ fontSize: 32, lineHeight: 38, fontWeight: '400' }}>
                 {digit}
               </AppText>
-              {letters !== '' && (
-                <AppText latin variant="micro" centered>
-                  {letters}
+              {(letters !== '' || digit === '0') && (
+                <AppText
+                  latin
+                  variant="micro"
+                  centered
+                  style={{ fontSize: 10, lineHeight: 14, letterSpacing: 2 }}
+                >
+                  {digit === '0' ? '+' : letters}
                 </AppText>
               )}
             </>
@@ -107,7 +109,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     alignSelf: 'center',
     width: '100%',
-    maxWidth: theme.layout.keypadMaxWidth,
+    maxWidth: 320,
     gap: theme.spacing.md,
     justifyContent: 'center',
   },
@@ -121,3 +123,40 @@ const styles = StyleSheet.create({
   pressed: { backgroundColor: theme.colors.accentSoft },
   disabled: { opacity: theme.opacity.disabled },
 });
+
+export function KeypadCallButton({
+  disabled,
+  busy,
+  onPress,
+}: {
+  disabled: boolean;
+  busy: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <FocusPressable
+      accessibilityRole="button"
+      accessibilityLabel={t('messenger.callVoice')}
+      accessibilityState={{ disabled: disabled || busy, busy }}
+      disabled={disabled || busy}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 72,
+        height: 72,
+        borderRadius: 36,
+        alignSelf: 'center',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.colors.accent,
+        opacity: disabled || busy ? 0.4 : pressed ? 0.7 : 1,
+      })}
+    >
+      {busy ? (
+        <ActivityIndicator color={theme.colors.black} />
+      ) : (
+        <AppIcon name="phone" size={28} color={theme.colors.black} />
+      )}
+    </FocusPressable>
+  );
+}

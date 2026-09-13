@@ -4,10 +4,18 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { qrGeometry } from '../qr-geometry';
 import { theme } from '@/theme/tokens';
 
-export function ContactQR({ value, label }: { value: string; label: string }) {
+export function ContactQR({
+  value,
+  label,
+  maxSize = theme.layout.qrSize,
+}: {
+  value: string;
+  label: string;
+  maxSize?: number;
+}) {
   const { width } = useWindowDimensions();
   const geometry = useMemo(() => qrGeometry(value), [value]);
-  const size = Math.min(theme.layout.qrSize, width - theme.spacing.xl * 4);
+  const size = Math.min(maxSize, theme.layout.qrSize, width - theme.spacing.xl * 4);
   return (
     <View
       accessible

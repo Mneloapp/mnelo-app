@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { CallsScreen, NewCallScreen } from '@/messenger/screens/CallsScreen';
 
+jest.mock('@/messenger/phone-client', () => ({ devicePhoneClient: () => null }));
 jest.mock('@/messenger/screens/FindPhoneScreen', () => ({ FindPhoneScreen: () => null }));
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
@@ -64,4 +65,20 @@ test('the contact video button starts the call directly only after an explicit t
     pathname: '/call/[id]',
     params: { id: 'direct-chat' },
   });
+});
+
+test('pulling the call list down reveals search, and cancelling restores the compact list', async () => {
+  await show(<CallsScreen />);
+  await screen.findByText('No calls yet. Start a voice or video call with a saved contact.');
+  expect(screen.queryByRole('search')).toBeNull();
+  await fireEvent(screen.getByTestId('calls-history'), 'scroll', {
+    nativeEvent: {
+      contentOffset: { x: 0, y: -45 },
+      layoutMeasurement: { width: 390, height: 600 },
+      contentSize: { width: 390, height: 700 },
+    },
+  });
+  expect(screen.getByLabelText('Name or phone number')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.queryByLabelText('Name or phone number')).toBeNull();
 });

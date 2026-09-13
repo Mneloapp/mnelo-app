@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { theme } from '@/theme/tokens';
+import { formatTime } from '@/i18n/format';
 import type { LocalMessage } from '../model';
 import { DeliveryLeaf } from './MessageMetadata';
 
@@ -10,12 +11,14 @@ import { DeliveryLeaf } from './MessageMetadata';
 export function MessageBubble({
   own,
   status,
+  sentAt,
   media,
   reactions = [],
   children,
 }: PropsWithChildren<{
   own: boolean;
   status: LocalMessage['status'];
+  sentAt?: number;
   media?: boolean;
   reactions?: readonly { emoji: string }[];
 }>) {
@@ -25,14 +28,16 @@ export function MessageBubble({
   const receipt = own && (status === 'delivered' || status === 'read');
   return (
     <View style={[styles.row, own && styles.own, media && styles.media]}>
-      <View
-        testID="message-bubble"
-        style={[styles.bubble, own && styles.outgoing, receipt && styles.withReceipt]}
-      >
-        {children}
-        {receipt && (
-          <View style={styles.receipt}>
-            <DeliveryLeaf status={status} />
+      <View testID="message-bubble" style={[styles.bubble, own && styles.outgoing]}>
+        <View style={[styles.body, media && styles.mediaBody]}>{children}</View>
+        {(sentAt !== undefined || receipt) && (
+          <View style={styles.metadata} testID="message-metadata">
+            {sentAt !== undefined && (
+              <AppText variant="caption" tone="secondary" style={styles.time}>
+                {formatTime(new Date(sentAt).toISOString())}
+              </AppText>
+            )}
+            {receipt && <DeliveryLeaf status={status} />}
           </View>
         )}
       </View>
@@ -69,10 +74,22 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSoft,
     borderRadius: theme.radii.lg,
     padding: theme.spacing.md,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'flex-end',
+    columnGap: theme.spacing.sm,
+    rowGap: theme.spacing.xs,
   },
   outgoing: { backgroundColor: theme.colors.messageOutgoing },
-  withReceipt: { paddingRight: theme.spacing.xxl },
-  receipt: { position: 'absolute', right: theme.spacing.sm, bottom: theme.spacing.sm },
+  body: { maxWidth: '100%' },
+  mediaBody: { width: '100%' },
+  metadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    marginLeft: 'auto',
+  },
+  time: { fontSize: 12, lineHeight: 16 },
   reactions: {
     flexDirection: 'row',
     flexWrap: 'wrap',

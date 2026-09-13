@@ -7,6 +7,7 @@ import { ChatPhoto } from '@/messenger/components/ChatPhoto';
 import { CallHistoryRow } from '@/messenger/components/CallHistoryRow';
 import type { LocalCall } from '@/messenger/model';
 import { theme } from '@/theme/tokens';
+jest.mock('@/messenger/components/PhotoGallery', () => ({ PhotoGallery: () => null }));
 
 test('reactions sit outside message content, group counts, and do not alter its copyable text', async () => {
   await render(

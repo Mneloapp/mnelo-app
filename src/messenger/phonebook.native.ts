@@ -134,3 +134,48 @@ async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: stri
     if (rows.length < 200 || matches.size === wanted.size) return matches;
   }
 }
+
+// Search locally first. Only the small matching page is eligible for an explicit
+// Mnelo lookup; names and the rest of the address book never leave the phone.
+export async function searchPhonebook(query: string, ownNumber?: string, signal?: AbortSignal) {
+  const needle = query.trim().normalize('NFC').toLocaleLowerCase();
+  const numeric = /^\+?[\d ()-]+$/.test(needle);
+  const digits = numeric ? needle.replace(/\D/g, '') : '';
+  const matches = new Map<string, { phone: string; name: string }>();
+  if (needle.length < 2 || !(await phonebookPermission())) return [];
+  const country = parsePhoneNumberFromString(ownNumber ?? '')?.country;
+  for (let offset = 0; ; offset += 200) {
+    if (signal?.aborted) return [];
+    const rows = await Contact.getAllDetails([ContactField.FULL_NAME, ContactField.PHONES], {
+      limit: 200,
+      offset,
+    });
+    for (const row of rows) {
+      const name =
+        row.fullName
+          ?.trim()
+          .normalize('NFC')
+          .slice(0, 60)
+          .replace(/[\uD800-\uDBFF]$/, '') ?? '';
+      const nameMatches = !numeric && name.toLocaleLowerCase().includes(needle);
+      for (const entry of row.phones ?? []) {
+        const phone =
+          entry.number &&
+          parsePhoneNumberFromString(
+            entry.number.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim(),
+            { ...(country ? { defaultCountry: country } : {}), extract: false },
+          )?.number;
+        if (
+          phone &&
+          phone !== ownNumber &&
+          (nameMatches || Boolean(digits && phone.includes(digits)))
+        )
+          matches.set(phone, { phone, name: name || phone });
+        if (matches.size >= 8) break;
+      }
+      if (matches.size >= 8) break;
+    }
+    if (signal?.aborted || !(await phonebookPermission())) return [];
+    if (rows.length < 200 || matches.size >= 8) return [...matches.values()];
+  }
+}

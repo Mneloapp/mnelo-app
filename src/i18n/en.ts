@@ -3,7 +3,27 @@ import { cardEn } from '@/messenger/contact-card-copy';
 import { messengerEn } from '../messenger/copy';
 import { phoneEn } from '../messenger/phone-copy';
 export const en = {
+  incomingShare: {
+    title: 'Share with Mnelo',
+    choose: 'Choose a conversation, review the items, then send.',
+    search: 'Find a conversation',
+    empty: 'No conversations found. Open a chat in Mnelo first.',
+    to: 'To: {{name}}',
+    invalid:
+      'Share up to 10 items. Each file must be available on this phone and under 10 MB; text can contain up to 8,000 characters.',
+    failed: '{{sent}} of {{total}} sent. Try again to send the remaining items.',
+  },
+  callSearch: {
+    open: 'Search contacts for a call',
+    placeholder: 'Name or phone number',
+    empty: 'No Mnelo contacts found. Try a more specific name or number.',
+  },
   library: {
+    photoUnavailable: 'This photo is unavailable on this device.',
+    selectPhoto: 'View photo: {{name}}',
+    photoLoadMore: 'Could not load more photos. Tap to retry.',
+    previousPhoto: 'Previous photo',
+    nextPhoto: 'Next photo',
     title: 'Media, links and docs',
     media: 'Media',
     links: 'Links',

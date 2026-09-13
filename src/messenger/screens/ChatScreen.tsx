@@ -24,7 +24,7 @@ import { useDevice } from '../DeviceProvider';
 import type { LocalMessage } from '../model';
 import { useLocalAction } from './shared';
 import { useVisibleRead } from '../useVisibleRead';
-import { callOutcomeCopy, readCallRecord } from '../call-record';
+import { CallBackSheet, CallMessage } from '../components/CallMessage';
 import { MessageTimeReveal } from '../components/MessageMetadata';
 import { MessageBubble } from '../components/MessageBubble';
 import { PeerAvatar } from '../components/ContactCard';
@@ -125,10 +125,6 @@ function Bubble({
     networkMode: 'always',
   });
   const own = message.sender === identity?.key;
-  const displayBody =
-    message.kind === 'call'
-      ? t(callOutcomeCopy[readCallRecord(message.body).status])
-      : message.body;
   return (
     <MessageTimeReveal sentAt={message.sentAt} onReply={onReply}>
       <MessageBubble
@@ -141,7 +137,7 @@ function Bubble({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              (displayBody || t('common.more')) +
+              (message.body || t('common.more')) +
               '. ' +
               new Date(message.sentAt).toLocaleTimeString(undefined, {
                 hour: '2-digit',
@@ -154,13 +150,7 @@ function Bubble({
             style={styles.messageBody}
           >
             {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
-            {message.body.length > 0 && (
-              <AppText>
-                {message.kind === 'call'
-                  ? t(callOutcomeCopy[readCallRecord(message.body).status])
-                  : message.body}
-              </AppText>
-            )}
+            {message.body.length > 0 && <AppText>{message.body}</AppText>}
           </Pressable>
         ) : null}
         {message.attachment && <MessageMedia message={message} onSelect={onSelect} />}
@@ -190,6 +180,7 @@ export function ChatScreen() {
   });
   const [text, setText] = useState('');
   const [selected, setSelected] = useState<LocalMessage | null>(null);
+  const [callBack, setCallBack] = useState<LocalMessage | null>(null);
   const [reply, setReply] = useState<string | undefined>();
   const [attachments, setAttachments] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -322,13 +313,24 @@ export function ChatScreen() {
         initialNumToRender={8}
         windowSize={5}
         keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <Bubble
-            message={item}
-            onSelect={() => setSelected(item)}
-            onReply={() => setReply(item.id)}
-          />
-        )}
+        renderItem={({ item }) =>
+          item.kind === 'call' ? (
+            <CallMessage
+              message={item}
+              onLongPress={() => setSelected(item)}
+              onPress={() => {
+                Keyboard.dismiss();
+                setCallBack(item);
+              }}
+            />
+          ) : (
+            <Bubble
+              message={item}
+              onSelect={() => setSelected(item)}
+              onReply={() => setReply(item.id)}
+            />
+          )
+        }
         onEndReached={() => {
           if (messages.hasNextPage && !messages.isFetchingNextPage) void messages.fetchNextPage();
         }}
@@ -338,6 +340,20 @@ export function ChatScreen() {
           </View>
         }
       />
+      {callBack && (
+        <CallBackSheet
+          message={callBack}
+          name={chat.data?.title ?? t('brand')}
+          available={Boolean(
+            chat.data?.kind === 'direct' &&
+            remote &&
+            calls &&
+            (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
+          )}
+          onClose={() => setCallBack(null)}
+          onCall={(media) => router.push({ pathname: '/call/[id]', params: { id, media } })}
+        />
+      )}
       {reply && (
         <View style={ui.row}>
           <View style={ui.flex}>

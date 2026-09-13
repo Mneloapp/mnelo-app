@@ -1,7 +1,7 @@
 import { DeviceCalls } from '@/messenger/calls';
 import type { DeviceMessenger } from '@/messenger/engine';
 import type { PeerMesh } from '@/messenger/peer-mesh';
-import { captureCall } from '@/messenger/call-platform';
+import { captureCall, stopCallAudio } from '@/messenger/call-platform';
 jest.mock('@/messenger/call-platform', () => ({
   captureCall: jest.fn(async () => ({ getTracks: () => [] })),
   stopCallAudio: jest.fn(async () => undefined),
@@ -155,6 +155,34 @@ test('deliberately declining an incoming call is not missed', async () => {
     'declined',
     'incoming',
   );
+  calls.stop();
+});
+test('hangup stops capture and playback before pending signaling finishes, and records only once', async () => {
+  let deliver!: () => void;
+  const send = jest.fn(async (_peer, control) => {
+    if (control.action === 'end')
+      await new Promise<void>((resolve) => {
+        deliver = resolve;
+      });
+  });
+  const stop = jest.fn();
+  jest.mocked(captureCall).mockResolvedValueOnce({
+    getTracks: () => [{ stop }],
+  } as unknown as MediaStream);
+  const { calls, mesh, recordCall } = runtime({ send });
+  await calls.start('peer', 'video');
+  jest.mocked(stopCallAudio).mockClear();
+  const pending = calls.end();
+  expect(calls.snapshot()?.status).toBe('ended');
+  expect(stop).toHaveBeenCalledTimes(1);
+  expect(mesh.endMedia).toHaveBeenCalledWith('peer', 'outgoing-id');
+  expect(stopCallAudio).toHaveBeenCalledTimes(1);
+  expect(recordCall).toHaveBeenCalledTimes(1);
+  await calls.end();
+  deliver();
+  await pending;
+  expect(recordCall).toHaveBeenCalledTimes(1);
+  expect(stop).toHaveBeenCalledTimes(1);
   calls.stop();
 });
 test('ring timeout distinguishes incoming missed calls from outgoing unanswered calls', async () => {

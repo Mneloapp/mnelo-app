@@ -1,5 +1,5 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
-import { router, useLocalSearchParams, usePathname } from 'expo-router';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
+import { router, useIsFocused, useLocalSearchParams, usePathname } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/ui';
@@ -38,7 +38,24 @@ export function CallScreen() {
   const action = useLocalAction();
   const endAction = useLocalAction();
   const started = useRef(false);
+  const dismissed = useRef(false);
+  const focused = useIsFocused();
   const call = useSyncExternalStore(calls?.subscribe ?? noSubscribe, calls?.snapshot ?? noCall);
+  const active = call?.chat === id ? call : null;
+  // A new outgoing call can initially see the previous call's retained terminal snapshot.
+  const restarting = useRef(
+    media && active && ['ended', 'failed'].includes(active.status) ? active.id : null,
+  );
+  const dismiss = useCallback(() => {
+    if (!focused || dismissed.current) return;
+    dismissed.current = true;
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/calls');
+  }, [focused]);
+  useEffect(() => {
+    if (active && ['ended', 'failed'].includes(active.status) && active.id !== restarting.current)
+      dismiss();
+  }, [active, dismiss]);
   const chat = useQuery({
     queryKey: ['device', 'chat', id],
     queryFn: () => view.chat(id),
@@ -56,7 +73,6 @@ export function CallScreen() {
     if (call && call.chat === id && !['ended', 'failed'].includes(call.status)) return;
     void action.run(() => calls.start(peer.key, media));
   }, [action, call, calls, chat.data?.kind, id, media, peer]);
-  const active = call?.chat === id ? call : null;
   const name = chat.data?.title ?? t('brand');
   const avatarPeer = active?.peer ?? peer?.key;
   return (
@@ -74,7 +90,7 @@ export function CallScreen() {
       busy={action.busy}
       ending={endAction.busy}
       error={endAction.error ?? action.error}
-      onBack={() => router.back()}
+      onBack={dismiss}
       onAccept={() =>
         void action.run(async () => {
           await calls?.accept();

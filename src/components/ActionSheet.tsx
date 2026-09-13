@@ -5,15 +5,19 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { theme } from '@/theme/tokens';
 import { AppText } from './AppText';
+import { AppIcon } from './AppIcon';
+import { FocusPressable } from './FocusPressable';
 export function ActionSheet({
   visible,
   title,
   onClose,
+  compact = false,
   children,
 }: PropsWithChildren<{
   visible: boolean;
   title: string;
   onClose: () => void;
+  compact?: boolean;
 }>) {
   const reduced = useReducedMotion();
   const { t } = useTranslation();
@@ -75,10 +79,29 @@ export function ActionSheet({
               keyboardShouldPersistTaps="handled"
               bounces={false}
             >
-              <View style={styles.handle} accessible={false} />
-              <AppText variant="headline" accessibilityRole="header">
-                {title}
-              </AppText>
+              {compact ? (
+                <View style={styles.header}>
+                  <View style={styles.closeSpace} />
+                  <AppText variant="bodyMedium" accessibilityRole="header" style={styles.title}>
+                    {title}
+                  </AppText>
+                  <FocusPressable
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.cancel')}
+                    onPress={onClose}
+                    style={styles.close}
+                  >
+                    <AppIcon name="x" />
+                  </FocusPressable>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.handle} accessible={false} />
+                  <AppText variant="headline" accessibilityRole="header">
+                    {title}
+                  </AppText>
+                </>
+              )}
               {children}
             </ScrollView>
           </Animated.View>
@@ -88,6 +111,17 @@ export function ActionSheet({
   );
 }
 const styles = StyleSheet.create({
+  header: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  title: { flex: 1, textAlign: 'center' },
+  closeSpace: { width: theme.controls.minTapTarget },
+  close: {
+    width: theme.controls.minTapTarget,
+    height: theme.controls.minTapTarget,
+    borderRadius: theme.radii.pill,
+    backgroundColor: theme.colors.surfaceSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   modal: { flex: 1, justifyContent: 'flex-end' },
   scrim: { backgroundColor: theme.colors.scrim },
   panel: { maxHeight: '90%', flexShrink: 1 },

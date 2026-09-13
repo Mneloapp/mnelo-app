@@ -243,6 +243,11 @@ export class DeviceCalls {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.update({ ...call, status: failed ? 'failed' : 'ended', local: null, remote: null });
+    // Stop local capture and playback before waiting for delivery of the hangup control.
+    this.mesh.endMedia(call.peer, call.id);
+    call.local?.getTracks().forEach((track) => track.stop());
+    const audioStopped = stopCallAudio().catch(() => undefined);
+    let notification = Promise.resolve();
     if (notify) {
       const control: CallControl = {
         type: 'call',
@@ -250,7 +255,7 @@ export class DeviceCalls {
         media: call.media,
         action: call.status === 'incoming' ? 'decline' : 'end',
       };
-      if (this.signaling) await this.send(call.peer, control).catch(() => undefined);
+      if (this.signaling) notification = this.send(call.peer, control).catch(() => undefined);
       else if (!this.mesh.send(call.peer, control))
         void this.mesh
           .waitForPeer(call.peer, () => true, 15000)
@@ -259,17 +264,18 @@ export class DeviceCalls {
           })
           .catch(() => undefined);
     }
-    this.mesh.endMedia(call.peer, call.id);
-    call.local?.getTracks().forEach((track) => track.stop());
-    await stopCallAudio();
-    await this.engine.recordCall(
-      call.chat,
-      call.id,
-      call.peer,
-      call.media,
-      callOutcome(call, failed, reason),
-      call.incoming ? 'incoming' : 'outgoing',
-    );
+    await Promise.all([
+      audioStopped,
+      notification,
+      this.engine.recordCall(
+        call.chat,
+        call.id,
+        call.peer,
+        call.media,
+        callOutcome(call, failed, reason),
+        call.incoming ? 'incoming' : 'outgoing',
+      ),
+    ]);
   }
   mute() {
     const call = this.value;

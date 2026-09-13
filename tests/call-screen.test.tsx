@@ -5,10 +5,13 @@ import { CallScreen } from '@/messenger/screens/CallScreen';
 import type { DeviceCall } from '@/messenger/calls';
 
 jest.mock('@/messenger/system-calls', () => ({ systemCallAudio: () => false }));
+let mockFocused = true;
+let mockRouteMedia: 'voice' | 'video' | undefined;
 jest.mock('expo-router', () => ({
-  router: { back: jest.fn(), push: jest.fn() },
-  useLocalSearchParams: () => ({ id: 'chat' }),
+  router: { back: jest.fn(), push: jest.fn(), replace: jest.fn(), canGoBack: jest.fn(() => true) },
+  useLocalSearchParams: () => ({ id: 'chat', media: mockRouteMedia }),
   usePathname: () => '/call/chat',
+  useIsFocused: () => mockFocused,
 }));
 jest.mock('@/messenger/VideoView', () => ({
   VideoView: ({ stream, local }: { stream: { id: string }; local?: boolean }) => {
@@ -81,6 +84,9 @@ async function show() {
 }
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocused = true;
+  mockRouteMedia = undefined;
+  jest.mocked(router.canGoBack).mockReturnValue(true);
   mockProfile.mockResolvedValue({ avatar: '' });
   mockCall = {
     id: 'call',
@@ -111,6 +117,8 @@ test('voice calls use the phonebook name and peer photo, and minimizing keeps th
   await fireEvent.press(screen.getByRole('button', { name: 'Return to conversation' }));
   expect(router.back).toHaveBeenCalledTimes(1);
   expect(mockCalls.end).not.toHaveBeenCalled();
+  await act(() => update({ status: 'ended' }));
+  expect(router.back).toHaveBeenCalledTimes(1);
 });
 
 test('voice audio stays mounted and mute/speaker actions expose their new state', async () => {
@@ -175,11 +183,12 @@ test('hangup remains available during an audio route change and ends only once',
   await fireEvent.press(end);
   await screen.findByText('Call ended');
   expect(mockCalls.end).toHaveBeenCalledTimes(1);
+  expect(router.back).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('button', { name: 'End call' })).toBeNull();
   await act(() => finish());
 });
 
-test('incoming calls expose accept/decline and terminal failures remove live controls', async () => {
+test('incoming calls expose accept/decline and connection failure returns to the previous screen', async () => {
   mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null };
   await show();
   expect(screen.getByRole('button', { name: 'Decline' })).toBeOnTheScreen();
@@ -190,4 +199,68 @@ test('incoming calls expose accept/decline and terminal failures remove live con
   expect(screen.getByText('The call could not connect.')).toBeOnTheScreen();
   expect(screen.queryByRole('button', { name: 'End call' })).toBeNull();
   expect(screen.getByRole('button', { name: 'Back' })).toBeOnTheScreen();
+  expect(router.back).toHaveBeenCalledTimes(1);
+});
+
+test.each(['voice', 'video'] as const)(
+  '%s hangup returns immediately while call cleanup is pending',
+  async (media) => {
+    let finish!: () => void;
+    mockCall = { ...mockCall!, media, status: 'active' };
+    mockCalls.end.mockImplementationOnce(async () => {
+      update({ status: 'ended', local: null, remote: null });
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    await show();
+    await fireEvent.press(screen.getByRole('button', { name: 'End call' }));
+    expect(router.back).toHaveBeenCalledTimes(1);
+    await act(() => update({ diagnostic: 'ENDED' }));
+    expect(router.back).toHaveBeenCalledTimes(1);
+    await act(() => finish());
+  },
+);
+
+test.each(['voice', 'video'] as const)(
+  '%s remote hangup closes the call without a second tap',
+  async (media) => {
+    mockCall = { ...mockCall!, media, status: 'active' };
+    await show();
+    await act(() => update({ status: 'ended', local: null, remote: null }));
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(mockCalls.end).not.toHaveBeenCalled();
+  },
+);
+
+test('a covered call route does not pop another screen when the other person hangs up', async () => {
+  await show();
+  mockFocused = false;
+  await act(() => update({ status: 'ended' }));
+  expect(router.back).not.toHaveBeenCalled();
+  mockFocused = true;
+  await act(() => update({ diagnostic: 'ENDED' }));
+  expect(router.back).toHaveBeenCalledTimes(1);
+});
+
+test('declining a call opened without navigation history returns to Calls', async () => {
+  jest.mocked(router.canGoBack).mockReturnValue(false);
+  mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null };
+  await show();
+  await fireEvent.press(screen.getByRole('button', { name: 'Decline' }));
+  expect(router.back).not.toHaveBeenCalled();
+  expect(router.replace).toHaveBeenCalledWith('/(tabs)/calls');
+});
+
+test('starting a new call ignores the retained ended snapshot, then closes when the new call ends', async () => {
+  mockRouteMedia = 'voice';
+  mockCall = { ...mockCall!, status: 'ended' };
+  mockCalls.start.mockImplementationOnce(async () => {
+    update({ id: 'next-call', status: 'ringing' });
+  });
+  await show();
+  await waitFor(() => expect(mockCalls.start).toHaveBeenCalledWith('peer', 'voice'));
+  expect(router.back).not.toHaveBeenCalled();
+  await act(() => update({ status: 'ended' }));
+  expect(router.back).toHaveBeenCalledTimes(1);
 });

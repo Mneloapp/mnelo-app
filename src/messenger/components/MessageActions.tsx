@@ -6,6 +6,7 @@ import { AppIcon, type IconName } from '@/components/AppIcon';
 import { FocusPressable } from '@/components/FocusPressable';
 import { theme } from '@/theme/tokens';
 import type { LocalMessage } from '../model';
+import { callOutcomeCopy, readCallRecord } from '../call-record';
 
 export function MessageActions({
   message,
@@ -29,13 +30,21 @@ export function MessageActions({
   busy: boolean;
 }) {
   const { t } = useTranslation();
+  const call = message.kind === 'call' ? readCallRecord(message.body) : null;
+  const preview = call
+    ? `${t(call.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice')} · ${t(callOutcomeCopy[call.status])}`
+    : message.body;
   const actions: { icon: IconName; label: string; onPress: () => void }[] = [
-    { icon: 'corner-up-left', label: t('messenger.reply'), onPress: reply },
-    ...(message.kind !== 'call'
-      ? [{ icon: 'corner-up-right' as const, label: t('messenger.forward'), onPress: forward }]
+    ...(!call
+      ? [
+          { icon: 'corner-up-left' as const, label: t('messenger.reply'), onPress: reply },
+          { icon: 'corner-up-right' as const, label: t('messenger.forward'), onPress: forward },
+        ]
       : []),
-    ...(message.body ? [{ icon: 'copy' as const, label: t('messenger.copy'), onPress: copy }] : []),
-    ...(message.status === 'pending'
+    ...(!call && message.body
+      ? [{ icon: 'copy' as const, label: t('messenger.copy'), onPress: copy }]
+      : []),
+    ...(!call && message.status === 'pending'
       ? [{ icon: 'refresh-cw' as const, label: t('messenger.retry'), onPress: retry }]
       : []),
     { icon: 'trash-2', label: t('messenger.deleteLocal'), onPress: remove },
@@ -51,21 +60,23 @@ export function MessageActions({
             onPress={close}
           />
           <ScrollView style={styles.menu} contentContainerStyle={styles.content} bounces={false}>
-            {message.body ? <AppText numberOfLines={2}>{message.body}</AppText> : null}
-            <View style={styles.reactions}>
-              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
-                <FocusPressable
-                  key={emoji}
-                  style={styles.reaction}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('messenger.reactWith', { emoji })}
-                  disabled={busy}
-                  onPress={() => react(emoji)}
-                >
-                  <AppText variant="headline">{emoji}</AppText>
-                </FocusPressable>
-              ))}
-            </View>
+            {preview ? <AppText numberOfLines={2}>{preview}</AppText> : null}
+            {!call && (
+              <View style={styles.reactions}>
+                {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
+                  <FocusPressable
+                    key={emoji}
+                    style={styles.reaction}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('messenger.reactWith', { emoji })}
+                    disabled={busy}
+                    onPress={() => react(emoji)}
+                  >
+                    <AppText variant="headline">{emoji}</AppText>
+                  </FocusPressable>
+                ))}
+              </View>
+            )}
             {actions.map((item) => (
               <FocusPressable
                 key={item.icon}

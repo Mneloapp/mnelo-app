@@ -19,6 +19,11 @@ export const messengerEn = {
   chatOptions: 'Chat options',
   callDirectionIncoming: 'Incoming',
   callDirectionOutgoing: 'Outgoing',
+  callMissedVoice: 'Missed voice call',
+  callMissedVideo: 'Missed video call',
+  callBack: 'Call',
+  callBackHint: 'Tap to call back',
+  callOptionsHint: 'Opens call options',
   callStatusFailed: 'Failed',
   blockContact: 'Block contact',
   deliveryPeerNotReady:
@@ -226,6 +231,11 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   chatOptions: 'ჩატის პარამეტრები',
   callDirectionIncoming: 'შემოსული',
   callDirectionOutgoing: 'გასული',
+  callMissedVoice: 'გამოტოვებული ხმოვანი ზარი',
+  callMissedVideo: 'გამოტოვებული ვიდეოზარი',
+  callBack: 'დარეკვა',
+  callBackHint: 'შეეხე გადასარეკად',
+  callOptionsHint: 'ზარის მენიუს გახსნა',
   callStatusFailed: 'ვერ შედგა',
   blockContact: 'კონტაქტის დაბლოკვა',
   deliveryPeerNotReady:

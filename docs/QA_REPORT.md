@@ -1,3 +1,5 @@
+> **September 13 — TestFlight 0.1.0 (12):** signed archive/export/upload and Apple processing PASS. Public CI for the exact source tag `ios-0.1.0-12` PASS; preceding source checks total 447 tests. Final archive/export signatures, production APNs, disabled debugging, EN/KA purpose strings, linked QR provider, source/endpoint markers and zero-finding native/Hermes secret scans verified. Mnelo Development is Testing; Mnelo Preview is Waiting for Review with automatic notification enabled. Build 11 was replaced in the beta-review queue. Native Photos saving, QR scanning, upgraded-device delivery/calls and background acceptance remain physical tests. Four existing vendor dSYM warnings persist. [Full evidence](BUILD_LOG.md).
+
 > September 12 public-release request: [current readiness and exact blockers](PUBLIC_RELEASE_READINESS.md). Full automated suite 389 PASS, Doctor 21/21, no secrets. Apple confirms build 9 processing Complete. Public description/URLs saved as draft; no public submission. Second-device USB testing is the immediate acceptance step.
 
 # Mnelo device-owned messenger QA

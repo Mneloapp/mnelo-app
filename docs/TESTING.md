@@ -35,3 +35,9 @@ Test a cold app reopen with the identity service stopped: enrolled Chats and loc
 ## Hosted development checks — September 12
 
 `tests/messenger/hosting.integration.ts` adds seven negative/behavioral cases for tester admission, restart-resistant budgets, atomic hourly/daily caps, clock rollback and proxy address boundaries. The compiled deployed-service checks validate real HTTPS/WSS without requesting SMS or writing a user account. See [commands, actual results and limits](DEVELOPMENT_HOSTING.md). A remote synthetic pass is not physical iPhone or WebRTC media acceptance.
+
+## Physical-feedback regression suite (September 13)
+
+`tests/chat-presentation.test.tsx` covers external reaction badges/counts, safe destructive confirmation, backdrop dismissal, photo open/share/close and duplicate-share disabling, incoming/outgoing calls, persistent missed-call colour and unknown historical directions. `phonebook.test.ts` covers full-number matching, limited permission, batch reads and revocation during a read. `phonebook-refresh.test.tsx` covers foreground/permission refresh without re-reading the address book on each message. `tests/messenger/contact-view.integration.ts` uses the real local SQLite engine to verify phonebook name precedence, chat search, headers/members/calls, unchanged group titles and persistence isolation. The authenticated real-libsignal HTTP delivery test also checks an unprepared recipient: no ciphertext is submitted before keys exist, the local message survives and later delivers with receipts.
+
+Local browser component previews use synthetic names/messages and a brand asset, never participants' chat/photo data. These previews check geometry and interaction only. They do not certify native font rendering, system Photos sharing, iOS status-bar insets or physical delivery/calls; repeat these on both phones after installing the next build. Preserve device data and update both phones before testing the new delivery protocol.

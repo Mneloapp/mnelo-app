@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useSyncExternalStore,
   type PropsWithChildren,
@@ -11,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { Page, StateView } from '@/components/ui';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
 import { theme } from '@/theme/tokens';
+import { ContactView } from './contact-view';
+import { usePhonebookNames } from './usePhonebookNames';
 import { DeviceMessenger } from './engine';
 import { PeerMesh } from './peer-mesh';
 import { DeviceCalls } from './calls';
@@ -27,6 +30,7 @@ import {
 
 type Context = {
   engine: DeviceMessenger;
+  view: ContactView;
   identity: { key: string; name: string } | null;
   mesh: PeerMesh | null;
   calls: DeviceCalls | null;
@@ -122,6 +126,14 @@ export function DeviceProvider({ children }: PropsWithChildren) {
       deviceNetworkFailed();
     }
   }, [engine, identity?.key, authenticated]);
+  const phoneNames = usePhonebookNames(engine, authenticated, enrollment?.phone);
+  const contactView = useMemo(
+    () => (engine ? new ContactView(engine, phoneNames) : null),
+    [engine, phoneNames],
+  );
+  useEffect(() => {
+    if (contactView) void cache.invalidateQueries({ queryKey: ['device'] });
+  }, [contactView, cache]);
   if (error || runtime.invalid)
     return (
       <Page>
@@ -135,11 +147,12 @@ export function DeviceProvider({ children }: PropsWithChildren) {
         />
       </Page>
     );
-  if (!engine || !welcomeFinished) return <WelcomeScreen />;
+  if (!engine || !contactView || !welcomeFinished) return <WelcomeScreen />;
   return (
     <DeviceContext.Provider
       value={{
         engine,
+        view: contactView,
         identity,
         mesh: runtime.mesh,
         calls: runtime.calls,

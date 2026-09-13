@@ -36,19 +36,19 @@ export function IncomingCalls() {
 }
 export function CallScreen() {
   const { id, media } = useLocalSearchParams<{ id: string; media?: 'voice' | 'video' }>();
-  const { engine, identity, calls } = useDevice();
+  const { identity, calls, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const started = useRef(false);
   const call = useSyncExternalStore(calls?.subscribe ?? noSubscribe, calls?.snapshot ?? noCall);
   const chat = useQuery({
     queryKey: ['device', 'chat', id],
-    queryFn: () => engine.chat(id),
+    queryFn: () => view.chat(id),
     networkMode: 'always',
   });
   const members = useQuery({
     queryKey: ['device', 'members', id],
-    queryFn: () => engine.members(id),
+    queryFn: () => view.members(id),
     networkMode: 'always',
   });
   const peer = members.data?.find((member) => member.key !== identity?.key);

@@ -6,11 +6,11 @@ import { theme } from '@/theme/tokens';
 import { useDevice } from '../DeviceProvider';
 
 export function ReplyQuote({ chat, id }: { chat: string; id: string }) {
-  const { engine, identity } = useDevice();
+  const { identity, view } = useDevice();
   const { t } = useTranslation();
   const q = useQuery({
     queryKey: ['device', 'reply', chat, id],
-    queryFn: () => engine.replyPreview(chat, id),
+    queryFn: () => view.replyPreview(chat, id),
     networkMode: 'always',
   });
   const quote = q.data;

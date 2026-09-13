@@ -3,34 +3,27 @@ import { FlatList } from 'react-native';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { AppIcon } from '@/components/AppIcon';
-import { AppText } from '@/components/AppText';
-import { IconButton, Page, Row, StateView, ui } from '@/components/ui';
+import { IconButton, Page, StateView, ui } from '@/components/ui';
 import { PeerAvatar } from '../components/ContactCard';
 import { ContactPickerScreen } from './ContactPickerScreen';
 import { useDevice } from '../DeviceProvider';
 import { useVisibleRead } from '../useVisibleRead';
-import { callOutcomeCopy } from '../call-record';
-import { CountBadge } from '@/components/CountBadge';
+import { CallHistoryRow } from '../components/CallHistoryRow';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 
 export function CallsScreen() {
-  const { engine } = useDevice();
-  const { t, i18n } = useTranslation();
+  const { engine, view } = useDevice();
+  const { t } = useTranslation();
   const [selected, setSelected] = useState<CallTarget | null>(null);
   const q = useInfiniteQuery({
     queryKey: ['device', 'call-history'],
-    queryFn: ({ pageParam }) => engine.callHistory(pageParam),
+    queryFn: ({ pageParam }) => view.callHistory(pageParam),
     initialPageParam: Number.MAX_SAFE_INTEGER,
     getNextPageParam: (page) => (page.length === 40 ? page.at(-1)?.sequence : undefined),
     networkMode: 'always',
   });
   const newest = q.data?.pages[0]?.[0]?.sequence;
   useVisibleRead(engine, null, newest);
-  const dates = new Intl.DateTimeFormat(i18n.resolvedLanguage === 'ka' ? 'ka-GE' : 'en', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
   return (
     <Page
       title={t('tabs.calls')}
@@ -46,9 +39,6 @@ export function CallsScreen() {
         />
       }
     >
-      <AppText variant="caption" tone="secondary">
-        {t('messenger.callHistoryHint')}
-      </AppText>
       <CurrentCall />
       <FlatList
         data={q.data?.pages.flat() ?? []}
@@ -59,23 +49,9 @@ export function CallsScreen() {
           if (q.hasNextPage && !q.isFetching && !q.isFetchNextPageError) void q.fetchNextPage();
         }}
         renderItem={({ item }) => (
-          <Row
-            title={item.name}
-            subtitle={
-              t(item.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice') +
-              ' · ' +
-              t(callOutcomeCopy[item.status]) +
-              '\n' +
-              dates.format(item.endedAt)
-            }
-            left={<PeerAvatar peer={item.peer} name={item.name} />}
-            right={
-              item.status === 'missed' && item.unseen ? (
-                <CountBadge count={1} label={t('messenger.callMissed')} />
-              ) : (
-                <AppIcon name={item.media === 'video' ? 'video' : 'phone'} />
-              )
-            }
+          <CallHistoryRow
+            call={item}
+            avatar={<PeerAvatar peer={item.peer} name={item.name} />}
             onPress={() => setSelected({ key: item.peer, name: item.name, history: item })}
           />
         )}

@@ -8,24 +8,24 @@ import { useDevice } from '../DeviceProvider';
 import { Check, useLocalAction } from './shared';
 export function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { engine, identity } = useDevice();
+  const { engine, identity, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const [title, setTitle] = useState<string | undefined>();
   const [selected, setSelected] = useState<string[] | undefined>();
   const group = useQuery({
     queryKey: ['device', 'chat', id],
-    queryFn: () => engine.chat(id),
+    queryFn: () => view.chat(id),
     networkMode: 'always',
   });
   const members = useQuery({
     queryKey: ['device', 'members', id],
-    queryFn: () => engine.members(id),
+    queryFn: () => view.members(id),
     networkMode: 'always',
   });
   const contacts = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const keys =

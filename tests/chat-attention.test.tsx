@@ -14,7 +14,9 @@ const mockEngine = {
   contactRequests: jest.fn(async () => []),
   chatPage: jest.fn(async () => ({ rows: [], next: undefined })),
 };
-jest.mock('@/messenger/DeviceProvider', () => ({ useDevice: () => ({ engine: mockEngine }) }));
+jest.mock('@/messenger/DeviceProvider', () => ({
+  useDevice: () => ({ engine: mockEngine, view: mockEngine }),
+}));
 test('Chats keeps search mounted while filters and clear search update the local query', async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   await render(

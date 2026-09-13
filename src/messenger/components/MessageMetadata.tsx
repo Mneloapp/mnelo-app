@@ -1,5 +1,5 @@
 import { useMemo, useState, type PropsWithChildren } from 'react';
-import { Animated, PanResponder, StyleSheet, View } from 'react-native';
+import { Animated, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
@@ -19,10 +19,10 @@ export function DeliveryLeaf({ status }: { status: LocalMessage['status'] }) {
       accessibilityLabel={t(`messenger.${status}`)}
     >
       <Svg
-        width={theme.icons.sm}
-        height={theme.spacing.step}
+        width={theme.spacing.md}
+        height={theme.icons.sm}
         viewBox="61 17 42 62"
-        accessible={false}
+        {...(Platform.OS === 'web' ? { 'aria-hidden': true } : { accessible: false })}
       >
         <Path
           d={geometry.leaf}
@@ -100,5 +100,5 @@ const styles = StyleSheet.create({
     width: theme.layout.messageTimeReveal,
     alignItems: 'flex-end',
   },
-  leaf: { alignSelf: 'flex-end', paddingTop: theme.spacing.xs },
+  leaf: { alignSelf: 'flex-end' },
 });

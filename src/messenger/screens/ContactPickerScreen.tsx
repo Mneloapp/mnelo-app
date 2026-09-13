@@ -46,7 +46,7 @@ export function PickerAction({
   );
 }
 export function ContactPickerScreen({ mode }: { mode: 'chat' | 'call' }) {
-  const { engine, calls, mesh, enrollment } = useDevice();
+  const { engine, calls, mesh, enrollment, view } = useDevice();
   const { t, i18n } = useTranslation();
   const { finish } = useComposer();
   const action = useLocalAction();
@@ -61,7 +61,7 @@ export function ContactPickerScreen({ mode }: { mode: 'chat' | 'call' }) {
   const [unavailable, setUnavailable] = useState<CallTarget | null>(null);
   const q = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const sections = useMemo(() => {

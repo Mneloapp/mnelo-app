@@ -38,7 +38,7 @@ type Incoming = {
   created_at: number;
 };
 export type RetryPhase = 'receive' | 'project' | 'send';
-export type RetryCode = 'message-error' | 'identity-changed' | 'update-required';
+export type RetryCode = 'message-error' | 'identity-changed' | 'update-required' | 'peer-not-ready';
 const frame = z
   .object({
     version: z.literal(2),

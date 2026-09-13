@@ -27,7 +27,9 @@ const mockRuntime = {
     start: jest.fn(async () => undefined),
   },
 };
-jest.mock('@/messenger/DeviceProvider', () => ({ useDevice: () => mockRuntime }));
+jest.mock('@/messenger/DeviceProvider', () => ({
+  useDevice: () => ({ ...mockRuntime, view: mockRuntime.engine }),
+}));
 async function show(children: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
@@ -38,7 +40,6 @@ beforeEach(() => {
 test('Calls displays an empty local history and opens the new-call picker', async () => {
   await show(<CallsScreen />);
   await screen.findByText('No calls yet. Start a voice or video call with a saved contact.');
-  expect(screen.getByText('Call history stays on this device.')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'New call' }));
   expect(router.push).toHaveBeenCalledWith('/new-call');
 });

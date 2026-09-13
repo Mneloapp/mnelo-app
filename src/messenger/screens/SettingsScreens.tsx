@@ -125,12 +125,12 @@ export function PrivacyScreen() {
   );
 }
 export function BlockedScreen() {
-  const { engine } = useDevice();
+  const { engine, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const q = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const blocked = q.data?.filter((contact) => contact.blocked);

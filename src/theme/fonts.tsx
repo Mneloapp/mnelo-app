@@ -1,5 +1,6 @@
 import { createContext, useContext, type PropsWithChildren } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Platform } from 'react-native';
 import { useFonts } from 'expo-font';
 import Feather from '@expo/vector-icons/Feather';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
@@ -25,6 +26,13 @@ export function TypographyProvider({ children }: PropsWithChildren) {
 export function useAppFont(weight: string = '400', latin = false) {
   const ready = useContext(FontsReady);
   const { i18n } = useTranslation();
+  // Native system faces provide softer platform typography and proper Georgian fallback.
+  // Brand artwork stays independent; web keeps its existing editorial faces.
+  if (Platform.OS !== 'web')
+    return {
+      fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+      fontWeight: weight as '400' | '500' | '600',
+    };
   if (!ready) return undefined;
   const family = !latin && i18n.language.startsWith('ka') ? 'FiraGO' : 'DMSans';
   // FiraGO's Georgian strokes are optically heavier than DM Sans at the same weight.

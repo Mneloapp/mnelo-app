@@ -17,13 +17,13 @@ import { PeerAvatar } from '../components/ContactCard';
 import { ContactRequests } from './ContactRequests';
 
 export function ChatsScreen() {
-  const { engine } = useDevice();
+  const { view } = useDevice();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ChatFilter>('all');
   const q = useInfiniteQuery({
     queryKey: ['device', 'chats', filter, search.trim()],
-    queryFn: ({ pageParam }) => engine.chatPage(filter, search, pageParam),
+    queryFn: ({ pageParam }) => view.chatPage(filter, search, pageParam),
     initialPageParam: undefined as ChatCursor | undefined,
     getNextPageParam: (page) => page.next,
     networkMode: 'always',
@@ -110,14 +110,14 @@ export function ChatsScreen() {
   );
 }
 export function NewGroupScreen() {
-  const { engine } = useDevice();
+  const { engine, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const q = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const { finish } = useComposer();

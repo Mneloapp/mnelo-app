@@ -17,7 +17,7 @@ import { DeliveryPump, type DeliveryState } from '../../src/messenger/delivery/p
 import type { LocalDatabase } from '../../src/messenger/model';
 import { NodeSignal } from './node-signal';
 
-function device() {
+function device(now = Date.now) {
   const sql = new DatabaseSync(':memory:'),
     root = createKeys(randomBytes);
   const db: LocalDatabase = {
@@ -53,13 +53,15 @@ function device() {
     },
     new NodeSignal(),
     root,
+    now,
   );
   return { root, journal, sql };
 }
 
 test('two real Signal clients use authenticated HTTP delivery without a live sender, with durable reverse receipts and no repeated projection', async () => {
-  const a = device(),
-    b = device(),
+  let clock = Date.now();
+  const a = device(() => clock),
+    b = device(() => clock),
     statesA: DeliveryState[] = [],
     statesB: DeliveryState[] = [];
   const registry = new PhoneRegistry(new DatabaseSync(':memory:'), randomBytes(32));
@@ -98,6 +100,7 @@ test('two real Signal clients use authenticated HTTP delivery without a live sen
       return {};
     },
     (state) => statesA.push(state),
+    () => clock,
   );
   const bp = new DeliveryPump(
     new PhoneClient(url, b.root),
@@ -113,11 +116,22 @@ test('two real Signal clients use authenticated HTTP delivery without a live sen
   try {
     ap.start();
     await ap.tick();
+    const pendingId = randomUUID();
+    await a.journal.enqueue(b.root.key, pendingId, 'FICTIONAL_OFFLINE_HTTP_MESSAGE');
+    await ap.tick();
+    assert.equal(statesA.at(-1), 'peer-not-ready');
+    assert.equal(delivery.store.fetch(b.root.key).length, 0);
+    assert.equal((await a.journal.pending())[0]?.id, pendingId);
+    assert.equal(
+      a.sql.prepare('SELECT wire FROM signal_outbox WHERE id=?').get(pendingId)?.wire,
+      null,
+    );
     bp.start();
     await bp.tick();
+    clock += 60000;
+    await ap.tick();
     assert.equal(statesA.at(-1), 'ready');
     assert.equal(statesB.at(-1), 'ready');
-    await a.journal.enqueue(b.root.key, randomUUID(), 'FICTIONAL_OFFLINE_HTTP_MESSAGE');
     await ap.tick();
     ap.stop();
     assert.equal(delivery.store.fetch(b.root.key).length, 1);

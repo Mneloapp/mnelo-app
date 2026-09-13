@@ -25,7 +25,9 @@ import type { LocalMessage } from '../model';
 import { useLocalAction } from './shared';
 import { useVisibleRead } from '../useVisibleRead';
 import { callOutcomeCopy, readCallRecord } from '../call-record';
-import { DeliveryLeaf, MessageTimeReveal } from '../components/MessageMetadata';
+import { MessageTimeReveal } from '../components/MessageMetadata';
+import { MessageBubble } from '../components/MessageBubble';
+import { ChatOptions } from '../components/ChatOptions';
 import { ChatPhoto } from '../components/ChatPhoto';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
@@ -129,12 +131,11 @@ function Bubble({
       : message.body;
   return (
     <MessageTimeReveal sentAt={message.sentAt} onReply={onReply}>
-      <View
-        style={[
-          styles.bubble,
-          own && styles.outgoing,
-          Boolean(message.attachment) && styles.mediaBubble,
-        ]}
+      <MessageBubble
+        own={own}
+        status={message.status}
+        media={Boolean(message.attachment)}
+        reactions={reaction.data ?? []}
       >
         {message.body.length > 0 || message.replyTo ? (
           <Pressable
@@ -154,7 +155,7 @@ function Bubble({
           >
             {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
             {message.body.length > 0 && (
-              <AppText selectable>
+              <AppText>
                 {message.kind === 'call'
                   ? t(callOutcomeCopy[readCallRecord(message.body).status])
                   : message.body}
@@ -166,29 +167,25 @@ function Bubble({
         {message.kind === 'location' && /^[-\d.]+,[-\d.]+$/.test(message.body) && (
           <LocationMessage coordinates={message.body} />
         )}
-        {reaction.data && reaction.data.length > 0 && (
-          <AppText>{reaction.data.map((value) => value.emoji).join(' ')}</AppText>
-        )}
-        {own && <DeliveryLeaf status={message.status} />}
-      </View>
+      </MessageBubble>
     </MessageTimeReveal>
   );
 }
 export function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { engine, identity, mesh, calls, deliveryState } = useDevice();
+  const { engine, identity, mesh, calls, deliveryState, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const [forward, setForward] = useState<LocalMessage | null>(null);
   const [contactPicker, setContactPicker] = useState(false);
   const contacts = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const chats = useQuery({
     queryKey: ['device', 'chats'],
-    queryFn: () => engine.chats(),
+    queryFn: () => view.chats(),
     networkMode: 'always',
   });
   const [text, setText] = useState('');
@@ -200,12 +197,12 @@ export function ChatScreen() {
   const [clear, setClear] = useState(false);
   const chat = useQuery({
     queryKey: ['device', 'chat', id],
-    queryFn: () => engine.chat(id),
+    queryFn: () => view.chat(id),
     networkMode: 'always',
   });
   const members = useQuery({
     queryKey: ['device', 'members', id],
-    queryFn: () => engine.members(id),
+    queryFn: () => view.members(id),
     networkMode: 'always',
   });
   const messages = useInfiniteQuery({
@@ -299,6 +296,11 @@ export function ChatScreen() {
       {deliveryState === 'update-required' && (
         <AppText variant="caption" tone="secondary">
           {t('messenger.deliveryUpdate')}
+        </AppText>
+      )}
+      {deliveryState === 'peer-not-ready' && (
+        <AppText variant="caption" tone="secondary">
+          {t('messenger.deliveryPeerNotReady')}
         </AppText>
       )}
       {deliveryState === 'identity-changed' && (
@@ -544,57 +546,42 @@ export function ChatScreen() {
         />
         {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
       </ActionSheet>
-      <ActionSheet
+      <ChatOptions
         visible={clear}
-        title={t('messenger.localHistory')}
-        onClose={() => setClear(false)}
-      >
-        {remote && chat.data?.kind === 'direct' && (
-          <Button
-            variant="secondary"
-            label={t('card.view')}
-            onPress={() => {
-              setClear(false);
-              router.push({ pathname: '/contact/[key]', params: { key: remote.key } });
-            }}
-          />
-        )}
-        {chat.data?.kind === 'group' && (
-          <Button
-            variant="secondary"
-            label={t('messenger.groupDetails')}
-            onPress={() => {
-              setClear(false);
-              router.push({ pathname: '/group/[id]', params: { id } });
-            }}
-          />
-        )}
-        <AppText>{t('messenger.deletionHint')}</AppText>
-        <Button
-          variant="danger"
-          label={t('messenger.confirmClear')}
-          busy={action.busy}
-          onPress={() =>
-            void action.run(async () => {
-              await engine.clearLocalHistory(id);
-              setClear(false);
-            })
-          }
-        />
-        {remote && chat.data?.kind === 'direct' && (
-          <Button
-            variant="secondary"
-            label={t('messenger.block')}
-            onPress={() =>
-              void action.run(async () => {
-                await engine.block(remote.key);
+        busy={action.busy}
+        close={() => setClear(false)}
+        onContact={
+          remote && chat.data?.kind === 'direct'
+            ? () => {
                 setClear(false);
-              })
-            }
-          />
-        )}
-        <Button variant="secondary" label={t('common.cancel')} onPress={() => setClear(false)} />
-      </ActionSheet>
+                router.push({ pathname: '/contact/[key]', params: { key: remote.key } });
+              }
+            : undefined
+        }
+        onGroup={
+          chat.data?.kind === 'group'
+            ? () => {
+                setClear(false);
+                router.push({ pathname: '/group/[id]', params: { id } });
+              }
+            : undefined
+        }
+        onClear={() =>
+          void action.run(async () => {
+            await engine.clearLocalHistory(id);
+            setClear(false);
+          })
+        }
+        onBlock={
+          remote && chat.data?.kind === 'direct'
+            ? () =>
+                void action.run(async () => {
+                  await engine.block(remote.key);
+                  setClear(false);
+                })
+            : undefined
+        }
+      />
     </Page>
   );
 }
@@ -610,23 +597,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceSoft,
     borderRadius: theme.radii.pill,
   },
-  mediaBubble: { width: '86%' },
   attachmentGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  bubble: {
-    alignSelf: 'flex-start',
-    maxWidth: '86%',
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radii.lg,
-    padding: theme.spacing.md,
-    marginVertical: theme.spacing.xs,
-    marginRight: theme.spacing.xl,
-  },
-  outgoing: {
-    alignSelf: 'flex-end',
-    backgroundColor: theme.colors.messageOutgoing,
-    marginRight: 0,
-    marginLeft: theme.spacing.xl,
-  },
   messageBody: { minHeight: theme.spacing.xl, paddingVertical: theme.spacing.xs },
   empty: { transform: [{ scaleY: -1 }] },
 });

@@ -841,3 +841,16 @@ Status: signed archive, App Store export/upload and Apple processing PASS. Build
 - Secrets: final native app scan and 49.93 MB disassembled Hermes scan both zero findings. No credentials or phone data added to public source.
 - Upload warnings: missing upstream dSYMs for React, ReactNativeDependencies, WebRTC and hermesvm limit crash symbolication; Apple upload succeeds. The app's own matching dSYM exists.
 - No device data reset or uninstall. Both phones must receive build 11 before testing the new protocol. Do not infer physical call, QR, media, background or migration PASS from these build results. Key rotation/recovery and public-release gates remain documented.
+
+## September 13 — physical chat, contacts, calls and photo feedback
+
+Phase: Physical feedback refinements after TestFlight 11.
+Status: Source QA PASS; native build verification recorded in BUILD_LOG.md; new physical acceptance pending.
+Implemented: External reaction badges, compact delivery leaf, nonduplicated Copy interaction, icon-based chat options with backdrop dismissal and separate clear-history confirmation, local Contacts name precedence across existing screens, recipient-key readiness state, direction/missed-call presentation, native system typography, photo safe-area/status-bar and bottom share controls.
+Files: `src/components/ActionSheet.tsx`, `SheetAction.tsx`, messenger presentation components/screens, `contact-view.ts`, `usePhonebookNames.ts`, phonebook adapters, delivery pump/journal, theme and regression tests.
+Database migrations: None. Existing free-text retry records accept the new `peer-not-ready` code. No identity/ratchet/history reset.
+Security impact: Contacts names stay a local read-only projection; pinned numbers and keys remain unchanged. Pending recipients do not trigger plaintext or older-protocol fallback. Destructive history clearing requires an explicit second action. No server deployment, OTP transmission or account operation.
+Tests: `npm run check` PASS — 312 Jest tests in 63 suites, 3 server tests, 132 device/protocol tests (447 total), TypeScript/lint/format/security/environment/localization/brand checks. Expo Doctor 21/21 PASS; dependency alignment PASS; iOS and Android production-mode JS/Hermes exports PASS with preview endpoints and delivery V2 enabled.
+Native checks: See BUILD_LOG.md for the actual unsigned iOS compilation result. No new signed distribution artifact or device installation is inferred from an export.
+Known limitations: User reports only one iPhone is on build 11. The changes in this section are not in the already uploaded build 11. Both phones need the next build for these UI fixes and a compatible delivery version before end-to-end testing. iPhone Photos sharing, native inset/font/gesture behavior, QR and voice/video/background flows still need physical acceptance. Existing recovery/cryptography/release limitations remain.
+Commit: Recorded by the Git commit containing this section; build-11 corresponding-source tag remains unchanged.

@@ -81,7 +81,7 @@ function InvitationPreview({ invitation }: { invitation: ContactInvitation | nul
 }
 export function ContactProfileScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
-  const { engine } = useDevice();
+  const { engine, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const q = useQuery({
@@ -89,7 +89,7 @@ export function ContactProfileScreen() {
     enabled: peerKey.safeParse(key).success,
     networkMode: 'always',
     queryFn: async () => {
-      const contact = (await engine.contacts()).find((row) => row.key === key && !row.blocked);
+      const contact = (await view.contacts()).find((row) => row.key === key && !row.blocked);
       if (!contact) throw new Error('CONTACT_UNAVAILABLE');
       return { contact, profile: await engine.contactProfile(key) };
     },
@@ -109,7 +109,9 @@ export function ContactProfileScreen() {
             onPress={() =>
               void action.run(async () => {
                 if (!(await engine.acceptsPeer(key))) throw new Error('CONTACT_BLOCKED');
-                const id = await engine.trustContact({ key, name: q.data!.contact.name });
+                const saved = (await engine.contacts()).find((c) => c.key === key && !c.blocked);
+                if (!saved) return;
+                const id = await engine.trustContact(saved);
                 router.push({ pathname: '/chat/[id]', params: { id } });
               })
             }

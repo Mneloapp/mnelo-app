@@ -118,7 +118,7 @@ export class DeliveryPump {
   private async pin(peer: string) {
     if (await this.journal.known(peer)) return;
     const { identity } = await this.command({ action: 'delivery-identity', peer });
-    if (!identity) throw new Error('DELIVERY_UNAVAILABLE');
+    if (!identity) throw new Error('DELIVERY_PEER_NOT_READY');
     await this.journal.pin(identity);
   }
   private async cycle() {
@@ -194,7 +194,7 @@ export class DeliveryPump {
         const leased = needBundle
           ? (await this.command({ action: 'delivery-keys', peer: row.peer, request: row.id })).keys
           : undefined;
-        if (needBundle && !leased) throw new Error('DELIVERY_UNAVAILABLE');
+        if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
         if (leased) {
           const { oneTime: _oneTime, ...identity } = leased.bundle;
           await this.journal.pin({ ...identity, owner: row.peer, signature: leased.signature });
@@ -243,9 +243,11 @@ export class DeliveryPump {
     const message = error instanceof Error ? error.message : '';
     return message.includes('IDENTITY_CHANGED')
       ? 'identity-changed'
-      : message === 'DELIVERY_UNAVAILABLE'
-        ? 'update-required'
-        : 'message-error';
+      : message === 'DELIVERY_PEER_NOT_READY'
+        ? 'peer-not-ready'
+        : message === 'DELIVERY_UNAVAILABLE'
+          ? 'update-required'
+          : 'message-error';
   }
   private async maintainKeys() {
     if (this.now() - this.keysCheckedAt >= 300000) {

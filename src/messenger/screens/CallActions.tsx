@@ -46,13 +46,13 @@ export function CallActions({
   onClose: () => void;
   onStarted?: (id: string) => void;
 }) {
-  const { engine, calls, mesh } = useDevice();
+  const { engine, calls, mesh, view } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const current = useCurrentCall();
   const contacts = useQuery({
     queryKey: ['device', 'contacts'],
-    queryFn: () => engine.contacts(),
+    queryFn: () => view.contacts(),
     networkMode: 'always',
   });
   const trusted = contacts.data?.some((item) => item.key === target.key && !item.blocked);
@@ -65,7 +65,9 @@ export function CallActions({
   function start(media: 'voice' | 'video') {
     void action.run(async () => {
       if (!calls || !available || current) return;
-      const id = await engine.trustContact({ key: target.key, name: target.name });
+      const saved = (await engine.contacts()).find((c) => c.key === target.key && !c.blocked);
+      if (!saved) return;
+      const id = await engine.trustContact(saved);
       await calls.start(target.key, media);
       onClose();
       if (onStarted) onStarted(id);
@@ -73,7 +75,11 @@ export function CallActions({
     });
   }
   return (
-    <ActionSheet visible title={target.name} onClose={onClose}>
+    <ActionSheet
+      visible
+      title={contacts.data?.find((c) => c.key === target.key)?.name ?? target.name}
+      onClose={onClose}
+    >
       <CurrentCall onNavigate={onClose} onOpen={onStarted} />
       {!available && <AppText tone="secondary">{t('messenger.callUnavailable')}</AppText>}
       <Button

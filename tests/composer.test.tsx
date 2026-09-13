@@ -27,6 +27,7 @@ const mockMesh = { focus: jest.fn(), online: jest.fn(() => false) };
 jest.mock('@/messenger/DeviceProvider', () => ({
   useDevice: () => ({
     engine: mockEngine,
+    view: mockEngine,
     calls: null,
     mesh: mockMesh,
     identity: { key: 'd'.repeat(64) },

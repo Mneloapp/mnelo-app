@@ -41,6 +41,7 @@ const mockMesh = {
 jest.mock('@/messenger/DeviceProvider', () => ({
   useDevice: () => ({
     engine: mockEngine,
+    view: mockEngine,
     identity: mockEngine.currentIdentity(),
     calls: mockCalls,
     mesh: mockMesh,

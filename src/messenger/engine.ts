@@ -733,6 +733,7 @@ export class DeviceMessenger {
     filter: ChatFilter = 'all',
     search = '',
     before?: ChatCursor,
+    displayTitle?: (chat: Chat) => string,
   ): Promise<{ rows: Chat[]; next: ChatCursor | undefined }> {
     await this.tail;
     const own = this.own().key;
@@ -764,7 +765,9 @@ export class DeviceMessenger {
       );
       for (const row of batch) {
         cursor = { activity: row.activity, id: row.id };
-        if (row.title.normalize('NFC').toLocaleLowerCase().includes(needle)) rows.push(row);
+        const title = displayTitle?.(row) ?? row.title;
+        if (title.normalize('NFC').toLocaleLowerCase().includes(needle))
+          rows.push({ ...row, title });
         if (rows.length === 40) return { rows, next: cursor };
       }
       if (batch.length < 100) return { rows, next: undefined };
@@ -800,7 +803,15 @@ export class DeviceMessenger {
   }
   async chat(id: string) {
     await this.tail;
-    return (await this.db.all<Chat>('SELECT * FROM chats WHERE id=?', id))[0] ?? null;
+    return (
+      (
+        await this.db.all<Chat>(
+          'SELECT c.*, (SELECT public_key FROM members WHERE chat_id=c.id AND public_key!=? LIMIT 1) AS peer FROM chats c WHERE id=?',
+          this.own().key,
+          id,
+        )
+      )[0] ?? null
+    );
   }
   async members(id: string) {
     await this.tail;

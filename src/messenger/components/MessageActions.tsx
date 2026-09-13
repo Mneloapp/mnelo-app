@@ -1,5 +1,5 @@
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { AppIcon, type IconName } from '@/components/AppIcon';
@@ -42,52 +42,54 @@ export function MessageActions({
   ];
   return (
     <Modal transparent visible onRequestClose={close} animationType="none">
-      <SafeAreaView style={styles.overlay} accessibilityViewIsModal onAccessibilityEscape={close}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          accessibilityRole="button"
-          accessibilityLabel={t('compose.close')}
-          onPress={close}
-        />
-        <ScrollView style={styles.menu} contentContainerStyle={styles.content} bounces={false}>
-          {message.body ? <AppText numberOfLines={2}>{message.body}</AppText> : null}
-          <View style={styles.reactions}>
-            {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.overlay} accessibilityViewIsModal onAccessibilityEscape={close}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            accessibilityRole="button"
+            accessibilityLabel={t('compose.close')}
+            onPress={close}
+          />
+          <ScrollView style={styles.menu} contentContainerStyle={styles.content} bounces={false}>
+            {message.body ? <AppText numberOfLines={2}>{message.body}</AppText> : null}
+            <View style={styles.reactions}>
+              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
+                <FocusPressable
+                  key={emoji}
+                  style={styles.reaction}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('messenger.reactWith', { emoji })}
+                  disabled={busy}
+                  onPress={() => react(emoji)}
+                >
+                  <AppText variant="headline">{emoji}</AppText>
+                </FocusPressable>
+              ))}
+            </View>
+            {actions.map((item) => (
               <FocusPressable
-                key={emoji}
-                style={styles.reaction}
+                key={item.icon}
+                style={styles.action}
                 accessibilityRole="button"
-                accessibilityLabel={t('messenger.reactWith', { emoji })}
+                onPress={item.onPress}
+                accessibilityLabel={item.label}
                 disabled={busy}
-                onPress={() => react(emoji)}
               >
-                <AppText variant="headline">{emoji}</AppText>
+                <AppIcon
+                  name={item.icon}
+                  color={item.icon === 'trash-2' ? theme.colors.error : theme.colors.black}
+                />
+                <AppText variant="bodyMedium" style={styles.label}>
+                  {item.label}
+                </AppText>
               </FocusPressable>
             ))}
-          </View>
-          {actions.map((item) => (
-            <FocusPressable
-              key={item.icon}
-              style={styles.action}
-              accessibilityRole="button"
-              onPress={item.onPress}
-              accessibilityLabel={item.label}
-              disabled={busy}
-            >
-              <AppIcon
-                name={item.icon}
-                color={item.icon === 'trash-2' ? theme.colors.error : theme.colors.black}
-              />
-              <AppText variant="bodyMedium" style={styles.label}>
-                {item.label}
-              </AppText>
-            </FocusPressable>
-          ))}
-          <AppText variant="caption" tone="secondary">
-            {new Date(message.sentAt).toLocaleString()}
-          </AppText>
-        </ScrollView>
-      </SafeAreaView>
+            <AppText variant="caption" tone="secondary">
+              {new Date(message.sentAt).toLocaleString()}
+            </AppText>
+          </ScrollView>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }

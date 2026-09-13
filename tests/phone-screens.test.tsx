@@ -54,7 +54,11 @@ const mockClient = {
   }),
 };
 jest.mock('@/messenger/DeviceProvider', () => ({
-  useDevice: () => ({ engine: mockEngine, identity: mockEngine.currentIdentity() }),
+  useDevice: () => ({
+    engine: mockEngine,
+    view: mockEngine,
+    identity: mockEngine.currentIdentity(),
+  }),
 }));
 jest.mock('@/messenger/phone-client', () => ({
   devicePhoneClient: () => mockClient,

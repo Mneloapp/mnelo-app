@@ -3,12 +3,14 @@ import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
-import { Avatar, Button, Field, Page, Section, ui } from '@/components/ui';
+import { Avatar, Field, IconButton, Page, Section, ui } from '@/components/ui';
 import { useDevice } from '../DeviceProvider';
 import { localProfile, profileName } from '../local-profile';
 import { useLocalAction } from './shared';
 import { pickProfilePhoto } from '../pick-profile-photo';
 import { avatarUri } from '../profile-avatar';
+import { SheetAction } from '@/components/SheetAction';
+import { InfoGroup, infoStyles } from '../components/ContactInfo';
 
 export function EditProfileScreen() {
   const { engine, profile } = useDevice();
@@ -18,13 +20,34 @@ export function EditProfileScreen() {
   const [photoError, setPhotoError] = useState(false);
   const valid = localProfile.safeParse(draft).success;
   return (
-    <Page title={t('profile.edit')} back nativeKeyboardInsets>
+    <Page
+      title={t('profile.edit')}
+      back
+      nativeKeyboardInsets
+      right={
+        <IconButton
+          icon="check"
+          variant="accent"
+          label={t('common.save')}
+          disabled={!valid}
+          busy={action.busy}
+          onPress={() =>
+            void action.run(async () => {
+              await engine.saveProfile(draft);
+              router.back();
+            })
+          }
+        />
+      }
+    >
       <View style={[ui.center, ui.stack]}>
         <Avatar name={profileName(draft)} uri={avatarUri(draft.avatar)} size="large" />
-        <Button
-          variant="secondary"
+      </View>
+      <InfoGroup>
+        <SheetAction
+          icon="camera"
           label={t(draft.avatar ? 'card.changePhoto' : 'card.addPhoto')}
-          busy={action.busy}
+          disabled={action.busy}
           onPress={() =>
             void action.run(async () => {
               setPhotoError(false);
@@ -38,16 +61,18 @@ export function EditProfileScreen() {
           }
         />
         {draft.avatar ? (
-          <Button
-            variant="danger"
+          <SheetAction
+            icon="trash-2"
+            danger
             label={t('card.removePhoto')}
             disabled={action.busy}
             onPress={() => setDraft((value) => ({ ...value, avatar: '' }))}
           />
         ) : null}
         {photoError && <AppText accessibilityRole="alert">{t('card.photoError')}</AppText>}
-      </View>
+      </InfoGroup>
       <Field
+        style={infoStyles.field}
         label={t('messenger.username')}
         value={draft.username}
         hint={t('messenger.usernameHint')}
@@ -65,6 +90,7 @@ export function EditProfileScreen() {
         }
       />
       <Field
+        style={infoStyles.field}
         label={t('messenger.firstName')}
         value={draft.firstName}
         maxLength={60}
@@ -74,6 +100,7 @@ export function EditProfileScreen() {
         onChangeText={(firstName) => setDraft((current) => ({ ...current, firstName }))}
       />
       <Field
+        style={infoStyles.field}
         label={t('messenger.lastName')}
         value={draft.lastName}
         maxLength={60}
@@ -84,6 +111,7 @@ export function EditProfileScreen() {
       />
       <Section title={t('card.optional')}>
         <Field
+          style={infoStyles.field}
           label={t('card.headline')}
           placeholder={t('card.headlinePlaceholder')}
           value={draft.headline}
@@ -92,6 +120,7 @@ export function EditProfileScreen() {
           onChangeText={(headline) => setDraft((value) => ({ ...value, headline }))}
         />
         <Field
+          style={infoStyles.field}
           label={t('card.about')}
           placeholder={t('card.aboutPlaceholder')}
           value={draft.about}
@@ -101,6 +130,7 @@ export function EditProfileScreen() {
           onChangeText={(about) => setDraft((value) => ({ ...value, about }))}
         />
         <Field
+          style={infoStyles.field}
           label={t('card.email')}
           value={draft.email}
           keyboardType="email-address"
@@ -111,6 +141,7 @@ export function EditProfileScreen() {
           onChangeText={(email) => setDraft((value) => ({ ...value, email }))}
         />
         <Field
+          style={infoStyles.field}
           label={t('card.website')}
           value={draft.website}
           keyboardType="url"
@@ -125,17 +156,7 @@ export function EditProfileScreen() {
         {t('card.detailsHint')}
       </AppText>
       {!valid && <AppText>{t('card.invalidDetails')}</AppText>}
-      <Button
-        label={t('common.save')}
-        disabled={!valid}
-        busy={action.busy}
-        onPress={() =>
-          void action.run(async () => {
-            await engine.saveProfile(draft);
-            router.back();
-          })
-        }
-      />
+
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
     </Page>
   );

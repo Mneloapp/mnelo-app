@@ -24,7 +24,11 @@ export function SheetAction({
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
-      style={styles.row}
+      style={({ pressed }) => [
+        styles.row,
+        disabled && styles.disabled,
+        pressed && !disabled && styles.pressed,
+      ]}
     >
       <View style={styles.icon}>
         <AppIcon name={icon} color={danger ? theme.colors.error : theme.colors.textPrimary} />
@@ -34,6 +38,8 @@ export function SheetAction({
   );
 }
 const styles = StyleSheet.create({
+  disabled: { opacity: 0.4 },
+  pressed: { opacity: 0.65 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

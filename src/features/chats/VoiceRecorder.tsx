@@ -14,16 +14,20 @@ import { Button, ui } from '@/components/ui';
 import { useAction } from '@/hooks/useAction';
 import { AudioPlayback } from './AudioPlayback';
 import { discardCachedMedia, type SelectedMedia } from './media-files';
+import { VoiceRecordingPanel } from './VoiceRecordingPanel';
+import { MAX_VOICE_SAMPLES, VOICE_METER_INTERVAL, voiceLevel } from './voice-waveform';
 export function VoiceRecorder({
   onReady,
   disabled = false,
   autoStart = false,
   onCancel,
+  onSend,
 }: {
   onReady: (file: SelectedMedia | null) => void;
   disabled?: boolean;
   autoStart?: boolean;
   onCancel?: () => void;
+  onSend?: () => void;
 }) {
   const { t } = useTranslation();
   const [uri, setUri] = useState<string | null>(null);
@@ -33,6 +37,9 @@ export function VoiceRecorder({
   const lastDuration = useRef(0);
   const cancelling = useRef(false);
   const mounted = useRef(true);
+  const samples = useRef<number[]>([]);
+  const [previewWaveform, setPreviewWaveform] = useState<number[]>([]);
+  const lastSampleTime = useRef(-1);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -41,7 +48,12 @@ export function VoiceRecorder({
     };
   }, []);
   const recorder = useAudioRecorder(
-    { ...RecordingPresets.HIGH_QUALITY, numberOfChannels: 1, bitRate: 64000 },
+    {
+      ...RecordingPresets.HIGH_QUALITY,
+      numberOfChannels: 1,
+      bitRate: 64000,
+      isMeteringEnabled: true,
+    },
     (event) => {
       if (!mounted.current) {
         if (event.url) discardCachedMedia(event.url);
@@ -60,6 +72,7 @@ export function VoiceRecorder({
         if (event.url && !event.hasError) {
           setRecordedMillis((previous) => Math.max(previous, lastDuration.current));
           setUri(event.url);
+          setPreviewWaveform(samples.current.slice());
           onReady({
             uri: event.url,
             name: 'voice.m4a',
@@ -70,12 +83,20 @@ export function VoiceRecorder({
       }
     },
   );
-  const status = useAudioRecorderState(recorder, 250);
+  const status = useAudioRecorderState(recorder, VOICE_METER_INTERVAL);
+  const [levels, setLevels] = useState<number[]>([]);
   useEffect(() => {
     // Android clears its native duration on stop. Keep the observed recording duration
     // for the preview, including automatic/background stops between polling ticks.
-    if (status.isRecording) lastDuration.current = status.durationMillis;
-  }, [status.isRecording, status.durationMillis]);
+    if (!status.isRecording) return;
+    lastDuration.current = status.durationMillis;
+    if (status.durationMillis <= lastSampleTime.current) return;
+    lastSampleTime.current = status.durationMillis;
+    if (samples.current.length < MAX_VOICE_SAMPLES)
+      samples.current.push(voiceLevel(status.metering));
+    // Only the short rolling window redraws while recording; full draft data stays local in memory.
+    setLevels(samples.current.slice(-56));
+  }, [status.isRecording, status.durationMillis, status.metering]);
   const a = useAction();
   const focused = useIsFocused();
   useEffect(() => {
@@ -103,6 +124,10 @@ export function VoiceRecorder({
     cancelling.current = false;
     setRecordedMillis(0);
     lastDuration.current = 0;
+    samples.current = [];
+    lastSampleTime.current = -1;
+    setLevels([]);
+    setPreviewWaveform([]);
     await setAudioModeAsync({
       allowsRecording: true,
       playsInSilentMode: true,
@@ -129,37 +154,38 @@ export function VoiceRecorder({
   return (
     <View style={ui.stack}>
       {!autoStart && <AppText variant="bodyMedium">{t('chat.voiceMessage')}</AppText>}
-      <AppText>
-        {t('media.recordedTime', {
-          seconds: Math.floor((status.isRecording ? status.durationMillis : recordedMillis) / 1000),
-        })}
-      </AppText>
-      {uri ? (
-        <AudioPlayback uri={uri} durationSeconds={recordedMillis / 1000} />
-      ) : (
-        <Button
-          label={t(status.isRecording ? 'media.stop' : 'media.record')}
-          busy={a.busy}
-          disabled={disabled}
-          onPress={() =>
-            void a.run(async () => {
-              if (status.isRecording) {
-                const elapsed = recorder.getStatus().durationMillis;
-                lastDuration.current = Math.max(lastDuration.current, elapsed);
-                setRecordedMillis((previous) => Math.max(previous, elapsed));
-                await recorder.stop();
-                return;
-              }
-              await startRecording();
-            })
-          }
-        />
-      )}
-      <Button
-        variant="secondary"
-        label={t(autoStart ? 'common.delete' : 'common.cancel')}
-        disabled={disabled || a.busy}
-        onPress={() =>
+      <VoiceRecordingPanel
+        samples={levels}
+        seconds={(status.isRecording ? status.durationMillis : recordedMillis) / 1000}
+        recording={status.isRecording}
+        preparing={a.busy}
+        disabled={disabled}
+        ready={Boolean(uri)}
+        deleteLabel={t(autoStart ? 'common.delete' : 'common.cancel')}
+        onSend={onSend}
+        preview={
+          uri ? (
+            <AudioPlayback
+              uri={uri}
+              durationSeconds={recordedMillis / 1000}
+              waveform={previewWaveform}
+              disabled={disabled || a.busy}
+            />
+          ) : undefined
+        }
+        onToggle={() =>
+          void a.run(async () => {
+            if (status.isRecording) {
+              const elapsed = recorder.getStatus().durationMillis;
+              lastDuration.current = Math.max(lastDuration.current, elapsed);
+              setRecordedMillis((previous) => Math.max(previous, elapsed));
+              await recorder.stop();
+              return;
+            }
+            await startRecording();
+          })
+        }
+        onDelete={() =>
           void a.run(async () => {
             cancelling.current = true;
             if (status.isRecording) await recorder.stop();
@@ -167,6 +193,10 @@ export function VoiceRecorder({
             setUri(null);
             setRecordedMillis(0);
             lastDuration.current = 0;
+            samples.current = [];
+            lastSampleTime.current = -1;
+            setLevels([]);
+            setPreviewWaveform([]);
             onReady(null);
             await setAudioModeAsync({ allowsRecording: false });
             onCancel?.();

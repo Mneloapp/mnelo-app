@@ -11,7 +11,15 @@ import { safeWebsite, type LocalProfile } from '../local-profile';
 import { avatarUri } from '../profile-avatar';
 import { useLocalAction } from '../screens/shared';
 
-export const PeerAvatar = memo(function PeerAvatar({ peer, name }: { peer: string; name: string }) {
+export const PeerAvatar = memo(function PeerAvatar({
+  peer,
+  name,
+  size,
+}: {
+  peer: string;
+  name: string;
+  size?: 'small' | 'large';
+}) {
   const { engine } = useDevice();
   const query = useQuery({
     queryKey: ['device', 'contact-profile', peer],
@@ -19,7 +27,7 @@ export const PeerAvatar = memo(function PeerAvatar({ peer, name }: { peer: strin
     networkMode: 'always',
     staleTime: Infinity,
   });
-  return <Avatar name={name} uri={avatarUri(query.data?.avatar ?? '')} />;
+  return <Avatar name={name} uri={avatarUri(query.data?.avatar ?? '')} size={size ?? 'normal'} />;
 });
 export function ContactCard({
   name,

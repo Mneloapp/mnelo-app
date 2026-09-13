@@ -1,6 +1,6 @@
 # Physical-test correction tracker — September 13
 
-The owner reported the initial issues on build 9 and additional UI issues while only one phone had build 11. The latest corrections are included in TestFlight **0.1.0 (12)**: internal testing is available and external Beta App Review is pending. Neither phone has been confirmed on build 12 yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
+The owner reported the initial issues on build 9 and additional UI issues while only one phone had build 11. The preceding corrections are included in TestFlight **0.1.0 (12)**: internal testing is available and external Beta App Review is pending. Neither phone has been confirmed on build 12 yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
 
 | Reported issue                                 | Implemented change                                                                                                          | Actual verification / remaining check                                                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -21,6 +21,18 @@ The owner reported the initial issues on build 9 and additional UI issues while 
 Build 10 is signed for the two paired phones, with no uninstall or data reset. Source and server work is preserved in Git. The owner has authorized AGPL source distribution. Public binary distribution still requires corresponding-source/store compliance, complete key rotation/recovery and physical acceptance; the existence of a compiled build is not a public-release recommendation.
 
 Build 11 is a standalone App Store-signed TestFlight candidate using the existing hosted preview services and encrypted delivery. Both participants must update in place before testing. Do not delete Mnelo, downgrade a migrated vault or use backup restore as a workaround. Follow the table above, including sender-offline delivery, cross-network calls, background/locked-screen notifications and photo/QR acceptance. Build and Apple availability evidence is in [BUILD_LOG.md](BUILD_LOG.md); a successful archive is not proof that an external tester has access.
+
+## Follow-up source changes after build 12 — not yet uploaded
+
+Voice recording now uses native microphone metering for a bounded, local waveform, compact timer and Mnelo-colored controls. Stopping retains the waveform and recording for playback, delete or send. Playback pauses during send/delete; a late audio response cannot restart playback after leaving the screen or disabling the preview. No transcription, AI processing or waveform upload is added.
+
+Chat header name/avatar opens the Contact info route; the three-dot sheet is removed. The page shows the permission-respecting local contact name, known number/photo, message/voice/video actions, identity details and clear/block actions with separate destructive confirmation. Returning to the conversation does not overwrite the protocol name. Group titles open group details, where local-history clearing remains available.
+
+Call actions, QR sharing and profile-photo actions use compact icon rows. Profile Save is in the header. QR explanatory copy no longer tells both people to scan each other. The shared action-sheet scrim remains stationary while only the opaque panel shifts 24 points; its native whole-screen slide is removed. Compose routes use normal page navigation instead of iOS modal card scaling. Reduced Motion and outside-tap dismissal are retained.
+
+Verification: `npm run check` PASS — 320 Jest tests / 65 suites, 3 server tests, 132 device/protocol tests (455 total), TypeScript, lint, formatting, localization/security/environment and brand checks. iOS and Android Hermes exports PASS with dotenv disabled in the local diagnostic environment; these are not signed release archives. React Native Web component fixtures checked at 393×852 and 320×640 in EN/KA, including recording/preview, name navigation, call-sheet dismissal and no horizontal overflow. Screenshots are synthetic local fixtures, not evidence of native microphone or device acceptance.
+
+Physical follow-up: microphone permission, silence/speech waveform response, stop/listen/delete/send, interrupted/background recording, Dynamic Type and Bold Text, contact-page back navigation, repeated sheet opening/closing, and QR/profile navigation on both phones. The immutable `ios-0.1.0-12` source/archive and pending Apple review are unchanged. These newer source changes require the next TestFlight build.
 
 ## Build 12 follow-up acceptance
 

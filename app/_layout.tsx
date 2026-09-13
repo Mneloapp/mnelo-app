@@ -29,7 +29,7 @@ function Navigator() {
         </Stack.Protected>
         <Stack.Protected guard={authenticated}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="(compose)" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="(compose)" options={{ presentation: 'card' }} />
           <Stack.Screen name="phone" />
           <Stack.Screen name="chat/[id]" />
           <Stack.Screen name="group/[id]" />

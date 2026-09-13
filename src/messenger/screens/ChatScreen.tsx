@@ -27,7 +27,7 @@ import { useVisibleRead } from '../useVisibleRead';
 import { callOutcomeCopy, readCallRecord } from '../call-record';
 import { MessageTimeReveal } from '../components/MessageMetadata';
 import { MessageBubble } from '../components/MessageBubble';
-import { ChatOptions } from '../components/ChatOptions';
+import { PeerAvatar } from '../components/ContactCard';
 import { ChatPhoto } from '../components/ChatPhoto';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
@@ -194,7 +194,6 @@ export function ChatScreen() {
   const [attachments, setAttachments] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voice, setVoice] = useState<SelectedMedia | null>(null);
-  const [clear, setClear] = useState(false);
   const chat = useQuery({
     queryKey: ['device', 'chat', id],
     queryFn: () => view.chat(id),
@@ -245,6 +244,19 @@ export function ChatScreen() {
     <Page
       title={chat.data?.title ?? t('tabs.chats')}
       avatarName={chat.data?.title}
+      avatar={
+        chat.data?.kind === 'direct' && remote ? (
+          <PeerAvatar peer={remote.key} name={chat.data.title} size="small" />
+        ) : undefined
+      }
+      titleActionLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}
+      onTitlePress={
+        chat.data?.kind === 'group'
+          ? () => router.push({ pathname: '/group/[id]', params: { id } })
+          : remote
+            ? () => router.push({ pathname: '/contact/[key]', params: { key: remote.key } })
+            : undefined
+      }
       titleLines={1}
       headerStyle={styles.chatHeader}
       back
@@ -272,11 +284,6 @@ export function ChatScreen() {
               />
             </>
           )}
-          <IconButton
-            icon="more-horizontal"
-            label={t('common.more')}
-            onPress={() => setClear(true)}
-          />
         </View>
       }
     >
@@ -346,18 +353,12 @@ export function ChatScreen() {
             autoStart
             onReady={setVoice}
             disabled={action.busy}
+            onSend={() => void action.run(() => sendFile(voice, 'voice'))}
             onCancel={() => {
               setRecording(false);
               setVoice(null);
             }}
           />
-          {voice && (
-            <Button
-              label={t('common.send')}
-              busy={action.busy}
-              onPress={() => void action.run(() => sendFile(voice, 'voice'))}
-            />
-          )}
         </View>
       ) : (
         <View style={ui.row}>
@@ -546,42 +547,6 @@ export function ChatScreen() {
         />
         {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
       </ActionSheet>
-      <ChatOptions
-        visible={clear}
-        busy={action.busy}
-        close={() => setClear(false)}
-        onContact={
-          remote && chat.data?.kind === 'direct'
-            ? () => {
-                setClear(false);
-                router.push({ pathname: '/contact/[key]', params: { key: remote.key } });
-              }
-            : undefined
-        }
-        onGroup={
-          chat.data?.kind === 'group'
-            ? () => {
-                setClear(false);
-                router.push({ pathname: '/group/[id]', params: { id } });
-              }
-            : undefined
-        }
-        onClear={() =>
-          void action.run(async () => {
-            await engine.clearLocalHistory(id);
-            setClear(false);
-          })
-        }
-        onBlock={
-          remote && chat.data?.kind === 'direct'
-            ? () =>
-                void action.run(async () => {
-                  await engine.block(remote.key);
-                  setClear(false);
-                })
-            : undefined
-        }
-      />
     </Page>
   );
 }

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, act, waitFor } from '@testing-library/react-
 import { ContactInvitationScreen } from '@/messenger/screens/ContactProfileScreen';
 import { setInvitation } from '@/messenger/pending-invitation';
 const mockTrust = jest.fn(async () => 'chat');
+jest.mock('@/messenger/crypto', () => ({ directChatId: () => 'direct-chat' }));
 const mockContacts = jest.fn(async () => []);
 let mockAuthenticated = false;
 jest.mock('@react-native-community/netinfo', () =>

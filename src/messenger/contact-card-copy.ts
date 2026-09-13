@@ -1,5 +1,9 @@
 export const cardEn = {
   title: 'My card',
+  info: 'Contact info',
+  blockHint: 'You won’t receive messages or calls from this contact. You can unblock them here.',
+  historyCleared: 'History cleared from this device.',
+  identityDetails: 'Profile details',
   view: 'Contact card',
   edit: 'Edit profile',
   scan: 'Scan QR code',
@@ -21,7 +25,7 @@ export const cardEn = {
   detailsHint:
     'Optional. These details and your photo are shared with contacts you have added, when you connect. They can keep their copy.',
   privateHint: 'Your card stays on devices. Your QR shares only your name and Mnelo identity.',
-  qrHint: 'Let someone scan this to add you. Scan their code too, so you can both connect.',
+  qrHint: 'Let someone scan this to add you on Mnelo.',
   scanHint: 'Scan the QR code on the other person’s Mnelo card.',
   scanPrivacy: 'The camera is used only to read a Mnelo QR code. No photo is saved.',
   camera: 'Open camera',
@@ -55,6 +59,10 @@ export const cardEn = {
 } as const;
 export const cardKa: Record<keyof typeof cardEn, string> = {
   title: 'ჩემი ბარათი',
+  info: 'კონტაქტის ინფორმაცია',
+  blockHint: 'ამ კონტაქტის შეტყობინებებსა და ზარებს აღარ მიიღებ. განბლოკვა აქვე შეგიძლია.',
+  historyCleared: 'ისტორია ამ მოწყობილობიდან წაიშალა.',
+  identityDetails: 'პროფილის ინფორმაცია',
   view: 'კონტაქტის ბარათი',
   edit: 'პროფილის შეცვლა',
   scan: 'QR-ის სკანირება',
@@ -77,8 +85,7 @@ export const cardKa: Record<keyof typeof cardEn, string> = {
   detailsHint:
     'არასავალდებულო. ფოტო და ეს ინფორმაცია შენს დამატებულ კონტაქტებს დაკავშირებისას გადაეცემა. მათ საკუთარი ასლის შენახვა შეუძლიათ.',
   privateHint: 'ბარათი მოწყობილობებზე რჩება. QR მხოლოდ სახელსა და Mnelo იდენტობას აზიარებს.',
-  qrHint:
-    'სხვამ ეს კოდი დაასკანეროს შენ დასამატებლად. შენც დაასკანერე მისი კოდი, რომ ორივემ შეძლოთ დაკავშირება.',
+  qrHint: 'შენ დასამატებლად სხვამ ეს კოდი Mnelo-თი დაასკანეროს.',
   scanHint: 'დაასკანერე მეორე ადამიანის Mnelo ბარათის QR კოდი.',
   scanPrivacy: 'კამერა მხოლოდ Mnelo კოდის წასაკითხად გამოიყენება. ფოტო არ ინახება.',
   camera: 'კამერის გახსნა',

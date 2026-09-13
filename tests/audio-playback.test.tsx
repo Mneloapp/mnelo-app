@@ -65,3 +65,25 @@ test('a private voice message shows its known duration before downloading audio'
   expect(screen.getByText('0 / 66 seconds')).toBeTruthy();
   expect(mockPlayer.replace).not.toHaveBeenCalled();
 });
+test('sending or deleting a draft stops preview playback and rejects a late audio response', async () => {
+  let resolve!: (uri: string) => void;
+  const source = () =>
+    new Promise<string>((done) => {
+      resolve = done;
+    });
+  const props = {
+    uri: 'unused',
+    resolveUri: source,
+    waveform: [0.1, 0.8, 0.2],
+    durationSeconds: 65,
+  };
+  const view = await render(<AudioPlayback {...props} />);
+  expect(screen.getByText('1:05')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Play' }));
+  await view.rerender(<AudioPlayback {...props} disabled />);
+  await act(() => resolve('file:///draft.m4a'));
+  expect(mockPlayer.pause).toHaveBeenCalled();
+  expect(mockPlayer.play).not.toHaveBeenCalled();
+  expect(mockPlayer.replace).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Play' })).toBeDisabled();
+});

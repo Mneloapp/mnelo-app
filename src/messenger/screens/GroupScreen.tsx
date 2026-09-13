@@ -6,6 +6,7 @@ import { Avatar, Button, Field, Page, Row, StateView } from '@/components/ui';
 import { AppText } from '@/components/AppText';
 import { useDevice } from '../DeviceProvider';
 import { Check, useLocalAction } from './shared';
+import { ChatPrivacyActions } from '../components/ContactInfo';
 export function GroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { engine, identity, view } = useDevice();
@@ -88,6 +89,10 @@ export function GroupScreen() {
           )}
         </>
       )}
+      <ChatPrivacyActions
+        busy={action.busy}
+        onClear={() => void action.run(() => engine.clearLocalHistory(id))}
+      />
       <StateView
         loading={members.isPending}
         error={action.error ?? (members.isError ? t('messenger.genericError') : undefined)}

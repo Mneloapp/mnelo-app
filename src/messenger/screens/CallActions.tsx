@@ -1,4 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
+import { Alert } from 'react-native';
+import { SheetAction } from '@/components/SheetAction';
 import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +13,7 @@ import { useLocalAction } from './shared';
 
 const noSubscribe = () => () => {};
 const noCall = () => null;
-function useCurrentCall() {
+export function useCurrentCall() {
   const { calls } = useDevice();
   const call = useSyncExternalStore(calls?.subscribe ?? noSubscribe, calls?.snapshot ?? noCall);
   return call && !['ended', 'failed'].includes(call.status) ? call : null;
@@ -82,47 +84,53 @@ export function CallActions({
     >
       <CurrentCall onNavigate={onClose} onOpen={onStarted} />
       {!available && <AppText tone="secondary">{t('messenger.callUnavailable')}</AppText>}
-      <Button
+      <SheetAction
+        icon="phone"
         label={t('messenger.callVoice')}
-        disabled={!available || Boolean(current)}
-        busy={action.busy}
+        disabled={!available || Boolean(current) || action.busy}
         onPress={() => start('voice')}
       />
-      <Button
-        variant="secondary"
+      <SheetAction
+        icon="video"
         label={t('messenger.callVideo')}
-        disabled={!available || Boolean(current)}
-        busy={action.busy}
+        disabled={!available || Boolean(current) || action.busy}
         onPress={() => start('video')}
       />
       {target.history && (
         <>
-          <Button
-            variant="secondary"
+          <SheetAction
+            icon="message-circle"
+            disabled={action.busy}
             label={t('messenger.callOpenChat')}
             onPress={() => {
               onClose();
               router.push({ pathname: '/chat/[id]', params: { id: target.history!.chatId } });
             }}
           />
-          <AppText variant="caption" tone="secondary">
-            {t('messenger.callHistoryDeleteHint')}
-          </AppText>
-          <Button
-            variant="danger"
+          <SheetAction
+            icon="trash-2"
+            danger
             label={t('messenger.callHistoryDelete')}
-            busy={action.busy}
+            disabled={action.busy}
             onPress={() =>
-              void action.run(async () => {
-                await engine.deleteLocalMessage(target.history!.id);
-                onClose();
-              })
+              Alert.alert(t('messenger.callHistoryDelete'), t('messenger.callHistoryDeleteHint'), [
+                { text: t('common.cancel'), style: 'cancel' },
+                {
+                  text: t('messenger.callHistoryDelete'),
+                  style: 'destructive',
+                  onPress: () =>
+                    void action.run(async () => {
+                      await engine.deleteLocalMessage(target.history!.id);
+                      onClose();
+                    }),
+                },
+              ])
             }
           />
         </>
       )}
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
-      <Button variant="secondary" label={t('common.cancel')} onPress={onClose} />
+      <SheetAction icon="x" label={t('common.cancel')} onPress={onClose} />
     </ActionSheet>
   );
 }

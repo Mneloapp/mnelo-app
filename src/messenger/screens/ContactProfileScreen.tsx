@@ -1,4 +1,5 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +12,17 @@ import { emptyProfile } from '../local-profile';
 import { peerKey } from '../model';
 import { Check, useLocalAction } from './shared';
 import type { ContactInvitation } from '../contact-link';
+import { SheetAction } from '@/components/SheetAction';
+import {
+  ContactHero,
+  ContactAction,
+  ChatPrivacyActions,
+  InfoGroup,
+  infoStyles,
+} from '../components/ContactInfo';
+import { avatarUri } from '../profile-avatar';
+import { directChatId } from '../crypto';
+import { CurrentCall, useCurrentCall } from './CallActions';
 
 export function ContactInvitationScreen() {
   const invitation = useSyncExternalStore(
@@ -81,51 +93,122 @@ function InvitationPreview({ invitation }: { invitation: ContactInvitation | nul
 }
 export function ContactProfileScreen() {
   const { key } = useLocalSearchParams<{ key: string }>();
-  const { engine, view } = useDevice();
+  const { engine, view, identity, calls, mesh } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
+  const currentCall = useCurrentCall();
+  const [details, setDetails] = useState(false);
+  const [cleared, setCleared] = useState(false);
   const q = useQuery({
     queryKey: ['device', 'contact-card', key],
     enabled: peerKey.safeParse(key).success,
     networkMode: 'always',
     queryFn: async () => {
-      const contact = (await view.contacts()).find((row) => row.key === key && !row.blocked);
+      const contact = (await view.contacts()).find((row) => row.key === key);
       if (!contact) throw new Error('CONTACT_UNAVAILABLE');
       return { contact, profile: await engine.contactProfile(key) };
     },
   });
+  const contact = q.data?.contact;
+  const profile = q.data?.profile;
+  const chatId = identity && contact ? directChatId(identity.key, contact.key) : null;
+  const canCall = Boolean(
+    contact &&
+    !contact.blocked &&
+    calls &&
+    !currentCall &&
+    (calls.supportsQueuedSignaling || mesh?.online(key)),
+  );
+  useEffect(() => {
+    if (contact && !contact.blocked) void mesh?.focus(contact.key).catch(() => undefined);
+  }, [contact, mesh]);
+  function open(media?: 'voice' | 'video') {
+    void action.run(async () => {
+      if (!chatId || !(await engine.acceptsPeer(key))) return;
+      if (media) {
+        if (!calls || !canCall) return;
+        await calls.start(key, media);
+        router.push({ pathname: '/call/[id]', params: { id: chatId } });
+      } else {
+        router.dismissTo({ pathname: '/chat/[id]', params: { id: chatId } });
+      }
+    });
+  }
   return (
-    <Page title={t('card.view')} back>
-      {q.data ? (
+    <Page title={t('card.info')} back>
+      {contact ? (
         <>
-          <ContactCard name={q.data.contact.name} profile={q.data.profile ?? emptyProfile()} />
-          {q.data.profile ? (
-            <CardDetails profile={q.data.profile} />
-          ) : (
-            <AppText tone="secondary">{t('card.noCard')}</AppText>
-          )}
-          <Button
-            label={t('card.message')}
-            onPress={() =>
+          <ContactHero
+            name={contact.name}
+            uri={avatarUri(profile?.avatar ?? '')}
+            subtitle={contact.phone || (profile?.username ? '@' + profile.username : undefined)}
+            about={profile?.headline}
+          />
+          <CurrentCall />
+          <View style={infoStyles.actions}>
+            <ContactAction
+              icon="message-circle"
+              label={t('card.message')}
+              disabled={action.busy || contact.blocked || !chatId}
+              onPress={() => open()}
+            />
+            <ContactAction
+              icon="phone"
+              label={t('messenger.callVoice')}
+              disabled={action.busy || !canCall}
+              onPress={() => open('voice')}
+            />
+            <ContactAction
+              icon="video"
+              label={t('messenger.callVideo')}
+              disabled={action.busy || !canCall}
+              onPress={() => open('video')}
+            />
+          </View>
+          {profile?.about ? (
+            <InfoGroup>
+              <AppText>{profile.about}</AppText>
+            </InfoGroup>
+          ) : null}
+          {profile && (profile.email || profile.website) ? (
+            <InfoGroup>
+              <CardDetails profile={profile} />
+            </InfoGroup>
+          ) : null}
+          <InfoGroup>
+            <SheetAction
+              icon="shield"
+              label={t('card.key')}
+              onPress={() => setDetails((value) => !value)}
+            />
+            {details && (
+              <AppText selectable variant="caption" tone="secondary">
+                {key}
+              </AppText>
+            )}
+          </InfoGroup>
+          <ChatPrivacyActions
+            busy={action.busy || !chatId}
+            blocked={contact.blocked}
+            onClear={() =>
               void action.run(async () => {
-                if (!(await engine.acceptsPeer(key))) throw new Error('CONTACT_BLOCKED');
-                const saved = (await engine.contacts()).find((c) => c.key === key && !c.blocked);
-                if (!saved) return;
-                const id = await engine.trustContact(saved);
-                router.push({ pathname: '/chat/[id]', params: { id } });
+                if (!chatId) return;
+                await engine.clearLocalHistory(chatId);
+                setCleared(true);
+              })
+            }
+            onBlock={() =>
+              void action.run(async () => {
+                await engine.block(key, !contact.blocked);
+                await q.refetch();
               })
             }
           />
-          <Button
-            variant="secondary"
-            label={t('card.qr')}
-            onPress={() => router.push('/my-code')}
-          />
-          <Section title={t('card.key')}>
-            <AppText selectable variant="caption">
-              {key}
+          {cleared && (
+            <AppText variant="caption" tone="secondary" accessibilityLiveRegion="polite">
+              {t('card.historyCleared')}
             </AppText>
-          </Section>
+          )}
         </>
       ) : (
         <StateView

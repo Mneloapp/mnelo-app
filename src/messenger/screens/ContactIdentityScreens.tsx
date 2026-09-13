@@ -10,7 +10,10 @@ import { peerKey } from '../model';
 import { Check, useLocalAction } from './shared';
 import { useComposer } from './composer-navigation';
 import { ContactQR } from '../components/ContactQR';
-import { ContactCard, CardDetails, cardStyles } from '../components/ContactCard';
+import { cardStyles } from '../components/ContactCard';
+import { SheetAction } from '@/components/SheetAction';
+import { ContactHero, InfoGroup } from '../components/ContactInfo';
+import { avatarUri } from '../profile-avatar';
 import { contactLink } from '../contact-link';
 
 export function ContactCodeScreen() {
@@ -75,51 +78,70 @@ export function MyCodeScreen() {
   const { t } = useTranslation();
   const action = useLocalAction();
   const [copied, setCopied] = useState(false);
+  const [details, setDetails] = useState(false);
   return (
     <Page nativeHeader>
       {identity && (
         <>
-          <ContactCard name={identity.name} profile={profile} />
+          <ContactHero
+            name={identity.name}
+            uri={avatarUri(profile.avatar)}
+            subtitle={profile.username ? '@' + profile.username : undefined}
+          />
           <View style={cardStyles.card}>
             <ContactQR value={contactLink(identity)} label={t('card.qr')} />
             <AppText centered variant="caption" tone="secondary">
               {t('card.qrHint')}
             </AppText>
           </View>
-          <Button
-            label={t('card.share')}
-            onPress={() =>
-              void action.run(async () => {
-                await Share.share({
-                  message: t('card.invitation', { link: contactLink(identity) }),
-                });
-              })
-            }
-          />
-          <Button
-            variant="secondary"
-            label={copied ? t('card.copied') : t('card.copy')}
-            onPress={() =>
-              void action.run(async () => {
-                await Clipboard.setStringAsync(contactLink(identity));
-                setCopied(true);
-              })
-            }
-          />
-          <Button
-            variant="secondary"
-            label={t('card.scan')}
-            onPress={() => router.push('/scan-contact')}
-          />
-          <CardDetails profile={profile} />
+          <InfoGroup>
+            <SheetAction
+              icon="share"
+              disabled={action.busy}
+              label={t('card.share')}
+              onPress={() =>
+                void action.run(async () => {
+                  await Share.share({
+                    message: t('card.invitation', { link: contactLink(identity) }),
+                  });
+                })
+              }
+            />
+            <SheetAction
+              icon={copied ? 'check' : 'link'}
+              disabled={action.busy}
+              label={copied ? t('card.copied') : t('card.copy')}
+              onPress={() =>
+                void action.run(async () => {
+                  await Clipboard.setStringAsync(contactLink(identity));
+                  setCopied(true);
+                })
+              }
+            />
+            <SheetAction
+              icon="maximize"
+              disabled={action.busy}
+              label={t('card.scan')}
+              onPress={() => router.push('/scan-contact')}
+            />
+          </InfoGroup>
           <AppText variant="caption" tone="secondary">
             {t('card.privateHint')}
           </AppText>
-          <Section title={t('card.key')}>
-            <AppText selectable variant="caption">
-              {'mnelo1:' + identity.key}
-            </AppText>
-          </Section>
+          <InfoGroup>
+            <SheetAction
+              icon="shield"
+              label={t('card.key')}
+              onPress={() => setDetails((value) => !value)}
+            />
+            {details && (
+              <Section title={t('card.key')}>
+                <AppText selectable variant="caption">
+                  {'mnelo1:' + identity.key}
+                </AppText>
+              </Section>
+            )}
+          </InfoGroup>
           {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
         </>
       )}

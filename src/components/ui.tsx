@@ -37,6 +37,9 @@ export function Page({
   contentStyle,
   headerStyle,
   avatarName,
+  avatar,
+  onTitlePress,
+  titleActionLabel,
   nativeHeader = false,
   nativeKeyboardInsets = false,
   showDevelopmentNotice = true,
@@ -53,6 +56,9 @@ export function Page({
   contentStyle?: StyleProp<ViewStyle>;
   headerStyle?: StyleProp<ViewStyle>;
   avatarName?: string | undefined;
+  avatar?: ReactNode;
+  onTitlePress?: (() => void) | undefined;
+  titleActionLabel?: string | undefined;
 }>) {
   const { t: tr } = useTranslation();
   const online = useConnectivity();
@@ -60,6 +66,7 @@ export function Page({
   const dark = useCallAppearance();
   const { width, fontScale } = useWindowDimensions();
   const stackedActions = Boolean(back && avatarName && right && fontScale >= 1.4);
+  const IdentityContainer = onTitlePress ? Pressable : View;
   const body = <View style={[ui.body, contentStyle]}>{children}</View>;
   return (
     <View
@@ -100,10 +107,16 @@ export function Page({
                 <MneloLogo />
               </View>
             ) : (
-              <View style={[ui.headerTitle, ui.headerIdentity]}>
-                {avatarName && width >= t.layout.compactHeaderWidth && fontScale < 1.4 && (
-                  <Avatar name={avatarName} size="small" />
-                )}
+              <IdentityContainer
+                style={[ui.headerTitle, ui.headerIdentity]}
+                onPress={onTitlePress}
+                accessibilityRole={onTitlePress ? 'button' : undefined}
+                accessibilityLabel={onTitlePress ? (titleActionLabel ?? title) : undefined}
+              >
+                {avatarName &&
+                  width >= t.layout.compactHeaderWidth &&
+                  fontScale < 1.4 &&
+                  (avatar ?? <Avatar name={avatarName} size="small" />)}
                 <AppText
                   variant={
                     back
@@ -120,7 +133,7 @@ export function Page({
                 >
                   {title}
                 </AppText>
-              </View>
+              </IdentityContainer>
             )}
             {!stackedActions && right}
           </View>

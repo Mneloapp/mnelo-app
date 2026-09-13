@@ -59,37 +59,37 @@ export function CallHistoryRow({
     >
       {avatar}
       <View style={styles.content}>
-        <View style={[styles.heading, fontScale > 1.3 && styles.stacked]}>
+        <View style={styles.summary}>
           <AppText
             variant="bodyMedium"
             numberOfLines={fontScale > 1.3 ? undefined : 1}
-            style={[styles.name, missed && styles.missed]}
+            style={missed && styles.missed}
           >
             {call.name}
           </AppText>
-          <AppText variant="caption" tone="secondary">
-            {stamp}
-          </AppText>
+          <View style={styles.detail}>
+            <AppIcon
+              name={
+                call.direction === 'incoming'
+                  ? 'phone-incoming'
+                  : call.direction === 'outgoing'
+                    ? 'phone-outgoing'
+                    : 'phone'
+              }
+              size={theme.icons.sm}
+              color={color}
+            />
+            {call.media === 'video' && <AppIcon name="video" size={theme.icons.sm} color={color} />}
+            <AppText variant="caption" style={[styles.description, { color }]}>
+              {detail}
+            </AppText>
+          </View>
         </View>
-        <View style={styles.detail}>
-          <AppIcon
-            name={
-              call.direction === 'incoming'
-                ? 'phone-incoming'
-                : call.direction === 'outgoing'
-                  ? 'phone-outgoing'
-                  : 'phone'
-            }
-            size={theme.icons.sm}
-            color={color}
-          />
-          {call.media === 'video' && <AppIcon name="video" size={theme.icons.sm} color={color} />}
-          <AppText variant="caption" style={[styles.description, { color }]}>
-            {detail}
-          </AppText>
-        </View>
+        <AppText variant="caption" tone="secondary" style={styles.stamp}>
+          {stamp}
+        </AppText>
+        <AppIcon name="info" size={theme.icons.md} color={theme.colors.textSecondaryOnSoft} />
       </View>
-      <AppIcon name="info" size={theme.icons.sm} color={theme.colors.textSecondaryOnSoft} />
     </FocusPressable>
   );
 }
@@ -99,18 +99,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
     minHeight: theme.controls.minTapTarget,
-    paddingVertical: theme.spacing.md,
   },
   content: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     borderBottomWidth: theme.controls.borderWidth,
     borderBottomColor: theme.colors.border,
-    paddingBottom: theme.spacing.md,
-    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.sm,
+    gap: theme.spacing.sm,
   },
-  heading: { flexDirection: 'row', alignItems: 'baseline', gap: theme.spacing.sm },
-  stacked: { flexDirection: 'column', alignItems: 'flex-start', gap: theme.spacing.xs },
-  name: { flexShrink: 1, flexGrow: 1 },
+  summary: { flex: 1, minWidth: 0 },
+  stamp: { flexShrink: 0, maxWidth: '30%', textAlign: 'right' },
   missed: { color: theme.colors.error },
   detail: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs },
   description: { flex: 1 },

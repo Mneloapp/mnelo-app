@@ -348,7 +348,6 @@ export function Field({
   );
 }
 export function Avatar({
-  name,
   uri,
   size = 'normal',
 }: {
@@ -376,19 +375,11 @@ export function Avatar({
           style={{ width: '100%', height: '100%', borderRadius: t.radii.pill }}
         />
       ) : (
-        <AppText
-          variant={size === 'profile' ? 'titleLarge' : size === 'large' ? 'title' : 'button'}
-          tone="accent"
-          maxFontSizeMultiplier={1.4}
-        >
-          {name
-            .trim()
-            .split(/\s+/)
-            .slice(0, 2)
-            .map((s) => s[0])
-            .join('')
-            .toUpperCase() || '·'}
-        </AppText>
+        <AppIcon
+          name="user"
+          size={t.avatar[size] / 2}
+          color={dark ? t.colors.callSecondary : t.colors.textSecondaryOnSoft}
+        />
       )}
     </View>
   );

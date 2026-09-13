@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import type { DeviceMessenger } from './engine';
-import { savedPhoneNames } from './phonebook';
-import { observePhonebook } from './phonebook-events';
+import { observeNativePhonebook, savedPhoneNames } from './phonebook';
+import { observePhonebook, phonebookChanged } from './phonebook-events';
 
 const empty: ReadonlyMap<string, string> = new Map();
 export function usePhonebookNames(
@@ -31,43 +31,45 @@ export function usePhonebookNames(
       try {
         do {
           queued = false;
-          const refresh = force;
-          force = false;
-          const contacts = (await engine.contacts()).filter((c) => c.phone && !c.blocked);
-          const next = contacts
-            .map((c) => `${c.key}:${c.phone}`)
-            .sort()
-            .join('|');
-          if (refresh || next !== fingerprint) {
-            const byNumber = await savedPhoneNames(
-              contacts.map((c) => c.phone!),
-              ownNumber,
-            );
-            const resolved = new Map(
-              contacts.flatMap((c) => {
-                const name = byNumber.get(c.phone!);
-                return name ? [[c.key, name] as const] : [];
-              }),
-            );
-            if (alive) {
-              fingerprint = next;
-              setResolvedNames((previous) =>
-                previous.engine === engine &&
-                previous.number === ownNumber &&
-                previous.names.size === resolved.size &&
-                [...resolved].every(([key, name]) => previous.names.get(key) === name)
-                  ? previous
-                  : { engine, number: ownNumber, names: resolved },
+          try {
+            const refresh = force;
+            force = false;
+            const contacts = (await engine.contacts()).filter((c) => c.phone && !c.blocked);
+            const next = contacts
+              .map((c) => `${c.key}:${c.phone}`)
+              .sort()
+              .join('|');
+            if (refresh || next !== fingerprint) {
+              const byNumber = await savedPhoneNames(
+                contacts.map((c) => c.phone!),
+                ownNumber,
               );
+              const resolved = new Map(
+                contacts.flatMap((c) => {
+                  const name = byNumber.get(c.phone!);
+                  return name ? [[c.key, name] as const] : [];
+                }),
+              );
+              if (alive) {
+                fingerprint = next;
+                setResolvedNames((previous) =>
+                  previous.engine === engine &&
+                  previous.number === ownNumber &&
+                  previous.names.size === resolved.size &&
+                  [...resolved].every(([key, name]) => previous.names.get(key) === name)
+                    ? previous
+                    : { engine, number: ownNumber, names: resolved },
+                );
+              }
+            }
+          } catch {
+            // Permission changes/read failures clear the projection, never the saved alias.
+            if (alive) {
+              fingerprint = '';
+              setResolvedNames({ engine, number: ownNumber, names: empty });
             }
           }
         } while (alive && queued);
-      } catch {
-        // Permission changes/read failures clear the projection, never the saved alias.
-        if (alive) {
-          fingerprint = '';
-          setResolvedNames({ engine, number: ownNumber, names: empty });
-        }
       } finally {
         running = false;
       }
@@ -80,6 +82,7 @@ export function usePhonebookNames(
       void update();
     });
     const permission = observePhonebook(refresh);
+    const nativeChanges = observeNativePhonebook(phonebookChanged);
     const foreground = AppState.addEventListener('change', (state) => {
       if (state === 'active') refresh();
     });
@@ -88,6 +91,7 @@ export function usePhonebookNames(
       alive = false;
       changes();
       permission();
+      nativeChanges();
       foreground.remove();
     };
   }, [engine, enabled, ownNumber]);

@@ -13,6 +13,7 @@ import { peerKey } from '../model';
 import { Check, useLocalAction } from './shared';
 import type { ContactInvitation } from '../contact-link';
 import { SheetAction } from '@/components/SheetAction';
+import { PhonebookAccess } from '../components/PhonebookAccess';
 import {
   ContactHero,
   ContactAction,
@@ -181,6 +182,7 @@ export function ContactProfileScreen() {
               <AppText>{profile.about}</AppText>
             </InfoGroup>
           ) : null}
+          {contact.phone && !contact.blocked && <PhonebookAccess grouped />}
           {profile && (profile.email || profile.website) ? (
             <InfoGroup>
               <CardDetails profile={profile} />

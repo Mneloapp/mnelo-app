@@ -18,6 +18,7 @@ import type { Contact } from '../model';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 import { useLocalAction } from './shared';
 import { useComposer } from './composer-navigation';
+import { PhonebookAccess } from '../components/PhonebookAccess';
 
 export function PickerAction({
   label,
@@ -145,6 +146,7 @@ export function ContactPickerScreen({ mode }: { mode: 'chat' | 'call' }) {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <>
+            {!phone && <PhonebookAccess />}
             {!search.trim() && (
               <View style={styles.actions}>
                 {mode === 'chat' ? (

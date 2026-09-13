@@ -1,4 +1,12 @@
 // Web previews cannot read a phone's contacts.
+import type { PhonebookAccess } from './phonebook-access';
+export async function phonebookAccess(): Promise<PhonebookAccess> {
+  return 'unavailable';
+}
+export async function managePhonebookAccess() {}
+export function observeNativePhonebook(_listener: () => void) {
+  return () => {};
+}
 export async function phonebookPermission() {
   return false;
 }

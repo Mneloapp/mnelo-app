@@ -1,10 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { PhoneScreen } from '@/messenger/screens/PhoneScreen';
 import { PhonePrivacySection } from '@/messenger/screens/PhonePrivacySection';
 import { FindPhoneScreen } from '@/messenger/screens/FindPhoneScreen';
 import type { PhoneCommand, PhoneResponse } from '@/messenger/phone-protocol';
+import { Contact, getPermissionsAsync } from 'expo-contacts';
+import { phonebookChanged } from '@/messenger/phonebook-events';
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
 );
@@ -186,6 +188,88 @@ test('saving a phone contact returns to picker and allows optional name/security
     name: 'Development Bob',
   });
   expect(router.push).not.toHaveBeenCalled();
+});
+
+test('existing phone search replaces the Mnelo alias with the phonebook name and refreshes it without another server search', async () => {
+  mockRegistered = true;
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  mockEngine.contacts.mockResolvedValue([
+    { key: 'b'.repeat(64), phone: '+995555010101', name: 'Old Mnelo alias', blocked: false },
+  ] as never);
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValue([
+      { fullName: 'ჩემი მეგობარი', phones: [{ number: '\u200e+995 555 01 01 01' }] },
+    ] as never);
+  try {
+    await show(<FindPhoneScreen initialNumber="+995555010101" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+    await screen.findByText('ჩემი მეგობარი');
+    expect(screen.queryByText('Old Mnelo alias')).not.toBeOnTheScreen();
+    jest
+      .mocked(Contact.getAllDetails)
+      .mockResolvedValue([
+        { fullName: 'განახლებული მეგობარი', phones: [{ number: '555010101' }] },
+      ] as never);
+    await fireEvent.press(screen.getByRole('button', { name: 'Refresh contact names' }));
+    await screen.findByText('განახლებული მეგობარი');
+    expect(
+      mockClient.execute.mock.calls.filter(([command]) => command.action === 'lookup'),
+    ).toHaveLength(1);
+    await fireEvent.press(screen.getByRole('button', { name: 'Find person' }));
+    await screen.findByText('განახლებული მეგობარი');
+    await fireEvent.press(screen.getByRole('button', { name: 'Message' }));
+    expect(mockEngine.trustContact).toHaveBeenCalledWith({
+      key: 'b'.repeat(64),
+      name: 'Old Mnelo alias',
+    });
+    // Revoking access drops the in-memory phonebook name, not the user's saved alias.
+    jest
+      .mocked(getPermissionsAsync)
+      .mockResolvedValue({ granted: false, canAskAgain: false } as never);
+    await act(async () => phonebookChanged());
+    await screen.findByText('Old Mnelo alias');
+  } finally {
+    mockEngine.contacts.mockResolvedValue([]);
+    jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: false } as never);
+    jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  }
+});
+
+test('a person omitted from limited Contacts access can be selected and their saved name appears immediately', async () => {
+  mockRegistered = true;
+  jest
+    .mocked(getPermissionsAsync)
+    .mockResolvedValue({ granted: true, accessPrivileges: 'limited' } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  mockEngine.contacts.mockResolvedValue([
+    { key: 'b'.repeat(64), phone: '+995555010101', name: 'Old Mnelo alias', blocked: false },
+  ] as never);
+  jest.mocked(Contact.presentAccessPicker).mockImplementationOnce(async () => {
+    jest
+      .mocked(Contact.getAllDetails)
+      .mockResolvedValue([
+        { fullName: 'ტელეფონში შენახული სახელი', phones: [{ number: '555010101' }] },
+      ] as never);
+    return [];
+  });
+  try {
+    await show(<FindPhoneScreen initialNumber="+995555010101" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Find person' }));
+    await screen.findByText('Old Mnelo alias');
+    await fireEvent.press(screen.getByRole('button', { name: 'Choose contacts for Mnelo' }));
+    await screen.findByText('ტელეფონში შენახული სახელი');
+    expect(Contact.presentAccessPicker).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Choose contacts for Mnelo' })).toBeOnTheScreen();
+    expect(mockEngine.trustContact).not.toHaveBeenCalled();
+    expect(
+      mockClient.execute.mock.calls.filter(([command]) => command.action === 'lookup'),
+    ).toHaveLength(1);
+  } finally {
+    mockEngine.contacts.mockResolvedValue([]);
+    jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: false } as never);
+    jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  }
 });
 
 test('a new installation asks for the number without requiring a name or creating keys until Send', async () => {

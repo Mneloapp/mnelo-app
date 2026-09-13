@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import { Keyboard, View } from 'react-native';
+import { AppState, Keyboard, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { theme } from '@/theme/tokens';
@@ -12,7 +12,9 @@ import { usePhoneService, usePhoneAction } from './phone-shared';
 import { CallActions, type CallTarget } from './CallActions';
 import { NumberKeypad } from './NumberKeypad';
 import { useComposer } from './composer-navigation';
-import { phonebookPermission, requestPhonebookPermission, savedPhoneName } from '../phonebook';
+import { savedPhoneName } from '../phonebook';
+import { observePhonebook } from '../phonebook-events';
+import { PhonebookAccess } from '../components/PhonebookAccess';
 
 export function FindPhoneScreen({
   intent = 'chat',
@@ -36,21 +38,13 @@ export function FindPhoneScreen({
   const { finish, returnToPicker } = useComposer();
   const [phone, setPhone] = useState(() => phoneEntryFromNumber(initialNumber, enrollment?.phone));
   const [found, setFound] = useState<string | null | undefined>();
+  const [lookupRevision, setLookupRevision] = useState(0);
   const [name, setName] = useState('');
   const [pinned, setPinned] = useState(false);
   const [details, setDetails] = useState(false);
-  const [localNames, setLocalNames] = useState(false);
-  useEffect(() => {
-    let current = true;
-    void phonebookPermission()
-      .then((value) => {
-        if (current) setLocalNames(value);
-      })
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, []);
+  const [deviceName, setDeviceName] = useState<{ key: string; phone: string; name: string } | null>(
+    null,
+  );
   const generation = useRef(0);
   const mounted = useRef(true);
   useEffect(() => {
@@ -68,10 +62,39 @@ export function FindPhoneScreen({
   } catch {
     /* No lookup until the selected country and national number are valid. */
   }
+  useEffect(() => {
+    if (!found || !normalized || found === identity?.key) return;
+    let alive = true;
+    let revision = 0;
+    const refresh = () => {
+      const requested = ++revision;
+      void savedPhoneName(normalized, enrollment?.phone)
+        .catch(() => null)
+        .then((localName) => {
+          if (alive && requested === revision)
+            setDeviceName(localName ? { key: found, phone: normalized, name: localName } : null);
+        });
+    };
+    refresh();
+    const changes = observePhonebook(refresh);
+    const foreground = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh();
+    });
+    return () => {
+      alive = false;
+      changes();
+      foreground.remove();
+    };
+  }, [found, normalized, enrollment?.phone, identity?.key, lookupRevision]);
+  const displayName =
+    deviceName?.key === found && deviceName?.phone === normalized
+      ? deviceName.name
+      : name || normalized || '';
   const ready = Boolean(client && status.data?.registered);
   function clearResult() {
     setFound(undefined);
     setName('');
+    setDeviceName(null);
     setDetails(false);
     generation.current++;
     setPinned(false);
@@ -115,13 +138,9 @@ export function FindPhoneScreen({
       if (bound && result.key && bound.key !== result.key)
         throw new Error('PHONE_IDENTITY_CHANGED');
       const contact = contacts.find((item) => item.key === result.key);
-      const deviceName =
-        result.key && !contact?.blocked
-          ? await savedPhoneName(normalized, enrollment?.phone).catch(() => null)
-          : null;
-      if (!mounted.current || generation.current !== requested) return;
       setFound(contact?.blocked ? null : result.key);
-      setName(contact?.blocked ? '' : (deviceName ?? contact?.name ?? normalized));
+      setLookupRevision((revision) => revision + 1);
+      setName(contact?.blocked ? '' : (contact?.name ?? normalized));
       setPinned(Boolean(contact && !contact.blocked));
       if (keypad && contact && !contact.blocked && contact.key !== identity?.key)
         await dialVoice(contact);
@@ -167,25 +186,7 @@ export function FindPhoneScreen({
           ? { nativeHeader: true }
           : { title: t(dialing ? 'phone.dial' : 'phone.search'), back: true })}
     >
-      {!localNames && (
-        <Button
-          variant="secondary"
-          label={t('phone.contactNames')}
-          onPress={() =>
-            void action.run(async () => {
-              const requested = generation.current;
-              const allowed = await requestPhonebookPermission();
-              if (!mounted.current) return;
-              setLocalNames(allowed);
-              if (allowed && found && normalized) {
-                const localName = await savedPhoneName(normalized, enrollment?.phone);
-                if (mounted.current && generation.current === requested && localName)
-                  setName(localName);
-              }
-            })
-          }
-        />
-      )}
+      <PhonebookAccess />
       {!embedded && !keypad && (
         <AppText tone="secondary">{t(dialing ? 'phone.dialHint' : 'phone.searchHint')}</AppText>
       )}
@@ -249,9 +250,9 @@ export function FindPhoneScreen({
           ) : found ? (
             <View style={{ gap: theme.spacing.md }}>
               <Row
-                title={name || normalized || ''}
+                title={displayName}
                 subtitle={t('phone.found')}
-                left={<Avatar name={name || normalized || ''} />}
+                left={<Avatar name={displayName} />}
               />
               {!pinned && (
                 <AppText variant="caption" tone="secondary">

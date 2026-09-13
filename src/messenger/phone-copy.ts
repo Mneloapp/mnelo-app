@@ -1,5 +1,11 @@
 export const phoneEn = {
   contactNames: 'Use names from my contacts',
+  selectContacts: 'Choose contacts for Mnelo',
+  openContactsSettings: 'Allow access to contacts',
+  refreshContactNames: 'Refresh contact names',
+  limitedContactsHint:
+    'Only selected contacts are shared with Mnelo. Include this person to use the name saved on your phone.',
+  contactNamesHint: 'Show people as you saved them in Contacts. Names stay on this phone.',
   title: 'Phone number',
   welcome: 'What’s your number?',
   enrollmentHint:
@@ -78,6 +84,13 @@ export const phoneEn = {
 } as const;
 export const phoneKa: Record<keyof typeof phoneEn, string> = {
   contactNames: 'სახელების გამოყენება ჩემი კონტაქტებიდან',
+  selectContacts: 'კონტაქტების არჩევა Mnelo-სთვის',
+  openContactsSettings: 'კონტაქტებზე წვდომის დაშვება',
+  refreshContactNames: 'კონტაქტების სახელების განახლება',
+  limitedContactsHint:
+    'Mnelo მხოლოდ არჩეულ კონტაქტებს ხედავს. დაამატე ეს ადამიანიც, რომ ტელეფონში შენახული სახელი გამოჩნდეს.',
+  contactNamesHint:
+    'ადამიანები გამოჩნდებიან იმ სახელით, როგორც კონტაქტებში გყავს შენახული. სახელები ამ ტელეფონზე რჩება.',
   reviewKey: 'შემმოწმებლის წვდომის გასაღები',
   reviewInstructions:
     'Apple-ის იზოლირებული სატესტო ანგარიში. SMS არ იგზავნება. ჩასვი App Store Connect-ში მოცემული წვდომის გასაღები. ეს ანგარიში მხოლოდ მეორე სატესტო ანგარიშს უკავშირდება.',

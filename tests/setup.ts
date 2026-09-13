@@ -6,7 +6,8 @@ jest.mock('expo-contacts', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: false })),
   requestPermissionsAsync: jest.fn(async () => ({ granted: false })),
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
-  Contact: { getAllDetails: jest.fn(async () => []) },
+  Contact: { getAllDetails: jest.fn(async () => []), presentAccessPicker: jest.fn(async () => []) },
+  addContactsChangeListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
 
 jest.mock(

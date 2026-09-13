@@ -1,6 +1,32 @@
-import { Contact, ContactField, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
+import {
+  Contact,
+  ContactField,
+  addContactsChangeListener,
+  getPermissionsAsync,
+  requestPermissionsAsync,
+} from 'expo-contacts';
+import { Linking, Platform } from 'react-native';
 import { phonebookChanged } from './phonebook-events';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
+import type { PhonebookAccess } from './phonebook-access';
+
+export async function phonebookAccess(): Promise<PhonebookAccess> {
+  const permission = await getPermissionsAsync();
+  if (permission.accessPrivileges === 'limited') return 'limited';
+  if (permission.granted) return 'available';
+  return permission.canAskAgain === false ? 'settings' : 'request';
+}
+export async function managePhonebookAccess() {
+  const access = await phonebookAccess();
+  if (access === 'request') await requestPermissionsAsync();
+  else if (access === 'limited' && Platform.OS === 'ios') await Contact.presentAccessPicker();
+  else if (access === 'settings' || access === 'limited') await Linking.openSettings();
+  phonebookChanged();
+}
+export function observeNativePhonebook(listener: () => void) {
+  const subscription = addContactsChangeListener(listener);
+  return () => subscription.remove();
+}
 
 export async function phonebookPermission() {
   const permission = await getPermissionsAsync();
@@ -33,10 +59,15 @@ export async function savedPhoneNames(
       for (const phone of row.phones ?? []) {
         const number =
           phone.number &&
-          parsePhoneNumberFromString(phone.number, {
-            ...(country ? { defaultCountry: country } : {}),
-            extract: false,
-          })?.number;
+          // Contacts copied from messages can contain invisible direction marks.
+          // Remove presentation marks only; never match just a number's suffix.
+          parsePhoneNumberFromString(
+            phone.number.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim(),
+            {
+              ...(country ? { defaultCountry: country } : {}),
+              extract: false,
+            },
+          )?.number;
         if (number && wanted.has(number) && !names.has(number))
           names.set(
             number,

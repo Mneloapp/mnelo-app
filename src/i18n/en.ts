@@ -3,6 +3,16 @@ import { cardEn } from '@/messenger/contact-card-copy';
 import { messengerEn } from '../messenger/copy';
 import { phoneEn } from '../messenger/phone-copy';
 export const en = {
+  library: {
+    title: 'Media, links and docs',
+    media: 'Media',
+    links: 'Links',
+    docs: 'Docs',
+    emptyMedia: 'Photos and videos shared in this chat will appear here.',
+    emptyLinks: 'Links shared in this chat will appear here.',
+    emptyDocs: 'Documents shared in this chat will appear here.',
+    unavailable: 'This conversation is not available on this device.',
+  },
   card: cardEn,
   compose: composeEn,
   phone: phoneEn,

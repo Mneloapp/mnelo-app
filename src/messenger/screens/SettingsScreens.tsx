@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { View } from 'react-native';
 import { router } from 'expo-router';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -8,16 +7,7 @@ import * as Clipboard from 'expo-clipboard';
 import { getRandomBytes, randomUUID } from 'expo-crypto';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import {
-  IconButton,
-  Button,
-  Choice,
-  Field,
-  Page,
-  Section,
-  SettingsRow,
-  StateView,
-} from '@/components/ui';
+import { Button, Choice, Field, Page, Section, SettingsRow, StateView } from '@/components/ui';
 import { PhonePrivacySection } from './PhonePrivacySection';
 import { usePhoneService } from './phone-shared';
 import { AppText } from '@/components/AppText';
@@ -26,88 +16,11 @@ import { useDevice } from '../DeviceProvider';
 import { bytesToHex, openArchive, sealArchive } from '../crypto';
 import { Check, useLocalAction } from './shared';
 import { discardCachedMedia } from '@/features/chats/media-files';
-import { isReviewPhone } from '../review-account';
-import { ContactCard, cardStyles } from '../components/ContactCard';
 import { deliveryV2 } from '../delivery-mode';
 export { EditProfileScreen } from './LocalProfileScreen';
 
-export function MeScreen() {
-  const { identity, profile, enrollment } = useDevice();
-  const { t } = useTranslation();
-  return (
-    <Page
-      title={t('tabs.me')}
-      bottomSafe={false}
-      right={
-        <IconButton
-          icon="grid"
-          label={t('card.qr')}
-          variant="soft"
-          onPress={() => router.push({ pathname: '/my-code', params: { from: 'me' } })}
-        />
-      }
-    >
-      {enrollment?.testOnly && isReviewPhone(enrollment.phone) && (
-        <AppText tone="secondary">{t('phone.reviewNotice')}</AppText>
-      )}
-      {identity && (
-        <ContactCard name={identity.name} profile={profile}>
-          <Button
-            label={t('card.edit')}
-            variant="secondary"
-            onPress={() => router.push('/edit-profile')}
-          />
-          <Button
-            label={t('card.share')}
-            variant="primary"
-            onPress={() => router.push({ pathname: '/my-code', params: { from: 'me' } })}
-          />
-        </ContactCard>
-      )}
-      <Section title={t('messenger.settings')}>
-        <View style={cardStyles.settings}>
-          <SettingsRow
-            title={t('messenger.notifications')}
-            icon="bell"
-            onPress={() => router.push('/notifications')}
-          />
-          <SettingsRow
-            title={t('phone.changeNumber')}
-            icon="phone"
-            onPress={() => router.push('/phone')}
-          />
-          <SettingsRow
-            title={t('messenger.contacts')}
-            icon="users"
-            onPress={() => router.push({ pathname: '/new-message', params: { from: 'me' } })}
-          />
-          <SettingsRow
-            title={t('messenger.privacy')}
-            icon="shield"
-            onPress={() => router.push('/privacy')}
-          />
-        </View>
-        <View style={cardStyles.settings}>
-          <SettingsRow
-            title={t('messenger.backups')}
-            icon="download"
-            onPress={() => router.push('/backups')}
-          />
-          <SettingsRow
-            title={t('messenger.blocked')}
-            icon="slash"
-            onPress={() => router.push('/blocked')}
-          />
-          <SettingsRow
-            title={t('messenger.settings')}
-            icon="settings"
-            onPress={() => router.push('/account')}
-          />
-        </View>
-      </Section>
-    </Page>
-  );
-}
+export { MeScreen } from './MeScreen';
+
 export function PrivacyScreen() {
   const { t } = useTranslation();
   return (

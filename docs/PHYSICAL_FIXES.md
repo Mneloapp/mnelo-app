@@ -1,6 +1,6 @@
 # Physical-test correction tracker — September 13
 
-The owner reported the initial issues on build 9 and additional UI issues while only one phone had build 11. The preceding corrections are included in TestFlight **0.1.0 (12)**: internal testing is available and external Beta App Review is pending. Neither phone has been confirmed on build 12 yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
+The owner reported the initial issues on build 9 and additional UI issues while only one phone had build 11. The physical-test corrections through the voice/contact/menu follow-up are included in TestFlight **0.1.0 (13)**: Mnelo Development is Testing and Mnelo Preview is Waiting for Review. Apple reports the internal tester on build 12; neither phone is confirmed on build 13 yet. **Implemented does not mean physically verified.** The server transition is documented in [current rollout](DELIVERY_ROLLOUT.md).
 
 | Reported issue                                 | Implemented change                                                                                                          | Actual verification / remaining check                                                                                       |
 | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -22,7 +22,7 @@ Build 10 is signed for the two paired phones, with no uninstall or data reset. S
 
 Build 11 is a standalone App Store-signed TestFlight candidate using the existing hosted preview services and encrypted delivery. Both participants must update in place before testing. Do not delete Mnelo, downgrade a migrated vault or use backup restore as a workaround. Follow the table above, including sender-offline delivery, cross-network calls, background/locked-screen notifications and photo/QR acceptance. Build and Apple availability evidence is in [BUILD_LOG.md](BUILD_LOG.md); a successful archive is not proof that an external tester has access.
 
-## Follow-up source changes after build 12 — not yet uploaded
+## Voice, contact and menu follow-up — included in build 13
 
 Voice recording now uses native microphone metering for a bounded, local waveform, compact timer and Mnelo-colored controls. Stopping retains the waveform and recording for playback, delete or send. Playback pauses during send/delete; a late audio response cannot restart playback after leaving the screen or disabling the preview. No transcription, AI processing or waveform upload is added.
 
@@ -32,8 +32,12 @@ Call actions, QR sharing and profile-photo actions use compact icon rows. Profil
 
 Verification: `npm run check` PASS — 320 Jest tests / 65 suites, 3 server tests, 132 device/protocol tests (455 total), TypeScript, lint, formatting, localization/security/environment and brand checks. iOS and Android Hermes exports PASS with dotenv disabled in the local diagnostic environment; these are not signed release archives. React Native Web component fixtures checked at 393×852 and 320×640 in EN/KA, including recording/preview, name navigation, call-sheet dismissal and no horizontal overflow. Screenshots are synthetic local fixtures, not evidence of native microphone or device acceptance.
 
-Physical follow-up: microphone permission, silence/speech waveform response, stop/listen/delete/send, interrupted/background recording, Dynamic Type and Bold Text, contact-page back navigation, repeated sheet opening/closing, and QR/profile navigation on both phones. The immutable `ios-0.1.0-12` source/archive and pending Apple review are unchanged. These newer source changes require the next TestFlight build.
+Physical follow-up: microphone permission, silence/speech waveform response, stop/listen/delete/send, interrupted/background recording, Dynamic Type and Bold Text, contact-page back navigation, repeated sheet opening/closing, and QR/profile navigation on both phones. The immutable `ios-0.1.0-12` source/archive remains unchanged. These source changes are now in signed TestFlight build 13 and its immutable `ios-0.1.0-13` source tag; build 13 replaced build 12 in the beta-review queue. Internal availability is confirmed, while external approval and two-phone acceptance remain pending.
 
 ## Build 12 follow-up acceptance
 
 Check external reaction badges, compact trailing delivery leaves, permission-respecting phonebook-name precedence, incoming/outgoing and red missed-call rows, native system typography, backdrop dismissal and photo safe-area close/save/share controls. Full source checks passed 447 tests; both Hermes exports, generic iOS Release compilation, signed archive/export, final permissions/signature/secret checks and Apple processing passed. Browser component previews used synthetic content at 320/390/430-point widths and EN/KA. Native Photos saving, touch targets, phonebook behavior and two-phone calling/delivery still require physical acceptance. The new peer-not-ready state preserves queued messages when a recipient has not initialized its new delivery keys. No server change was made for build 12.
+
+## Own-profile reference follow-up — source after build 13
+
+Me has a centered identity and grouped settings; tapping the name/photo opens a compact Profile overview. Name, About, Username and Links each open a focused editor; the number row opens existing phone verification, and Edit photo opens a dismissible icon menu. Existing profile values are preserved and unrelated fields are merged from the latest saved profile. All 461 automated tests and both diagnostic mobile exports pass. Actual screen components were checked with synthetic device/navigation adapters at 393×852 and 320×640 in EN/KA. Native photo/keyboard/back gestures and profile sharing still need physical acceptance. This work is not part of the already uploaded build 13 and requires a subsequent distribution build.

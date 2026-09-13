@@ -24,6 +24,7 @@ export function ChatPhoto({
   onLongPress,
   busy,
   error,
+  square = false,
 }: {
   uri: string;
   name: string;
@@ -31,6 +32,7 @@ export function ChatPhoto({
   onLongPress: () => void;
   busy: boolean;
   error: string | null;
+  square?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [ratio, setRatio] = useState(1);
@@ -49,10 +51,11 @@ export function ChatPhoto({
           resizeMode="cover"
           accessibilityLabel={name}
           onLoad={({ nativeEvent }) => {
+            if (!nativeEvent.source) return;
             const { width, height } = nativeEvent.source;
             if (width > 0 && height > 0) setRatio(width / height);
           }}
-          style={[styles.thumbnail, { aspectRatio: ratio }]}
+          style={[styles.thumbnail, { aspectRatio: square ? 1 : ratio }, square && styles.square]}
         />
       </Pressable>
       <Modal
@@ -115,6 +118,7 @@ export function ChatPhoto({
   );
 }
 const styles = StyleSheet.create({
+  square: { borderRadius: 0 },
   thumbnail: {
     width: '100%',
     maxHeight: theme.layout.photoPreviewHeight,

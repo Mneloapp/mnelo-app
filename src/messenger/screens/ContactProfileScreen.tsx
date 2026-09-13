@@ -21,6 +21,7 @@ import {
   infoStyles,
 } from '../components/ContactInfo';
 import { avatarUri } from '../profile-avatar';
+import { ProfileGroup, ProfileRow, profileStyles } from '../components/OwnProfile';
 import { directChatId } from '../crypto';
 import { CurrentCall, useCurrentCall } from './CallActions';
 
@@ -135,7 +136,7 @@ export function ContactProfileScreen() {
     });
   }
   return (
-    <Page title={t('card.info')} back>
+    <Page title={t('card.info')} back contentStyle={profileStyles.content}>
       {contact ? (
         <>
           <ContactHero
@@ -165,6 +166,16 @@ export function ContactProfileScreen() {
               onPress={() => open('video')}
             />
           </View>
+          {chatId && (
+            <ProfileGroup>
+              <ProfileRow
+                icon="image"
+                label={t('library.title')}
+                last
+                onPress={() => router.push({ pathname: '/shared/[id]', params: { id: chatId } })}
+              />
+            </ProfileGroup>
+          )}
           {profile?.about ? (
             <InfoGroup>
               <AppText>{profile.about}</AppText>

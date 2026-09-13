@@ -117,3 +117,13 @@ test('the header name and avatar form one accessible contact-info navigation tar
   await fireEvent.press(screen.getByRole('button', { name: 'Contact info' }));
   expect(open).toHaveBeenCalledTimes(1);
 });
+
+test('shared-content row opens the current direct conversation library without starting a call', async () => {
+  await show();
+  await fireEvent.press(screen.getByRole('button', { name: 'Media, links and docs' }));
+  expect(router.push).toHaveBeenCalledWith({
+    pathname: '/shared/[id]',
+    params: { id: 'direct-chat' },
+  });
+  expect(mockCalls.start).not.toHaveBeenCalled();
+});

@@ -8,6 +8,16 @@ type TranslationShape<T> = {
 };
 // Complete Georgian product copy. User-authored content and canonical server data are not rewritten.
 export const ka = {
+  library: {
+    title: 'მედია, ბმულები და ფაილები',
+    media: 'მედია',
+    links: 'ბმულები',
+    docs: 'ფაილები',
+    emptyMedia: 'ამ ჩატში გაზიარებული ფოტოები და ვიდეოები აქ გამოჩნდება.',
+    emptyLinks: 'ამ ჩატში გაზიარებული ბმულები აქ გამოჩნდება.',
+    emptyDocs: 'ამ ჩატში გაზიარებული დოკუმენტები აქ გამოჩნდება.',
+    unavailable: 'ეს მიმოწერა ამ მოწყობილობაზე არ არის ხელმისაწვდომი.',
+  },
   card: cardKa,
   compose: composeKa,
   phone: phoneKa,

@@ -1,5 +1,13 @@
 export const cardEn = {
   title: 'My card',
+  name: 'Name',
+  editPhoto: 'Edit photo',
+  links: 'Links',
+  addLinks: 'Add links',
+  addAbout: 'Add a few words',
+  addUsername: 'Add username',
+  shortAbout: 'Short description',
+  shortAboutPlaceholder: 'A few words about you…',
   info: 'Contact info',
   blockHint: 'You won’t receive messages or calls from this contact. You can unblock them here.',
   historyCleared: 'History cleared from this device.',
@@ -59,6 +67,14 @@ export const cardEn = {
 } as const;
 export const cardKa: Record<keyof typeof cardEn, string> = {
   title: 'ჩემი ბარათი',
+  name: 'სახელი',
+  editPhoto: 'ფოტოს შეცვლა',
+  links: 'ბმულები',
+  addLinks: 'ბმულების დამატება',
+  addAbout: 'დაწერე შენ შესახებ',
+  addUsername: 'იუზერნეიმის დამატება',
+  shortAbout: 'მოკლე აღწერა',
+  shortAboutPlaceholder: 'რამდენიმე სიტყვა შენ შესახებ…',
   info: 'კონტაქტის ინფორმაცია',
   blockHint: 'ამ კონტაქტის შეტყობინებებსა და ზარებს აღარ მიიღებ. განბლოკვა აქვე შეგიძლია.',
   historyCleared: 'ისტორია ამ მოწყობილობიდან წაიშალა.',

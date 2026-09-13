@@ -354,7 +354,7 @@ export function Avatar({
 }: {
   name: string;
   uri?: string | undefined;
-  size?: 'small' | 'normal' | 'large';
+  size?: 'small' | 'normal' | 'large' | 'profile';
 }) {
   const dark = useCallAppearance();
   return (
@@ -365,6 +365,7 @@ export function Avatar({
         ui.avatar,
         size === 'small' && ui.avatarSmall,
         size === 'large' && ui.avatarLarge,
+        size === 'profile' && ui.avatarProfile,
         dark && ui.callSurface,
       ]}
     >
@@ -376,7 +377,7 @@ export function Avatar({
         />
       ) : (
         <AppText
-          variant={size === 'large' ? 'title' : 'button'}
+          variant={size === 'profile' ? 'titleLarge' : size === 'large' ? 'title' : 'button'}
           tone="accent"
           maxFontSizeMultiplier={1.4}
         >
@@ -637,6 +638,7 @@ export const ui = StyleSheet.create({
     justifyContent: 'center',
   },
   avatarLarge: { width: t.avatar.large, height: t.avatar.large },
+  avatarProfile: { width: t.avatar.profile, height: t.avatar.profile },
   avatarSmall: { width: t.avatar.small, height: t.avatar.small },
   row: {
     flexDirection: 'row',

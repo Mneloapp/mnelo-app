@@ -7,6 +7,7 @@ import { FocusPressable } from '@/components/FocusPressable';
 import { SheetAction } from '@/components/SheetAction';
 import { Avatar } from '@/components/ui';
 import { theme } from '@/theme/tokens';
+import { profileStyles } from './OwnProfile';
 
 export function ContactHero({
   name,
@@ -21,18 +22,23 @@ export function ContactHero({
 }) {
   return (
     <View style={infoStyles.hero}>
-      <Avatar name={name} uri={uri} size="large" />
+      {about ? (
+        <View style={profileStyles.status}>
+          <AppText variant="label" centered numberOfLines={3}>
+            {about}
+          </AppText>
+          <View style={profileStyles.statusTip} />
+        </View>
+      ) : null}
+      <View style={profileStyles.avatarRing}>
+        <Avatar name={name} uri={uri} size="profile" />
+      </View>
       <AppText variant="title" centered style={infoStyles.name}>
         {name}
       </AppText>
       {subtitle ? (
         <AppText centered tone="secondary" selectable>
           {subtitle}
-        </AppText>
-      ) : null}
-      {about ? (
-        <AppText centered tone="secondary" style={infoStyles.about}>
-          {about}
         </AppText>
       ) : null}
     </View>

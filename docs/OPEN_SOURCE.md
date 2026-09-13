@@ -35,6 +35,8 @@ registered trademark. Fonts retain OFL; third-party code retains its own terms.
 
 Repository: https://github.com/Mneloapp/mnelo-app
 
+Published September 13, 2026. Initial public commit `0d97fc563d74e018a98a2fea4e8cdd2bd36b54d1` has exactly the same Git tree as local source `c6140fe1ac7354b64c1bb702905d31a6a65e86af` (`a1f578af5ce7a7c1f883a5d00f9559303cb4b2b8`). GitHub reports PUBLIC and AGPL-3.0. Private vulnerability reporting is enabled. No prior website repository was changed.
+
 Publish an audited source snapshot as the initial public commit, with the exact
 local source revision recorded in its commit message. Local development history
 is preserved without rewriting or changing old commits. It contains historical

@@ -814,3 +814,16 @@ Tests: Full check PASS: 304 Jest tests in 61 suites, 3 server tests, 131 device/
 Native checks: Both delivery-mode Hermes exports PASS; AGPL text matches installed pinned vendor LICENSE byte-for-byte; three podspec Ruby syntax checks PASS. No new Xcode/Gradle binary build or physical phone acceptance in this change.
 Known limitations: Initial checks caught stale generated route types, wrong route guard placement and untranslated literal/legal headings; corrected without removing or relaxing tests. Initial Doctor lacked CocoaPods on PATH; documented Ruby/CocoaPods environment passed. Recovery/key lifecycle, binary distribution compliance and two-phone acceptance remain open.
 Commit: See the commit containing this checkpoint; public snapshot commits record the original source revision.
+
+## Open-source publication — September 13, 2026
+
+Phase: Public source distribution.
+Status: COMPLETE for source publication; native/store release remains NOT READY.
+Implemented: https://github.com/Mneloapp/mnelo-app is PUBLIC with AGPL-3.0 recognized by GitHub; private vulnerability reporting enabled. Existing website repository and original local Git history are unchanged.
+Files: Audited current source snapshot, including native bindings, server, CNG/build scripts, lockfile, legal notices and fictional test fixtures.
+Database migrations: None.
+Security impact: No service credential, user data, build artifact or private design-discussion link published. Final separate snapshot Gitleaks scan: zero findings. No service/account configuration changed.
+Tests: 438 local automated tests and source checks PASS; Expo Doctor 21/21, dependency compatibility and both delivery-mode mobile exports PASS. GitHub CI is separate and was still running when this record was written; no remote PASS is inferred.
+Native checks: No new phone installation or Xcode/Gradle binary in this publication step. Both real phones remain on build 9.
+Known limitations: Public source does not certify cryptography, complete recovery/key lifecycle, solve the reported physical call failure by itself, or establish App Store license compatibility. Donation support remains future intent, without payment processing.
+Commit: Initial public `0d97fc563d74e018a98a2fea4e8cdd2bd36b54d1`; original source `c6140fe1ac7354b64c1bb702905d31a6a65e86af`; tree equality verified as `a1f578af5ce7a7c1f883a5d00f9559303cb4b2b8`.

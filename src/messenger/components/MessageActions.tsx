@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   Platform,
+  type GestureResponderEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
@@ -23,11 +24,14 @@ import { theme } from '@/theme/tokens';
 import type { LocalMessage } from '../model';
 import { callOutcomeCopy, readCallRecord } from '../call-record';
 import { isReactionEmoji, moreReactions, quickReactions } from '../reaction-emoji';
+import { createMenuGesture, menuHit, menuTouchPoint, type MenuGesture } from '../menu-gesture';
 import { MessageBubble } from './MessageBubble';
 export type MessageAnchor = { x: number; y: number; width: number; height: number };
 
 export function MessageActions({
   message,
+  inline = false,
+  gesture,
   own = false,
   reduceMotion,
   anchor,
@@ -44,6 +48,8 @@ export function MessageActions({
   removeEverywhere,
 }: {
   message: LocalMessage;
+  inline?: boolean;
+  gesture?: MenuGesture;
   own?: boolean;
   reduceMotion?: boolean;
   anchor?: MessageAnchor | undefined;
@@ -56,7 +62,7 @@ export function MessageActions({
   retry: () => void;
   busy: boolean;
   quickEmojis?: readonly string[] | undefined;
-  edit?: (body: string) => void;
+  edit?: () => void;
   removeEverywhere?: () => void;
 }) {
   const { t } = useTranslation();
@@ -102,7 +108,7 @@ export function MessageActions({
       if (reducedMotion) {
         progress.setValue(0);
         setVisible(false);
-        if (Platform.OS !== 'ios') finishDismiss();
+        if (inline || Platform.OS !== 'ios') finishDismiss();
         return;
       }
       Animated.timing(progress, {
@@ -113,16 +119,14 @@ export function MessageActions({
       }).start(({ finished }) => {
         if (!finished) return;
         setVisible(false);
-        if (Platform.OS !== 'ios') finishDismiss();
+        if (inline || Platform.OS !== 'ios') finishDismiss();
       });
     },
-    [close, finishDismiss, progress, reducedMotion],
+    [close, finishDismiss, progress, reducedMotion, inline],
   );
   const [picker, setPicker] = useState(false),
     [emoji, setEmoji] = useState(''),
     [info, setInfo] = useState(false);
-  const [editing, setEditing] = useState(false),
-    [editedBody, setEditedBody] = useState(message.body);
   const deleted = message.kind === 'deleted';
   const call = message.kind === 'call' ? readCallRecord(message.body) : null;
   const preview = call
@@ -171,7 +175,7 @@ export function MessageActions({
         setInfo((value) => !value);
         break;
       case 'edit-2':
-        setEditing(true);
+        dismiss(edit);
         break;
       case 'refresh-cw':
         dismiss(retry);
@@ -181,28 +185,69 @@ export function MessageActions({
         break;
     }
   }
+  const [localGesture] = useState(createMenuGesture);
+  const gestures = gesture ?? localGesture;
+  const targets = useRef(new Map<string, { node: View; action: () => void }>());
+  const [hovered, setHovered] = useState<string | null>(null);
+  const dragSequence = useRef(0);
+  useEffect(
+    () =>
+      gestures.listen((touch) => {
+        const sequence = ++dragSequence.current;
+        if (touch.phase === 'cancel' || busy || picker || closing.current) {
+          setHovered(null);
+          return;
+        }
+        const entries = [...targets.current];
+        let remaining = entries.length;
+        let hit: { id: string; action: () => void } | null = null;
+        for (const [id, target] of entries) {
+          target.node.measureInWindow((x, y, width, height) => {
+            if (menuHit(touch.point, { x, y, width, height })) hit = { id, action: target.action };
+            if (--remaining || sequence !== dragSequence.current || closing.current) return;
+            setHovered(touch.phase === 'release' ? null : (hit?.id ?? null));
+            if (touch.phase === 'release') hit?.action();
+          });
+        }
+      }),
+    [gestures, busy, picker],
+  );
+  const registerTarget = (id: string, node: View | null, action: () => void) => {
+    if (node) targets.current.set(id, { node, action });
+    else targets.current.delete(id);
+  };
+  const lastPoint = useRef({ x: -1, y: -1 });
+  const touchPoint = (event: GestureResponderEvent) => {
+    lastPoint.current = menuTouchPoint(event.nativeEvent, lastPoint.current);
+    return lastPoint.current;
+  };
   const available = height - insets.top - insets.bottom - 24;
   const previewLimit = Math.max(64, available - menuHeight - (!call && !deleted ? 64 : 0) - 24);
-  const top =
-    picker || editing
-      ? 12
-      : Math.max(
-          12,
-          Math.min(
-            (anchor?.y ?? height * 0.35) - insets.top - previewY,
-            available - contentHeight + 12,
-          ),
-        );
-  const lift = anchor && !picker && !editing ? anchor.y - insets.top - top - previewY : 12;
+  const top = picker
+    ? 12
+    : Math.max(
+        12,
+        Math.min(
+          (anchor?.y ?? height * 0.35) - insets.top - previewY,
+          available - contentHeight + 12,
+        ),
+      );
+  const lift = anchor && !picker ? anchor.y - insets.top - top - previewY : 12;
   const translation = progress.interpolate({ inputRange: [0, 1], outputRange: [lift, 0] });
-  return (
-    <Modal
-      testID="message-actions-modal"
-      transparent
-      visible={visible}
-      onRequestClose={() => dismiss()}
-      animationType="none"
-      onDismiss={finishDismiss}
+  const content = (
+    <View
+      testID="message-menu-touch-surface"
+      style={[styles.overlay, inline && StyleSheet.absoluteFill]}
+      onMoveShouldSetResponderCapture={() => !picker}
+      onResponderGrant={(event) => gestures.update({ phase: 'move', point: touchPoint(event) })}
+      onResponderMove={(event) => gestures.update({ phase: 'move', point: touchPoint(event) })}
+      onResponderRelease={(event) => {
+        gestures.update({ phase: 'release', point: touchPoint(event) });
+      }}
+      onResponderTerminate={(event) => {
+        gestures.update({ phase: 'cancel', point: touchPoint(event) });
+      }}
+      onResponderTerminationRequest={() => false}
     >
       <View style={styles.overlay} accessibilityViewIsModal onAccessibilityEscape={() => dismiss()}>
         <Animated.View
@@ -237,7 +282,7 @@ export function MessageActions({
               showsVerticalScrollIndicator={false}
               onContentSizeChange={(_, size) => setContentHeight(size)}
             >
-              {!call && !deleted && !picker && !editing && (
+              {!call && !deleted && !picker && (
                 <Animated.View
                   style={[
                     styles.reactions,
@@ -253,27 +298,42 @@ export function MessageActions({
                     contentContainerStyle={styles.reactionRow}
                   >
                     {quickEmojis.map((value) => (
-                      <FocusPressable
+                      <View
                         key={value}
-                        style={styles.reaction}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('messenger.reactWith', { emoji: value })}
-                        disabled={busy}
-                        onPress={() => dismiss(() => react(value))}
+                        collapsable={false}
+                        ref={(node) =>
+                          registerTarget('emoji:' + value, node, () => dismiss(() => react(value)))
+                        }
+                        testID={'message-menu-target-emoji-' + value}
                       >
-                        <AppText style={styles.emoji}>{value}</AppText>
-                      </FocusPressable>
+                        <FocusPressable
+                          style={[styles.reaction, hovered === 'emoji:' + value && styles.hover]}
+                          accessibilityRole="button"
+                          accessibilityLabel={t('messenger.reactWith', { emoji: value })}
+                          disabled={busy}
+                          onPress={() => dismiss(() => react(value))}
+                        >
+                          <AppText style={styles.emoji}>{value}</AppText>
+                        </FocusPressable>
+                      </View>
                     ))}
                   </ScrollView>
-                  <IconButton
-                    icon="plus"
-                    label={t('messenger.moreReactions')}
-                    disabled={busy}
-                    onPress={() => setPicker(true)}
-                  />
+                  <View
+                    collapsable={false}
+                    ref={(node) => registerTarget('more', node, () => setPicker(true))}
+                    testID="message-menu-target-more"
+                    style={hovered === 'more' && styles.hover}
+                  >
+                    <IconButton
+                      icon="plus"
+                      label={t('messenger.moreReactions')}
+                      disabled={busy}
+                      onPress={() => setPicker(true)}
+                    />
+                  </View>
                 </Animated.View>
               )}
-              {!picker && !editing && (
+              {!picker && (
                 <View
                   pointerEvents="none"
                   style={[
@@ -300,31 +360,7 @@ export function MessageActions({
                   </MessageBubble>
                 </View>
               )}
-              {editing ? (
-                <View style={styles.picker}>
-                  <Field
-                    label={t('messenger.editMessage')}
-                    value={editedBody}
-                    onChangeText={setEditedBody}
-                    multiline
-                    autoFocus
-                    maxLength={8000}
-                    style={{ maxHeight: 220 }}
-                  />
-                  <Button
-                    label={t('common.save')}
-                    variant="accent"
-                    busy={busy}
-                    disabled={!editedBody.trim() || editedBody === message.body}
-                    onPress={() => dismiss(() => edit?.(editedBody))}
-                  />
-                  <Button
-                    label={t('common.cancel')}
-                    variant="secondary"
-                    onPress={() => setEditing(false)}
-                  />
-                </View>
-              ) : picker ? (
+              {picker ? (
                 <View style={styles.picker}>
                   <View style={ui.row}>
                     <AppText variant="headline" style={ui.flex}>
@@ -371,25 +407,33 @@ export function MessageActions({
                   onLayout={(event) => setMenuHeight(event.nativeEvent.layout.height)}
                 >
                   {actions.map((item) => (
-                    <FocusPressable
+                    <View
                       key={item.icon}
-                      style={styles.action}
-                      accessibilityRole="button"
-                      onPress={() => performAction(item.icon)}
-                      accessibilityLabel={item.label}
-                      disabled={busy}
+                      collapsable={false}
+                      ref={(node) =>
+                        registerTarget(item.icon, node, () => performAction(item.icon))
+                      }
+                      testID={'message-menu-target-' + item.icon}
                     >
-                      <AppIcon
-                        name={item.icon}
-                        color={item.icon === 'trash-2' ? theme.colors.error : theme.colors.black}
-                      />
-                      <AppText
-                        variant="bodyMedium"
-                        style={[ui.flex, item.icon === 'trash-2' && styles.danger]}
+                      <FocusPressable
+                        style={[styles.action, hovered === item.icon && styles.hover]}
+                        accessibilityRole="button"
+                        onPress={() => performAction(item.icon)}
+                        accessibilityLabel={item.label}
+                        disabled={busy}
                       >
-                        {item.label}
-                      </AppText>
-                    </FocusPressable>
+                        <AppIcon
+                          name={item.icon}
+                          color={item.icon === 'trash-2' ? theme.colors.error : theme.colors.black}
+                        />
+                        <AppText
+                          variant="bodyMedium"
+                          style={[ui.flex, item.icon === 'trash-2' && styles.danger]}
+                        >
+                          {item.label}
+                        </AppText>
+                      </FocusPressable>
+                    </View>
                   ))}
                   {info && (
                     <AppText variant="caption" tone="secondary">
@@ -404,11 +448,25 @@ export function MessageActions({
           </Animated.View>
         </KeyboardAvoidingView>
       </View>
+    </View>
+  );
+  if (inline) return visible ? content : null;
+  return (
+    <Modal
+      testID="message-actions-modal"
+      transparent
+      visible={visible}
+      onRequestClose={() => dismiss()}
+      animationType="none"
+      onDismiss={finishDismiss}
+    >
+      {content}
     </Modal>
   );
 }
 const styles = StyleSheet.create({
   overlay: { flex: 1 },
+  hover: { backgroundColor: theme.colors.border, borderRadius: 14 },
   position: { position: 'absolute', left: 16, right: 16 },
   scroll: { flexGrow: 0 },
   content: { gap: 8, alignItems: 'flex-start' },
@@ -440,6 +498,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 48,
     paddingVertical: 6,
+    paddingHorizontal: 8,
   },
   danger: { color: theme.colors.error },
   picker: {

@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import { getSharedPayloads, clearSharedPayloads, type SharePayload } from 'expo-sharing';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
@@ -24,6 +24,7 @@ import {
   prepareIncoming,
   type IncomingItem,
 } from '../incoming-share';
+import { sharedConversation } from '../share-native';
 import type { Chat } from '../model';
 import type { ChatCursor } from '../engine';
 
@@ -71,11 +72,24 @@ export function IncomingShares() {
   }
   if (!payloads || !authenticated) return null;
   let items: IncomingItem[] = [];
-  let invalid = false;
+  let invalid:
+    | 'incomingShare.fileSize'
+    | 'incomingShare.imageSize'
+    | 'incomingShare.tooMany'
+    | 'incomingShare.unavailable'
+    | null = null;
   try {
     items = incomingItems(payloads);
-  } catch {
-    invalid = true;
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    invalid =
+      code === 'SHARE_FILE_SIZE'
+        ? 'incomingShare.fileSize'
+        : code === 'SHARE_IMAGE_SIZE'
+          ? 'incomingShare.imageSize'
+          : code === 'SHARE_TOO_MANY'
+            ? 'incomingShare.tooMany'
+            : 'incomingShare.unavailable';
   }
   return (
     <Modal visible animationType="fade" presentationStyle="fullScreen" onRequestClose={finish}>
@@ -85,12 +99,13 @@ export function IncomingShares() {
             title={t('incomingShare.title')}
             right={<IconButton icon="x" label={t('common.cancel')} onPress={finish} />}
           >
-            <AppText accessibilityRole="alert">{t('incomingShare.invalid')}</AppText>
+            <AppText accessibilityRole="alert">{t(invalid)}</AppText>
           </Page>
         ) : (
           <ShareReview
             key={signature(payloads)}
             items={items}
+            suggestedChat={sharedConversation(payloads.map((payload) => payload.value))}
             onClose={finish}
             onBusy={(value) => {
               sending.current = value;
@@ -106,7 +121,9 @@ export function ShareReview({
   items,
   onClose,
   onBusy,
+  suggestedChat,
 }: {
+  suggestedChat?: string | null;
   onBusy?: (busy: boolean) => void;
   items: readonly IncomingItem[];
   onClose: () => void;
@@ -120,6 +137,33 @@ export function ShareReview({
   const locked = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const suggestion = useQuery({
+    queryKey: ['device', 'share-suggestion', suggestedChat],
+    queryFn: async () => {
+      if (!suggestedChat) return null;
+      const [chat, members, contacts] = await Promise.all([
+        view.chat(suggestedChat),
+        view.members(suggestedChat),
+        view.contacts(),
+      ]);
+      return chat &&
+        !chat.left_group &&
+        members.length >= 2 &&
+        !members.some((member) =>
+          contacts.some((contact) => contact.key === member.key && contact.blocked),
+        )
+        ? chat
+        : null;
+    },
+    enabled: Boolean(suggestedChat),
+    networkMode: 'always',
+  });
+  const suggestionApplied = useRef(false);
+  useEffect(() => {
+    if (suggestionApplied.current || !suggestion.data) return;
+    suggestionApplied.current = true;
+    setSelected((current) => current ?? suggestion.data);
+  }, [suggestion.data]);
   const chats = useInfiniteQuery({
     queryKey: ['device', 'share-chats', search],
     queryFn: ({ pageParam }) => view.chatPage('all', search, pageParam),
@@ -224,6 +268,7 @@ export function ShareReview({
       )}
       <Button
         label={t('common.send')}
+        variant="accent"
         disabled={!selected || !items.length}
         busy={busy}
         onPress={() => void send()}

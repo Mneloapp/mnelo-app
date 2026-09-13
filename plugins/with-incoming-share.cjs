@@ -59,6 +59,19 @@ module.exports = function withIncomingShare(config) {
   }
 `,
       );
+      replace('import UIKit', 'import UIKit\nimport Intents\nimport CryptoKit');
+      replace(
+        '      userDefaults.set(encoded, forKey: SHARE_INTO_DEFAULTS_KEY)',
+        `      let conversation = (extensionContext?.intent as? INSendMessageIntent)?.conversationIdentifier
+      let digest = SHA256.hash(data: encoded).map { String(format: "%02x", $0) }.joined()
+      userDefaults.set(["digest": digest, "conversation": conversation ?? ""], forKey: "MneloShareContext")
+      userDefaults.set(encoded, forKey: SHARE_INTO_DEFAULTS_KEY)`,
+      );
+      // Keep security-scoped source access open until the app-group copy is complete.
+      replace(
+        '    let fileName = url.lastPathComponent.isEmpty',
+        '    let scoped = url.startAccessingSecurityScopedResource()\n    defer { if scoped { url.stopAccessingSecurityScopedResource() } }\n    let fileName = url.lastPathComponent.isEmpty',
+      );
       // Copies may otherwise inherit a source file's weaker protection class.
       replace(
         '      try FileManager.default.copyItem(at: url, to: destinationURL)',
@@ -72,7 +85,25 @@ module.exports = function withIncomingShare(config) {
       const infoPath = path.join(directory, 'Info.plist');
       const info = plist.parse(fs.readFileSync(infoPath, 'utf8'));
       info.CFBundleDisplayName = 'Mnelo';
+      info.NSExtension.NSExtensionAttributes.IntentsSupported = ['INSendMessageIntent'];
       fs.writeFileSync(infoPath, plist.build(info));
+      fs.writeFileSync(
+        path.join(directory, 'PrivacyInfo.xcprivacy'),
+        plist.build({
+          NSPrivacyTracking: false,
+          NSPrivacyCollectedDataTypes: [],
+          NSPrivacyAccessedAPITypes: [
+            {
+              NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+              NSPrivacyAccessedAPITypeReasons: ['1C8F.1'],
+            },
+            {
+              NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryFileTimestamp',
+              NSPrivacyAccessedAPITypeReasons: ['C617.1'],
+            },
+          ],
+        }),
+      );
       return mod;
     },
   ]);
@@ -89,6 +120,22 @@ module.exports = function withIncomingShare(config) {
       settings.MARKETING_VERSION = mod.version;
       settings.DEVELOPMENT_TEAM = mod.ios.appleTeamId;
       settings.INFOPLIST_KEY_CFBundleDisplayName = 'Mnelo';
+    }
+    const resource = 'expo-sharing-extension/PrivacyInfo.xcprivacy';
+    const target = Object.entries(mod.modResults.pbxNativeTargetSection()).find(
+      ([, value]) =>
+        typeof value === 'object' &&
+        String(value.name).replaceAll('"', '') === 'expo-sharing-extension',
+    );
+    if (target && !mod.modResults.hasFile(resource)) {
+      if (!mod.modResults.pbxGroupByName('Resources')) {
+        const group = mod.modResults.addPbxGroup([], 'Resources');
+        mod.modResults.addToPbxGroup(
+          { fileRef: group.uuid, basename: 'Resources' },
+          mod.modResults.getFirstProject().firstProject.mainGroup,
+        );
+      }
+      mod.modResults.addResourceFile(resource, { target: target[0] });
     }
     return mod;
   });

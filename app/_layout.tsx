@@ -6,6 +6,7 @@ import { theme } from '@/theme/tokens';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { DeviceProvider, useDevice } from '@/messenger/DeviceProvider';
 import { IncomingCalls } from '@/messenger/screens/CallScreen';
+import { ConversationSuggestions } from '@/messenger/components/ConversationSuggestions';
 import { IncomingShares } from '@/messenger/components/IncomingShares';
 import { DeviceNotifications } from '@/messenger/DeviceNotifications';
 export { RouteError as ErrorBoundary } from '@/components/RouteError';
@@ -49,6 +50,7 @@ function Navigator() {
       </Stack>
       <DeviceNotifications />
       <IncomingShares />
+      <ConversationSuggestions />
     </>
   );
 }

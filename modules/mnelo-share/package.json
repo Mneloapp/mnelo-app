@@ -1,0 +1,7 @@
+{
+  "name": "mnelo-share",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mnelo incoming attachments and conversation suggestions",
+  "license": "AGPL-3.0-only"
+}

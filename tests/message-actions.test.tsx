@@ -131,10 +131,9 @@ test('own text exposes editing and delete for everyone; incoming text only offer
   await measureActions();
   expect(screen.getByRole('button', { name: 'Delete for everyone' })).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Edit message' }));
-  await fireEvent.changeText(screen.getByLabelText('Edit message'), 'Corrected text');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  expect(screen.queryByLabelText('Edit message')).toBeNull();
   await finishDismiss();
-  expect(edit).toHaveBeenCalledWith('Corrected text');
+  expect(edit).toHaveBeenCalledTimes(1);
   await view.unmount();
   await render(
     <MessageActions

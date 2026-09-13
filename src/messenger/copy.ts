@@ -1,6 +1,16 @@
 import { deliveryV2 } from './delivery-mode';
 
 export const messengerEn = {
+  sendPoll: 'Send poll',
+  sendEvent: 'Send event',
+  pollHint: 'Ask the chat and let everyone vote.',
+  eventHint: 'Make a plan together. Share the details with this chat.',
+  pollOptions: 'Answer options',
+  pollPlaceholder: 'What would you like to ask?',
+  eventPlaceholder: 'Give your event a name',
+  multipleAnswersHint: 'People can choose more than one option.',
+  eventLocationPlaceholder: 'Add a place or meeting link',
+  eventNotesPlaceholder: 'Anything else people should know?',
   poll: 'Poll',
   openChatSearch: 'Show chat search',
   attachmentContact: 'Contact',
@@ -250,6 +260,16 @@ export const messengerEn = {
     'I understand that I will need my own backup and recovery key to restore this history',
 } as const;
 export const messengerKa: Record<keyof typeof messengerEn, string> = {
+  sendPoll: 'გამოკითხვის გაგზავნა',
+  sendEvent: 'ღონისძიების გაგზავნა',
+  pollHint: 'დასვი კითხვა და მიეცი მონაწილეებს ხმის მიცემის საშუალება.',
+  eventHint: 'დაგეგმეთ ერთად და გაუზიარეთ დეტალები ამ ჩატს.',
+  pollOptions: 'პასუხის ვარიანტები',
+  pollPlaceholder: 'რისი კითხვა გსურს?',
+  eventPlaceholder: 'ღონისძიების სახელწოდება',
+  multipleAnswersHint: 'მონაწილეებს რამდენიმე პასუხის არჩევა შეუძლიათ.',
+  eventLocationPlaceholder: 'ადგილი ან შეხვედრის ბმული',
+  eventNotesPlaceholder: 'დამატებითი ინფორმაცია მონაწილეებისთვის',
   poll: 'გამოკითხვა',
   openChatSearch: 'ჩატებში ძებნის გახსნა',
   attachmentContact: 'კონტაქტი',

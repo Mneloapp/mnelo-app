@@ -43,7 +43,15 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '23',
+    buildNumber: '24',
+    privacyManifests: {
+      NSPrivacyAccessedAPITypes: [
+        {
+          NSPrivacyAccessedAPIType: 'NSPrivacyAccessedAPICategoryUserDefaults',
+          NSPrivacyAccessedAPITypeReasons: ['CA92.1', '1C8F.1'],
+        },
+      ],
+    },
     supportsTablet: false,
     associatedDomains: ['applinks:mnelo.com', 'applinks:www.mnelo.com'],
     infoPlist: { UIBackgroundModes: ['audio', 'voip', 'remote-notification'] },

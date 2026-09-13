@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type PropsWithChildren } from 'react';
 import {
   Animated,
   KeyboardAvoidingView,
@@ -25,6 +25,7 @@ export function ActionSheet({
   compact = false,
   avoidKeyboard = false,
   children,
+  footer,
 }: PropsWithChildren<{
   visible: boolean;
   title: string;
@@ -32,6 +33,7 @@ export function ActionSheet({
   onDismiss?: () => void;
   compact?: boolean;
   avoidKeyboard?: boolean;
+  footer?: ReactNode;
 }>) {
   const reduced = useReducedMotion();
   const { t } = useTranslation();
@@ -135,6 +137,7 @@ export function ActionSheet({
                 )}
                 {children}
               </ScrollView>
+              {footer && <View style={styles.footer}>{footer}</View>}
             </Animated.View>
           </KeyboardAvoidingView>
         </SafeAreaView>
@@ -157,7 +160,20 @@ const styles = StyleSheet.create({
   modal: { flex: 1, justifyContent: 'flex-end' },
   scrim: { backgroundColor: theme.colors.scrim },
   keyboard: { flex: 1, justifyContent: 'flex-end' },
-  panel: { maxHeight: '90%', flexShrink: 1 },
+  panel: {
+    maxHeight: '90%',
+    flexShrink: 1,
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: theme.radii.xl,
+    borderTopRightRadius: theme.radii.xl,
+    overflow: 'hidden',
+  },
+  footer: {
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.lg,
+    backgroundColor: theme.colors.background,
+  },
   scroll: {
     flexGrow: 0,
     backgroundColor: theme.colors.background,

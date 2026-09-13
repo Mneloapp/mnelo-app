@@ -9,6 +9,11 @@ type TranslationShape<T> = {
 // Complete Georgian product copy. User-authored content and canonical server data are not rewritten.
 export const ka = {
   incomingShare: {
+    fileSize: 'ფაილი 10 მბ-ზე დიდია. აირჩიე უფრო პატარა ფაილი და ხელახლა გააზიარე.',
+    imageSize: 'ფოტო დასამუშავებლად ძალიან დიდია. გააზიარე შემცირებული ასლი.',
+    tooMany: 'აირჩიე მაქსიმუმ 10 ელემენტი და ხელახლა გააზიარე.',
+    unavailable:
+      'Mnelo-მ ეს ელემენტი ვერ გახსნა. ჩამოსატვირთად გახსენი ფოტოებში ან ფაილებში, შემდეგ ხელახლა გააზიარე.',
     title: 'გაზიარება Mnelo-თი',
     choose: 'აირჩიე საუბარი, გადაამოწმე მასალა და გაგზავნე.',
     search: 'საუბრის ძებნა',

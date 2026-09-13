@@ -37,7 +37,7 @@ export function DeliveryLeaf({ status }: { status: LocalMessage['status'] }) {
 export function MessageTimeReveal({
   children,
   onReply,
-}: PropsWithChildren<{ onReply?: () => void }>) {
+}: PropsWithChildren<{ onReply?: (() => void) | undefined }>) {
   const [offset] = useState(() => new Animated.Value(0));
   const distance = theme.layout.messageTimeReveal;
   const responder = useMemo(

@@ -75,6 +75,9 @@ const mapMessage = (row: MessageRow, own: string): LocalMessage => ({
 });
 const selectMessages = `SELECT m.*, (SELECT count(*) FROM deliveries d WHERE d.message_id=m.id AND d.acknowledged=0) AS pending, (SELECT count(*) FROM deliveries d WHERE d.message_id=m.id AND d.read_at IS NULL) AS unread_delivery FROM messages m`;
 
+export type ConversationActivity =
+  { type: 'message'; chat: string; outgoing: boolean } | { type: 'forget'; chat: string | null };
+
 export class DeviceMessenger {
   private identity: LocalIdentity | null = null;
   private enrollment: PhoneEnrollment | null = null;
@@ -83,6 +86,7 @@ export class DeviceMessenger {
   private deliveryVersion = 1;
   private transport: PeerTransport | null = null;
   private listeners = new Set<() => void>();
+  private conversationListeners = new Set<(event: ConversationActivity) => void>();
   private incomingListeners = new Set<(message: IncomingMessage) => void>();
   private tail: Promise<unknown> = Promise.resolve();
   constructor(
@@ -135,6 +139,22 @@ export class DeviceMessenger {
   }
   private changed() {
     this.listeners.forEach((listener) => listener());
+  }
+  subscribeConversationActivity(listener: (event: ConversationActivity) => void) {
+    this.conversationListeners.add(listener);
+    return () => {
+      this.conversationListeners.delete(listener);
+    };
+  }
+  private conversationActivity(event: ConversationActivity) {
+    // Optional system integrations must never turn a committed send into a failed send.
+    for (const listener of this.conversationListeners) {
+      try {
+        listener(event);
+      } catch {
+        /* No effect on message delivery. */
+      }
+    }
   }
   subscribeIncoming(listener: (message: IncomingMessage) => void) {
     this.incomingListeners.add(listener);
@@ -719,6 +739,7 @@ export class DeviceMessenger {
         await this.db.run('DELETE FROM wake_capabilities WHERE peer=?', peer);
       }
     });
+    if (blocked) this.conversationActivity({ type: 'forget', chat: null });
     this.changed();
   }
   async deliveryBlocks() {
@@ -935,6 +956,7 @@ export class DeviceMessenger {
           peer.public_key,
         );
     });
+    this.conversationActivity({ type: 'message', chat, outgoing: true });
     this.changed();
     await this.flush().catch(() => undefined);
     return packet.id;
@@ -1136,6 +1158,7 @@ export class DeviceMessenger {
         id,
       );
     });
+    this.conversationActivity({ type: 'forget', chat: id });
     this.changed();
     await this.flush().catch(() => undefined);
   }
@@ -1400,7 +1423,15 @@ export class DeviceMessenger {
         ...(groupAck as { id: string; revision: number }),
       });
     this.changed();
-    if (incoming) this.incomingListeners.forEach((listener) => listener(incoming!));
+    if (incoming) {
+      this.incomingListeners.forEach((listener) => listener(incoming!));
+      if ((incoming as IncomingMessage).type === 'message')
+        this.conversationActivity({
+          type: 'message',
+          chat: (incoming as IncomingMessage).chat,
+          outgoing: false,
+        });
+    }
     return true;
   }
   async markRead(chat: string, through = Number.MAX_SAFE_INTEGER) {
@@ -1791,6 +1822,7 @@ export class DeviceMessenger {
       );
       for (const row of media) await this.db.run('DELETE FROM media WHERE id=?', row.media_id);
     });
+    this.conversationActivity({ type: 'forget', chat });
     this.changed();
   }
   async retryMessage(id: string) {
@@ -1839,6 +1871,7 @@ export class DeviceMessenger {
     this.identity = null;
     this.enrollment = null;
     this.profile = emptyProfile();
+    this.conversationActivity({ type: 'forget', chat: null });
     this.changed();
   }
   async snapshot(): Promise<string> {

@@ -13,8 +13,10 @@ export function MessageField({
   focusKey,
   onFocus,
   inputRef,
+  editable = true,
 }: {
   value: string;
+  editable?: boolean;
   onChangeText: (text: string) => void;
   focusKey?: string | undefined;
   onFocus?: () => void;
@@ -38,6 +40,7 @@ export function MessageField({
       label={t('chat.message')}
       hideLabel
       value={value}
+      editable={editable}
       onChangeText={onChangeText}
       placeholder={t('chat.messagePlaceholder')}
       multiline

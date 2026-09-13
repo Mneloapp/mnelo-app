@@ -4,6 +4,11 @@ import { messengerEn } from '../messenger/copy';
 import { phoneEn } from '../messenger/phone-copy';
 export const en = {
   incomingShare: {
+    fileSize: 'This file is larger than 10 MB. Choose a smaller file and share it again.',
+    imageSize: 'This photo is too large to process. Share a smaller copy.',
+    tooMany: 'Choose up to 10 items and share them again.',
+    unavailable:
+      'Mnelo could not open this item. Open it in Photos or Files to download it, then share it again.',
     title: 'Share with Mnelo',
     choose: 'Choose a conversation, review the items, then send.',
     search: 'Find a conversation',

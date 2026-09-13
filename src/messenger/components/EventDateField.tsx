@@ -7,10 +7,12 @@ const display = (value: number) => {
 };
 export function EventDateField({
   label,
+  disabled = false,
   value,
   onChange,
 }: {
   label: string;
+  disabled?: boolean;
   value: number;
   onChange: (date: number | null) => void;
 }) {
@@ -21,6 +23,8 @@ export function EventDateField({
   return (
     <Field
       label={label}
+      editable={!disabled}
+      style={{ borderWidth: 0 }}
       value={draft}
       placeholder={t('messenger.eventDatePlaceholder')}
       onChangeText={(text) => {

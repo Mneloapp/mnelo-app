@@ -40,6 +40,7 @@ import { ChatPhoto } from '../components/ChatPhoto';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
 import { ReplyQuote } from '../components/ReplyQuote';
+import { createMenuGesture, menuTouchPoint, type MenuTouch, type MenuPoint } from '../menu-gesture';
 import { MessageActions, type MessageAnchor } from '../components/MessageActions';
 
 function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: () => void }) {
@@ -127,10 +128,12 @@ function Bubble({
   message,
   onSelect,
   onReply,
+  menuOpen,
 }: {
   message: LocalMessage;
   onSelect: (anchor?: MessageAnchor) => void;
   onReply: () => void;
+  menuOpen: boolean;
 }) {
   const { identity, engine } = useDevice();
   const { t } = useTranslation();
@@ -157,7 +160,7 @@ function Bubble({
     bubble.measureInWindow((x, y, width, height) => onSelect({ x, y, width, height }));
   }
   return (
-    <MessageTimeReveal onReply={onReply}>
+    <MessageTimeReveal onReply={menuOpen ? undefined : onReply}>
       <MessageBubble
         own={own}
         bubbleRef={bubbleRef}
@@ -222,7 +225,17 @@ export function ChatScreen() {
     networkMode: 'always',
   });
   const [text, setText] = useState('');
+  const [editing, setEditing] = useState<{
+    message: LocalMessage;
+    draft: string;
+    reply: string | undefined;
+  } | null>(null);
   const [selectedAnchor, setSelectedAnchor] = useState<MessageAnchor | undefined>();
+  const [menuGesture] = useState(createMenuGesture);
+  const touchHeld = useRef(false);
+  const menuHeld = useRef(false);
+  const menuMoved = useRef(false);
+  const lastMenuPoint = useRef<MenuPoint>({ x: -1, y: -1 });
   const [selected, setSelected] = useState<LocalMessage | null>(null);
   const [callBack, setCallBack] = useState<LocalMessage | null>(null);
   const [reply, setReply] = useState<string | undefined>();
@@ -309,274 +322,483 @@ export function ChatScreen() {
       ...(reply ? { replyTo: reply } : {}),
     });
   }
+  const menuTouch = (
+    phase: MenuTouch['phase'],
+    event: import('react-native').GestureResponderEvent,
+  ) => {
+    const point = menuTouchPoint(event.nativeEvent, lastMenuPoint.current);
+    lastMenuPoint.current = point;
+    if (phase === 'move') menuMoved.current = true;
+    if (menuHeld.current && menuMoved.current)
+      menuGesture.update({
+        phase,
+        point,
+      });
+    if (phase !== 'move') {
+      touchHeld.current = false;
+      menuHeld.current = false;
+    }
+  };
   return (
-    <Page
-      title={chat.data?.title ?? t('tabs.chats')}
-      avatarName={chat.data?.title}
-      avatar={
-        chat.data?.kind === 'direct' && remote ? (
-          <PeerAvatar peer={remote.key} name={chat.data.title} size="small" />
-        ) : undefined
-      }
-      titleActionLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}
-      onTitlePress={
-        chat.data?.kind === 'group'
-          ? () => router.push({ pathname: '/group/[id]', params: { id } })
-          : remote
-            ? () => router.push({ pathname: '/contact/[key]', params: { key: remote.key } })
-            : undefined
-      }
-      titleLines={1}
-      headerStyle={styles.chatHeader}
-      bottomSafe={false}
-      avoidKeyboard={!attachmentPanel.managedKeyboard}
-      back
-      scroll={false}
-      contentStyle={[ui.flex, styles.chatContent]}
-      right={
-        <View style={styles.headerButtons}>
-          {chat.data && !chat.data.left_group && remote && (
-            <>
-              <IconButton
-                icon="phone"
-                label={t('messenger.callVoice')}
-                disabled={!calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))}
-                onPress={() =>
-                  router.push({ pathname: '/call/[id]', params: { id, media: 'voice' } })
-                }
-              />
-              <IconButton
-                icon="video"
-                label={t('messenger.callVideo')}
-                disabled={!calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))}
-                onPress={() =>
-                  router.push({ pathname: '/call/[id]', params: { id, media: 'video' } })
-                }
-              />
-            </>
-          )}
-        </View>
-      }
+    <View
+      style={ui.flex}
+      onStartShouldSetResponderCapture={() => {
+        touchHeld.current = true;
+        return false;
+      }}
+      onTouchEnd={(event) => menuTouch('release', event)}
+      onTouchCancel={(event) => menuTouch('cancel', event)}
+      onMoveShouldSetResponderCapture={() => menuHeld.current}
+      onResponderGrant={(event) => menuTouch('move', event)}
+      onResponderMove={(event) => menuTouch('move', event)}
+      onResponderRelease={(event) => menuTouch('release', event)}
+      onResponderTerminate={(event) => menuTouch('cancel', event)}
+      onResponderTerminationRequest={() => !menuHeld.current}
     >
-      {!deliveryState && (
-        <AppText variant="caption" tone="secondary">
-          {t(remote && mesh?.online(remote.key) ? 'messenger.peerOnline' : 'messenger.peerOffline')}
-        </AppText>
-      )}
-      {deliveryState === 'message-error' && (
-        <AppText variant="caption">{t('messenger.deliverySomeFailed')}</AppText>
-      )}
-      {deliveryState === 'offline' && (
-        <AppText variant="caption" tone="secondary">
-          {t('messenger.deliveryOffline')}
-        </AppText>
-      )}
-      {deliveryState === 'update-required' && (
-        <AppText variant="caption" tone="secondary">
-          {t('messenger.deliveryUpdate')}
-        </AppText>
-      )}
-      {deliveryState === 'peer-not-ready' && (
-        <AppText variant="caption" tone="secondary">
-          {t('messenger.deliveryPeerNotReady')}
-        </AppText>
-      )}
-      {deliveryState === 'identity-changed' && (
-        <AppText variant="caption" tone="secondary">
-          {t('messenger.deliveryIdentity')}
-        </AppText>
-      )}
-      <FlatList
-        ref={listRef}
-        data={rows}
-        inverted
-        keyExtractor={(row) => row.id}
-        initialNumToRender={8}
-        windowSize={5}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) =>
-          item.kind === 'call' ? (
-            <CallMessage
-              message={item}
-              onLongPress={() => {
-                Keyboard.dismiss();
-                setSelectedAnchor(undefined);
-                setSelected(item);
-              }}
-              onPress={() => {
-                Keyboard.dismiss();
-                setCallBack(item);
-              }}
-            />
-          ) : (
-            <Bubble
-              message={item}
-              onSelect={(anchor) => {
-                Keyboard.dismiss();
-                setSelectedAnchor(anchor);
-                setSelected(item);
-              }}
-              onReply={() => setReply(item.id)}
-            />
-          )
-        }
-        onEndReached={() => {
-          if (messages.hasNextPage && !messages.isFetchingNextPage) void messages.fetchNextPage();
-        }}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <StateView loading={messages.isPending} message={t('messenger.noChats')} />
-          </View>
-        }
-      />
-      {callBack && (
-        <CallBackSheet
-          message={callBack}
-          name={chat.data?.title ?? t('brand')}
-          available={Boolean(
-            chat.data &&
-            !chat.data.left_group &&
-            remote &&
-            calls &&
-            (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
+      <View
+        style={ui.flex}
+        aria-hidden={Boolean(selected)}
+        accessibilityElementsHidden={Boolean(selected)}
+        importantForAccessibility={selected ? 'no-hide-descendants' : 'auto'}
+      >
+        <Page
+          title={chat.data?.title ?? t('tabs.chats')}
+          avatarName={chat.data?.title}
+          avatar={
+            chat.data?.kind === 'direct' && remote ? (
+              <PeerAvatar peer={remote.key} name={chat.data.title} size="small" />
+            ) : undefined
+          }
+          titleActionLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}
+          onTitlePress={
+            chat.data?.kind === 'group'
+              ? () => router.push({ pathname: '/group/[id]', params: { id } })
+              : remote
+                ? () => router.push({ pathname: '/contact/[key]', params: { key: remote.key } })
+                : undefined
+          }
+          titleLines={1}
+          headerStyle={styles.chatHeader}
+          bottomSafe={false}
+          avoidKeyboard={!attachmentPanel.managedKeyboard}
+          back
+          scroll={false}
+          contentStyle={[ui.flex, styles.chatContent]}
+          right={
+            <View style={styles.headerButtons}>
+              {chat.data && !chat.data.left_group && remote && (
+                <>
+                  <IconButton
+                    icon="phone"
+                    label={t('messenger.callVoice')}
+                    disabled={
+                      !calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))
+                    }
+                    onPress={() =>
+                      router.push({ pathname: '/call/[id]', params: { id, media: 'voice' } })
+                    }
+                  />
+                  <IconButton
+                    icon="video"
+                    label={t('messenger.callVideo')}
+                    disabled={
+                      !calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))
+                    }
+                    onPress={() =>
+                      router.push({ pathname: '/call/[id]', params: { id, media: 'video' } })
+                    }
+                  />
+                </>
+              )}
+            </View>
+          }
+        >
+          {!deliveryState && (
+            <AppText variant="caption" tone="secondary">
+              {t(
+                remote && mesh?.online(remote.key)
+                  ? 'messenger.peerOnline'
+                  : 'messenger.peerOffline',
+              )}
+            </AppText>
           )}
-          onClose={() => setCallBack(null)}
-          onCall={(media) => router.push({ pathname: '/call/[id]', params: { id, media } })}
-        />
-      )}
-      {reply && (
-        <View style={ui.row}>
-          <View style={ui.flex}>
-            <ReplyQuote chat={id} id={reply} />
-          </View>
-          <IconButton icon="x" label={t('common.cancel')} onPress={() => setReply(undefined)} />
-        </View>
-      )}
-      {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
-      {recording ? (
-        <View style={ui.stack}>
-          <VoiceRecorder
-            autoStart
-            onReady={setVoice}
-            disabled={action.busy}
-            onSend={() => void action.run(() => sendFile(voice, 'voice'))}
-            onCancel={() => {
-              setRecording(false);
-              setVoice(null);
+          {deliveryState === 'message-error' && (
+            <AppText variant="caption">{t('messenger.deliverySomeFailed')}</AppText>
+          )}
+          {deliveryState === 'offline' && (
+            <AppText variant="caption" tone="secondary">
+              {t('messenger.deliveryOffline')}
+            </AppText>
+          )}
+          {deliveryState === 'update-required' && (
+            <AppText variant="caption" tone="secondary">
+              {t('messenger.deliveryUpdate')}
+            </AppText>
+          )}
+          {deliveryState === 'peer-not-ready' && (
+            <AppText variant="caption" tone="secondary">
+              {t('messenger.deliveryPeerNotReady')}
+            </AppText>
+          )}
+          {deliveryState === 'identity-changed' && (
+            <AppText variant="caption" tone="secondary">
+              {t('messenger.deliveryIdentity')}
+            </AppText>
+          )}
+          <FlatList
+            ref={listRef}
+            data={rows}
+            scrollEnabled={!selected}
+            inverted
+            keyExtractor={(row) => row.id}
+            initialNumToRender={8}
+            windowSize={5}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) =>
+              item.kind === 'call' ? (
+                <CallMessage
+                  message={item}
+                  onLongPress={() => {
+                    Keyboard.dismiss();
+                    setSelectedAnchor(undefined);
+                    menuMoved.current = false;
+                    menuHeld.current = touchHeld.current;
+                    setSelected(item);
+                  }}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setCallBack(item);
+                  }}
+                />
+              ) : (
+                <Bubble
+                  message={item}
+                  menuOpen={Boolean(selected)}
+                  onSelect={(anchor) => {
+                    Keyboard.dismiss();
+                    setSelectedAnchor(anchor);
+                    menuMoved.current = false;
+                    menuHeld.current = touchHeld.current;
+                    setSelected(item);
+                  }}
+                  onReply={() => {
+                    if (editing) {
+                      setText(editing.draft);
+                      setEditing(null);
+                    }
+                    setReply(item.id);
+                  }}
+                />
+              )
+            }
+            onEndReached={() => {
+              if (messages.hasNextPage && !messages.isFetchingNextPage)
+                void messages.fetchNextPage();
             }}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <StateView loading={messages.isPending} message={t('messenger.noChats')} />
+              </View>
+            }
           />
-        </View>
-      ) : (
-        <View style={styles.composer}>
-          <IconButton
-            icon={attachmentPanel.visible ? 'keyboard' : 'plus'}
-            label={t(attachmentPanel.visible ? 'messenger.showKeyboard' : 'messenger.attachments')}
-            onPress={() => attachmentPanel.toggle(() => messageInput.current?.focus())}
-          />
-          <View style={ui.flex}>
-            <MessageField
-              inputRef={messageInput}
-              value={text}
-              onChangeText={setText}
-              focusKey={reply}
-              onFocus={attachmentPanel.focusInput}
+          {callBack && (
+            <CallBackSheet
+              message={callBack}
+              name={chat.data?.title ?? t('brand')}
+              available={Boolean(
+                chat.data &&
+                !chat.data.left_group &&
+                remote &&
+                calls &&
+                (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
+              )}
+              onClose={() => setCallBack(null)}
+              onCall={(media) => router.push({ pathname: '/call/[id]', params: { id, media } })}
             />
+          )}
+          {editing && (
+            <View style={styles.editingBanner}>
+              <View style={ui.flex}>
+                <AppText variant="caption" tone="secondary">
+                  {t('messenger.editMessage')}
+                </AppText>
+                <AppText variant="caption" numberOfLines={1}>
+                  {editing.message.body}
+                </AppText>
+              </View>
+              <IconButton
+                icon="x"
+                label={t('common.cancel')}
+                disabled={action.busy}
+                onPress={() => {
+                  setText(editing.draft);
+                  setReply(editing.reply);
+                  setEditing(null);
+                }}
+              />
+            </View>
+          )}
+          {!editing && reply && (
+            <View style={ui.row}>
+              <View style={ui.flex}>
+                <ReplyQuote chat={id} id={reply} />
+              </View>
+              <IconButton icon="x" label={t('common.cancel')} onPress={() => setReply(undefined)} />
+            </View>
+          )}
+          {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
+          {recording ? (
+            <View style={ui.stack}>
+              <VoiceRecorder
+                autoStart
+                onReady={setVoice}
+                disabled={action.busy}
+                onSend={() => void action.run(() => sendFile(voice, 'voice'))}
+                onCancel={() => {
+                  setRecording(false);
+                  setVoice(null);
+                }}
+              />
+            </View>
+          ) : (
+            <View style={styles.composer}>
+              <IconButton
+                disabled={Boolean(editing)}
+                icon={attachmentPanel.visible ? 'keyboard' : 'plus'}
+                label={t(
+                  attachmentPanel.visible ? 'messenger.showKeyboard' : 'messenger.attachments',
+                )}
+                onPress={() => attachmentPanel.toggle(() => messageInput.current?.focus())}
+              />
+              <View style={ui.flex}>
+                <MessageField
+                  inputRef={messageInput}
+                  editable={!editing || !action.busy}
+                  value={text}
+                  onChangeText={setText}
+                  focusKey={editing?.message.id ?? reply}
+                  onFocus={attachmentPanel.focusInput}
+                />
+              </View>
+              {text.trim() || editing ? (
+                <IconButton
+                  icon={editing ? 'check' : 'send'}
+                  variant="accent"
+                  label={t(editing ? 'common.save' : 'common.send')}
+                  disabled={!text.trim() || Boolean(editing && text === editing.message.body)}
+                  busy={action.busy}
+                  onPress={() =>
+                    void action.run(async () => {
+                      if (editing) {
+                        await engine.editMessage(editing.message.id, text);
+                        setText(editing.draft);
+                        setReply(editing.reply);
+                        setEditing(null);
+                        return;
+                      }
+                      await sendCurrent(text, reply ? { replyTo: reply } : {});
+                      setText((draft) => (draft === text ? '' : draft));
+                      setReply(undefined);
+                    })
+                  }
+                />
+              ) : (
+                <IconButton
+                  icon="mic"
+                  label={t('messenger.voice')}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    attachmentPanel.close();
+                    setVoice(null);
+                    setRecording(true);
+                  }}
+                />
+              )}
+            </View>
+          )}
+          <ActionSheet
+            visible={Boolean(forward)}
+            title={t('messenger.forward')}
+            onClose={() => setForward(null)}
+          >
+            {chats.data
+              ?.filter((chat) => !chat.left_group)
+              .map((chat) => (
+                <Button
+                  key={chat.id}
+                  variant="secondary"
+                  label={chat.title}
+                  busy={action.busy}
+                  onPress={() =>
+                    void action.run(async () => {
+                      if (!forward || forward.kind === 'call') return;
+                      const media = forward.attachment
+                        ? await engine.media(forward.attachment)
+                        : null;
+                      await engine.send(chat.id, forward.body, {
+                        kind: forward.kind as
+                          'text' | 'file' | 'image' | 'voice' | 'location' | 'contact',
+                        ...(media ? { media } : {}),
+                      });
+                      setForward(null);
+                    })
+                  }
+                />
+              ))}
+          </ActionSheet>
+          <ActionSheet
+            visible={contactPicker}
+            title={t('messenger.contact')}
+            onClose={() => setContactPicker(false)}
+          >
+            {contacts.data
+              ?.filter((contact) => !contact.blocked)
+              .map((contact) => (
+                <Button
+                  key={contact.key}
+                  variant="secondary"
+                  label={contact.name}
+                  busy={action.busy}
+                  onPress={() =>
+                    void action.run(async () => {
+                      await sendCurrent(contact.name + '\nmnelo1:' + contact.key, {
+                        kind: 'contact',
+                      });
+                      setContactPicker(false);
+                    })
+                  }
+                />
+              ))}
+          </ActionSheet>
+          <View
+            testID="chat-input-dock"
+            style={{ height: attachmentPanel.reservedHeight, flexShrink: 0 }}
+          >
+            {attachmentPanel.visible && (
+              <View
+                testID="attachment-panel"
+                style={[styles.attachmentPanel, { paddingBottom: insets.bottom }]}
+              >
+                <View style={styles.attachmentGrid}>
+                  <AttachmentAction
+                    icon="image"
+                    color="#147BF3"
+                    label={t('messenger.photo')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => sendFile(await imageSelection(), 'image'))
+                    }
+                  />
+                  <AttachmentAction
+                    icon="camera"
+                    color="#46515D"
+                    label={t('messenger.camera')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => sendFile(await imageSelection(true), 'image'))
+                    }
+                  />
+                  <AttachmentAction
+                    icon="map-pin"
+                    color="#008B68"
+                    label={t('messenger.attachmentLocation')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => {
+                        const permission = await Location.requestForegroundPermissionsAsync();
+                        if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
+                        const point = await Location.getCurrentPositionAsync({
+                          accuracy: Location.Accuracy.Balanced,
+                        });
+                        await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
+                          kind: 'location',
+                        });
+                        attachmentPanel.close();
+                      })
+                    }
+                  />
+                  <AttachmentAction
+                    icon="user"
+                    color="#7460CE"
+                    label={t('messenger.attachmentContact')}
+                    onPress={() => {
+                      attachmentPanel.close();
+                      setContactPicker(true);
+                    }}
+                  />
+                  <AttachmentAction
+                    icon="file-text"
+                    color="#008DB8"
+                    label={t('messenger.file')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => sendFile(await fileSelection(), 'file'))
+                    }
+                  />
+                  <AttachmentAction
+                    icon="bar-chart-2"
+                    color="#C28100"
+                    label={t('messenger.poll')}
+                    onPress={() => {
+                      attachmentPanel.close();
+                      setCardComposer('poll');
+                    }}
+                  />
+                  <AttachmentAction
+                    icon="calendar"
+                    color="#D92354"
+                    label={t('messenger.event')}
+                    onPress={() => {
+                      attachmentPanel.close();
+                      setCardComposer('event');
+                    }}
+                  />
+                </View>
+              </View>
+            )}
           </View>
-          {text.trim() ? (
-            <IconButton
-              icon="send"
-              variant="accent"
-              label={t('common.send')}
+          {cardComposer && (
+            <RichCardComposer
+              kind={cardComposer}
+              close={() => setCardComposer(null)}
               busy={action.busy}
-              onPress={() =>
+              error={action.error}
+              send={(card) =>
                 void action.run(async () => {
-                  await sendCurrent(text, reply ? { replyTo: reply } : {});
-                  setText((draft) => (draft === text ? '' : draft));
+                  await sendCard(card);
+                  setCardComposer(null);
                   setReply(undefined);
                 })
               }
             />
-          ) : (
-            <IconButton
-              icon="mic"
-              label={t('messenger.voice')}
-              onPress={() => {
-                Keyboard.dismiss();
-                attachmentPanel.close();
-                setVoice(null);
-                setRecording(true);
-              }}
-            />
           )}
-        </View>
-      )}
-      <ActionSheet
-        visible={Boolean(forward)}
-        title={t('messenger.forward')}
-        onClose={() => setForward(null)}
-      >
-        {chats.data
-          ?.filter((chat) => !chat.left_group)
-          .map((chat) => (
-            <Button
-              key={chat.id}
-              variant="secondary"
-              label={chat.title}
-              busy={action.busy}
-              onPress={() =>
-                void action.run(async () => {
-                  if (!forward || forward.kind === 'call') return;
-                  const media = forward.attachment ? await engine.media(forward.attachment) : null;
-                  await engine.send(chat.id, forward.body, {
-                    kind: forward.kind as
-                      'text' | 'file' | 'image' | 'voice' | 'location' | 'contact',
-                    ...(media ? { media } : {}),
-                  });
-                  setForward(null);
-                })
-              }
-            />
-          ))}
-      </ActionSheet>
-      <ActionSheet
-        visible={contactPicker}
-        title={t('messenger.contact')}
-        onClose={() => setContactPicker(false)}
-      >
-        {contacts.data
-          ?.filter((contact) => !contact.blocked)
-          .map((contact) => (
-            <Button
-              key={contact.key}
-              variant="secondary"
-              label={contact.name}
-              busy={action.busy}
-              onPress={() =>
-                void action.run(async () => {
-                  await sendCurrent(contact.name + '\nmnelo1:' + contact.key, {
-                    kind: 'contact',
-                  });
-                  setContactPicker(false);
-                })
-              }
-            />
-          ))}
-      </ActionSheet>
+        </Page>
+      </View>
       {selected && (
         <MessageActions
+          inline
+          gesture={menuGesture}
           reduceMotion={reduceMotion}
           message={selected}
           own={selected.sender === identity?.key}
           anchor={selectedAnchor}
           busy={action.busy}
-          close={() => setSelected(null)}
+          close={() => {
+            menuHeld.current = false;
+            setSelected(null);
+          }}
           quickEmojis={quickEmoji.data}
-          edit={(body) =>
-            void action.run(async () => {
-              await engine.editMessage(selected.id, body);
-              setSelected(null);
-            })
-          }
+          edit={() => {
+            setEditing({
+              message: selected,
+              draft: editing?.draft ?? text,
+              reply: editing?.reply ?? reply,
+            });
+            setText(selected.body);
+            setReply(undefined);
+            attachmentPanel.close();
+            setRecording(false);
+          }}
           removeEverywhere={() =>
             void action.run(async () => {
               await engine.deleteForEveryone(selected.id);
@@ -584,6 +806,10 @@ export function ChatScreen() {
             })
           }
           reply={() => {
+            if (editing) {
+              setText(editing.draft);
+              setEditing(null);
+            }
             setReply(selected.id);
             setSelected(null);
           }}
@@ -617,110 +843,18 @@ export function ChatScreen() {
           }
         />
       )}
-      <View
-        testID="chat-input-dock"
-        style={{ height: attachmentPanel.reservedHeight, flexShrink: 0 }}
-      >
-        {attachmentPanel.visible && (
-          <View
-            testID="attachment-panel"
-            style={[styles.attachmentPanel, { paddingBottom: insets.bottom }]}
-          >
-            <View style={styles.attachmentGrid}>
-              <AttachmentAction
-                icon="image"
-                color="#147BF3"
-                label={t('messenger.photo')}
-                busy={action.busy}
-                onPress={() =>
-                  void action.run(async () => sendFile(await imageSelection(), 'image'))
-                }
-              />
-              <AttachmentAction
-                icon="camera"
-                color="#46515D"
-                label={t('messenger.camera')}
-                busy={action.busy}
-                onPress={() =>
-                  void action.run(async () => sendFile(await imageSelection(true), 'image'))
-                }
-              />
-              <AttachmentAction
-                icon="map-pin"
-                color="#008B68"
-                label={t('messenger.attachmentLocation')}
-                busy={action.busy}
-                onPress={() =>
-                  void action.run(async () => {
-                    const permission = await Location.requestForegroundPermissionsAsync();
-                    if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
-                    const point = await Location.getCurrentPositionAsync({
-                      accuracy: Location.Accuracy.Balanced,
-                    });
-                    await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
-                      kind: 'location',
-                    });
-                    attachmentPanel.close();
-                  })
-                }
-              />
-              <AttachmentAction
-                icon="user"
-                color="#7460CE"
-                label={t('messenger.attachmentContact')}
-                onPress={() => {
-                  attachmentPanel.close();
-                  setContactPicker(true);
-                }}
-              />
-              <AttachmentAction
-                icon="file-text"
-                color="#008DB8"
-                label={t('messenger.file')}
-                busy={action.busy}
-                onPress={() => void action.run(async () => sendFile(await fileSelection(), 'file'))}
-              />
-              <AttachmentAction
-                icon="bar-chart-2"
-                color="#C28100"
-                label={t('messenger.poll')}
-                onPress={() => {
-                  attachmentPanel.close();
-                  setCardComposer('poll');
-                }}
-              />
-              <AttachmentAction
-                icon="calendar"
-                color="#D92354"
-                label={t('messenger.event')}
-                onPress={() => {
-                  attachmentPanel.close();
-                  setCardComposer('event');
-                }}
-              />
-            </View>
-          </View>
-        )}
-      </View>
-      {cardComposer && (
-        <RichCardComposer
-          kind={cardComposer}
-          close={() => setCardComposer(null)}
-          busy={action.busy}
-          error={action.error}
-          send={(card) =>
-            void action.run(async () => {
-              await sendCard(card);
-              setCardComposer(null);
-              setReply(undefined);
-            })
-          }
-        />
-      )}
-    </Page>
+    </View>
   );
 }
 const styles = StyleSheet.create({
+  editingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+  },
   chatHeader: {
     paddingHorizontal: theme.spacing.sm,
     paddingBottom: theme.spacing.sm,

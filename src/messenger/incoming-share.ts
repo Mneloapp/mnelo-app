@@ -3,10 +3,13 @@ import { File, Paths } from 'expo-file-system';
 import { Image, Platform } from 'react-native';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { discardCachedMedia } from '@/features/chats/media-files';
+import { resolveSharedFile } from './share-native';
 import type { Media } from './model';
 
 export const shareGroup = 'group.com.mnelo.messenger.sharing';
 export const shareLimit = 10 * 1024 * 1024;
+// Source photos are resized before applying the encrypted transport limit.
+export const shareImageSourceLimit = 50 * 1024 * 1024;
 export type IncomingItem = {
   id: string;
   label: string;
@@ -16,21 +19,27 @@ export type IncomingItem = {
   image: boolean;
 };
 
+const filePath = (value: string) =>
+  decodeURIComponent(new URL(value).pathname).replace(/^\/private\/var\//, '/var/');
 function inside(uri: string, root: string) {
   try {
-    const path = decodeURIComponent(new URL(uri).pathname);
-    const base = decodeURIComponent(new URL(root).pathname).replace(/\/?$/, '/');
-    return uri.startsWith('file://') && path.startsWith(base) && !path.split('/').includes('..');
+    const path = filePath(uri);
+    const base = filePath(root).replace(/\/?$/, '/');
+    return (
+      uri.startsWith('file://') &&
+      !new URL(uri).host &&
+      path.startsWith(base) &&
+      !path.split('/').includes('..')
+    );
   } catch {
     return false;
   }
 }
 export function ownedShareFile(uri: string) {
+  if (inside(uri, Paths.cache.uri)) return true;
+  if (resolveSharedFile) return Boolean(resolveSharedFile(uri));
   const group = Paths.appleSharedContainers?.[shareGroup];
-  return (
-    inside(uri, Paths.cache.uri) ||
-    Boolean(group && inside(uri, group.uri.replace(/\/?$/, '/') + 'MneloIncoming/'))
-  );
+  return Boolean(group && inside(uri, group.uri.replace(/\/?$/, '/') + 'MneloIncoming/'));
 }
 
 // Treat a Maps/Safari URL as text. Receiving a share never fetches URLs or follows redirects.
@@ -56,12 +65,16 @@ export function incomingItems(payloads: readonly SharePayload[]): IncomingItem[]
       )
     )
       throw new Error('SHARE_INVALID');
-    const file = new File(payload.value);
-    if (!file.exists || !file.size || file.size > shareLimit) throw new Error('SHARE_FILE_SIZE');
+    const uri = resolveSharedFile?.(payload.value) ?? payload.value;
+    const file = new File(uri);
+    if (!file.exists || !file.size) throw new Error('SHARE_FILE_UNAVAILABLE');
     const mime =
       payload.mimeType && /^[\w.+-]+\/[\w.+-]+$/.test(payload.mimeType)
         ? payload.mimeType
         : 'application/octet-stream';
+    const image = payload.shareType === 'image';
+    if (file.size > (image ? shareImageSourceLimit : shareLimit))
+      throw new Error(image ? 'SHARE_IMAGE_SIZE' : 'SHARE_FILE_SIZE');
     const label =
       decodeURIComponent(payload.value.split('/').at(-1) ?? 'file')
         .replace(/[\x00-\x1f\x7f/\\]/g, '_')
@@ -69,9 +82,9 @@ export function incomingItems(payloads: readonly SharePayload[]): IncomingItem[]
     return {
       id,
       label,
-      uri: payload.value,
+      uri,
       mime,
-      image: payload.shareType === 'image' && mime.startsWith('image/'),
+      image,
     };
   });
 }
@@ -86,6 +99,14 @@ export async function prepareIncoming(
   let name = item.label;
   if (item.image) {
     const { width, height } = await Image.getSize(uri);
+    if (
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      width <= 0 ||
+      height <= 0 ||
+      width * height > 100_000_000
+    )
+      throw new Error('SHARE_IMAGE_SIZE');
     const context = ImageManipulator.manipulate(uri);
     try {
       context.resize(
@@ -121,7 +142,7 @@ export function discardIncoming(payloads: readonly SharePayload[]) {
     if (item.shareType === 'url' || item.shareType === 'text' || !ownedShareFile(item.value))
       continue;
     try {
-      const file = new File(item.value);
+      const file = new File(resolveSharedFile?.(item.value) ?? item.value);
       if (file.exists) file.delete();
     } catch {
       /* Retry expiry cleanup on next share. */

@@ -24,7 +24,12 @@ jest.mock('@/messenger/DeviceProvider', () => ({
   useDevice: () => ({
     authenticated: mockAuthenticated,
     engine: { send: mockSend },
-    view: { chatPage: mockChats },
+    view: {
+      chatPage: mockChats,
+      chat: async () => ({ id: 'chat-a', title: 'Nino', left_group: 0 }),
+      members: async () => [{ key: 'own' }, { key: 'peer' }],
+      contacts: async () => [{ key: 'peer', blocked: 0 }],
+    },
   }),
 }));
 jest.mock('@react-native-community/netinfo', () =>
@@ -152,4 +157,25 @@ test('closing a received file removes the temporary copy without sending', async
   expect(mockClear).toHaveBeenCalledTimes(1);
   expect(mockDelete).toHaveBeenCalledWith(pdf.value);
   expect(mockSend).not.toHaveBeenCalled();
+});
+
+test('a large original photo reaches review before compression; ordinary files still respect 10 MB', () => {
+  mockSize = 14 * 1024 * 1024;
+  expect(incomingItems([{ ...pdf, shareType: 'image', mimeType: 'image/png' }])[0]?.image).toBe(
+    true,
+  );
+  expect(() => incomingItems([pdf])).toThrow('SHARE_FILE_SIZE');
+  mockSize = 51 * 1024 * 1024;
+  expect(() => incomingItems([{ ...pdf, shareType: 'image' }])).toThrow('SHARE_IMAGE_SIZE');
+});
+
+test('a system conversation suggestion preselects the recipient but never sends by itself', async () => {
+  await show(
+    <ShareReview items={incomingItems([url])} suggestedChat="chat-a" onClose={jest.fn()} />,
+  );
+  await screen.findByText('To: Nino');
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Send' })).not.toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() => expect(mockSend).toHaveBeenCalledWith('chat-a', url.value, { kind: 'text' }));
 });

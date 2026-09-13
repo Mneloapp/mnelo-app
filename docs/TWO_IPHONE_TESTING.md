@@ -1,3 +1,5 @@
+> **TestFlight September 13 — build 11:** Apple processing Complete; compliance cleared with the existing owner-authorized standard-encryption / France No answers. Internal Mnelo Development added. External Mnelo Preview submitted with automatic tester notification and currently Waiting for Review. Obsolete build 5 was removed from review to replace it with 11. Both phones must update in place; physical acceptance, secure recovery/key lifecycle and public-release security gates remain open. No public App Store submission. [Exact build/source evidence](BUILD_LOG.md) · [Physical checklist](PHYSICAL_FIXES.md). This supersedes older build-5 review and binary-preparation blockers below.
+
 # Two-iPhone TestFlight preparation
 
 > Updated owner acceptance: background/closed-app message notifications and system incoming calls are mandatory before the two-phone beta is considered ready. Build 2 is preserved as evidence, not a completed candidate. Native remote push and CallKit implementation/physical acceptance are now required.

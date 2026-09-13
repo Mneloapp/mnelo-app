@@ -830,7 +830,7 @@ Commit: Initial public `0d97fc563d74e018a98a2fea4e8cdd2bd36b54d1`; original sour
 
 # September 13 — TestFlight 0.1.0 (11)
 
-Status: signed archive, App Store export and upload PASS; Apple processing/tester availability is tracked in [BUILD_LOG.md](BUILD_LOG.md). This is an owner-requested functional beta. Physical acceptance and independent security review are still pending.
+Status: signed archive, App Store export/upload and Apple processing PASS. Build 11 is assigned internally and submitted externally, Waiting for Review with automatic tester notification. The obsolete build 5 review was replaced. [Apple disposition](BUILD_LOG.md). This is an owner-requested functional beta. Physical acceptance and independent security review are still pending.
 
 - Source: `58665f4c5aae5a32ec950a7fe971212a82a13e7d`; exact public corresponding source tag `ios-0.1.0-11`.
 - Full source checks: TypeScript, lint, formatting, security/environment/localization/brand PASS; 304 Jest tests in 61 suites, 3 server checks and 131 device/protocol checks (438 total). Public CI independently PASS.

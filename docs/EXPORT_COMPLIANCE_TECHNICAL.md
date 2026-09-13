@@ -4,6 +4,8 @@ The September 13 TestFlight candidate adds official libsignal 0.102.2 to the ear
 
 The owner's France exclusion remains in force. The earlier selection of third-party standard encryption in addition to the operating system is recorded below; any new Apple question or requested documentation must be assessed against this actual expanded inventory. No Info.plist claim of no encryption or blanket exemption is added. Apple's classification/acceptance is separate from technical QA and open-source licensing.
 
+Build 11 execution: selected standard encryption instead of/in addition to Apple's operating system and France No in the build-specific questionnaire, within the owner's existing authorization. Missing Compliance cleared and the build became Ready to Submit, then Waiting for Review after external submission. No additional document was requested/uploaded, no territory decision changed and no Info.plist exemption was invented. The UI's generic follow-up text described no encryption despite the selected standard-encryption option; that wording is not adopted as a technical claim about Mnelo.
+
 Historical build-specific inventory follows.
 
 # Encryption inventory for the account owner

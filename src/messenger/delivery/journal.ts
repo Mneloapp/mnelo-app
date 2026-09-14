@@ -233,11 +233,15 @@ export class SignalJournal {
     );
     return id;
   }
-  async pending(after = 0) {
+  async pending(after = 0, tokens?: readonly string[]) {
+    if (tokens?.length === 0) return [];
     return this.atomic((db) =>
       db.all<Outgoing>(
-        'SELECT rowid AS sequence,* FROM signal_outbox WHERE uploaded=0 AND rowid>? ORDER BY rowid LIMIT 20',
+        `SELECT rowid AS sequence,* FROM signal_outbox WHERE uploaded=0 AND rowid>?
+        ${tokens ? `AND token IN (${tokens.map(() => '?').join(',')})` : ''}
+        ORDER BY rowid LIMIT 20`,
         after,
+        ...(tokens ?? []),
       ),
     );
   }

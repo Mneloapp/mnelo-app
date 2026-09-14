@@ -17,6 +17,9 @@ import { ApplicationDelivery } from '../../src/messenger/delivery/application';
 import { ShareSession, type ShareItem } from '../../src/messenger/share-extension';
 import { deliveryDatabase } from './delivery-fixture';
 import { NodeSignal } from './node-signal';
+import { emptyProfile } from '../../src/messenger/local-profile';
+import { SignalJournal } from '../../src/messenger/delivery/journal';
+import { createKeys } from '../../src/messenger/crypto';
 
 test('native share engine sends actual encrypted photo/text, skips the inbox and retries only uncommitted items', async () => {
   const a = deliveryDatabase(),
@@ -73,8 +76,14 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
   const chat = await ae.trustPhoneContact({
     key: br.key,
     phone: '+12025550102',
-    name: 'ჩემი ბობი',
+    name: 'Old Mnelo alias',
   });
+  await ae.receiveProfile(
+    br.key,
+    { ...emptyProfile(), firstName: 'Current', lastName: 'Profile' },
+    1,
+  );
+  let phoneName: string | null = 'ჩემი ბობი';
   const bob = new ApplicationDelivery(
     be,
     new PhoneClient(url, br),
@@ -87,7 +96,7 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
   const actions: string[] = [];
   let unavailable = true,
     offline = false;
-  const photo = randomBytes(280_000).toString('base64');
+  const photo = randomBytes(750_000).toString('base64');
   const items: ShareItem[] = [
     { kind: 'text', text: 'ქართული გაზიარება' },
     {
@@ -101,6 +110,12 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     uuid: randomUUID,
     signal: new NodeSignal(),
     count: items.length,
+    savedNames: async (numbers: readonly string[], own: string) => {
+      assert.equal(own, '+12025550101');
+      return new Map(
+        phoneName && numbers.includes('+12025550102') ? [['+12025550102', phoneName]] : [],
+      );
+    },
     item: (index: number) => {
       if (index === 1 && unavailable) throw new Error('SHARE_FILE_UNAVAILABLE');
       return items[index]!;
@@ -119,6 +134,12 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     bob.pump.stop();
     assert.equal((await session.open()).find((row) => row.id === chat)?.title, 'ჩემი ბობი');
     assert.equal((await ae.messages(chat)).length, 0, 'opening picker never sends');
+    // More than one delivery page of older, not-yet-ready peers must not starve
+    // this explicit share or stop a multi-chunk image after its first step.
+    const backlog = new SignalJournal(ae.deliveryAtomic, new NodeSignal(), ar);
+    const unavailablePeer = createKeys(randomBytes).key;
+    for (let index = 0; index < 21; index++)
+      await backlog.enqueue(unavailablePeer, randomUUID(), '{}');
     const first = await session.send(chat);
     assert.equal(first.committed, 1);
     assert.equal(first.failure, 'SHARE_FILE_UNAVAILABLE');
@@ -146,8 +167,14 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     assert.equal(result.uploaded, false);
     assert.equal((await ae.messages(chat)).length, 3, 'offline share is durable in main history');
     await queued.close();
+    phoneName = 'ახალი სახელი';
+    const renamed = new ShareSession({ ...host, count: 1 });
+    assert.equal((await renamed.open()).find((row) => row.id === chat)?.title, phoneName);
+    await renamed.close();
+    phoneName = null; // Permission denied or contact removed: current profile, never old alias.
     const cancelled = new ShareSession({ ...host, count: 1 });
-    await cancelled.open();
+    assert.equal((await cancelled.open()).find((row) => row.id === chat)?.title, 'Current Profile');
+    assert.equal((await ae.contacts()).find((row) => row.key === br.key)?.name, 'Old Mnelo alias');
     await cancelled.close();
     assert.equal((await ae.messages(chat)).length, 3, 'cancel only closes the picker');
     await ae.block(br.key, true);

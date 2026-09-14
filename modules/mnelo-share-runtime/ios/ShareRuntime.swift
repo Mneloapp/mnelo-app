@@ -27,6 +27,13 @@ final class ShareRuntime {
           }
         }
         context.setObject(bridge, forKeyedSubscript: "__native" as NSString)
+        let contactNames: @convention(block) (String, JSValue) -> String = { text, normalize in
+          guard let numbers = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String] else { return "[]" }
+          return shareJSON(SharePhonebook.names(numbers) { raw in
+            normalize.call(withArguments: [raw])?.toString() ?? ""
+          })
+        }
+        context.setObject(contactNames, forKeyedSubscript: "__contactNames" as NSString)
         let result: @convention(block) (String, String) -> Void = { [weak self] id, text in
           guard let self, let callback = self.pending.removeValue(forKey: id), let value = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return }
           let outcome: Result<Any, Error> = (value["error"] as? String).map { .failure(shareError($0)) } ?? .success(value["value"] ?? NSNull())

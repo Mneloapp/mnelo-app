@@ -87,6 +87,7 @@ export class ApplicationDelivery {
     private readonly savedName: (phone: string) => Promise<string | null>,
     private readonly now = Date.now,
     outgoingOnly = false,
+    outgoingTokens?: () => Promise<readonly string[]>,
   ) {
     const own = engine.currentIdentity();
     if (!own) throw new Error('IDENTITY_REQUIRED');
@@ -101,6 +102,7 @@ export class ApplicationDelivery {
       now,
       {
         outgoingOnly,
+        ...(outgoingTokens ? { outgoingTokens } : {}),
         beforeCycle: async () => {
           if (outgoingOnly) return;
           await this.calls?.recover?.();

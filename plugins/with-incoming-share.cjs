@@ -57,6 +57,8 @@ module.exports = function withIncomingShare(config) {
       info.CFBundleDisplayName = 'Mnelo';
       info.MneloKeychainAccessGroup = access;
       info.MneloDeliveryOrigin = process.env.EXPO_PUBLIC_PHONE_IDENTITY_URL ?? '';
+      info.NSContactsUsageDescription =
+        'Mnelo uses your contacts to show the names you saved on this phone.';
       info.NSExtension.NSExtensionPrincipalClass = '$(PRODUCT_MODULE_NAME).ShareIntoViewController';
       info.NSExtension.NSExtensionAttributes.IntentsSupported = ['INSendMessageIntent'];
       fs.writeFileSync(infoPath, plist.build(info));

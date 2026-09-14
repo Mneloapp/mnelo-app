@@ -10,6 +10,7 @@ import { phonebookChanged } from './phonebook-events';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { PhonebookAccess } from './phonebook-access';
 import { internationalPhone } from './phone-protocol';
+import { phonebookName, phonebookNumber } from './phonebook-match';
 
 let permissionRequest: Promise<void> | undefined;
 // Contextual first use only. Denied/limited access is never expanded automatically.
@@ -107,25 +108,10 @@ async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: stri
     });
     for (const row of rows) {
       for (const phone of row.phones ?? []) {
-        const number =
-          phone.number &&
-          // Contacts copied from messages can contain invisible direction marks.
-          // Remove presentation marks only; never match just a number's suffix.
-          parsePhoneNumberFromString(
-            phone.number.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim(),
-            {
-              ...(country ? { defaultCountry: country } : {}),
-              extract: false,
-            },
-          )?.number;
+        const number = phone.number && phonebookNumber(phone.number, country);
         if (number && wanted.has(number) && !matches.has(number))
           matches.set(number, {
-            name:
-              row.fullName
-                ?.trim()
-                .normalize('NFC')
-                .slice(0, 60)
-                .replace(/[\uD800-\uDBFF]$/, '') || null,
+            name: phonebookName(row.fullName),
           });
       }
     }
@@ -151,20 +137,10 @@ export async function searchPhonebook(query: string, ownNumber?: string, signal?
       offset,
     });
     for (const row of rows) {
-      const name =
-        row.fullName
-          ?.trim()
-          .normalize('NFC')
-          .slice(0, 60)
-          .replace(/[\uD800-\uDBFF]$/, '') ?? '';
+      const name = phonebookName(row.fullName) ?? '';
       const nameMatches = !numeric && name.toLocaleLowerCase().includes(needle);
       for (const entry of row.phones ?? []) {
-        const phone =
-          entry.number &&
-          parsePhoneNumberFromString(
-            entry.number.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '').trim(),
-            { ...(country ? { defaultCountry: country } : {}), extract: false },
-          )?.number;
+        const phone = entry.number && phonebookNumber(entry.number, country);
         if (
           phone &&
           phone !== ownNumber &&

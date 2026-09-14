@@ -17,6 +17,10 @@ export type ShareHost = {
   request: typeof fetch;
   item: (index: number) => ShareItem;
   count: number;
+  savedNames: (
+    numbers: readonly string[],
+    ownNumber: string,
+  ) => Promise<ReadonlyMap<string, string>>;
 };
 
 // The extension uses the same encrypted vault, transactions, protocol and media
@@ -61,6 +65,7 @@ export class ShareSession {
       async () => null,
       Date.now,
       true,
+      () => this.tokens(),
     );
     await delivery.initialize();
     this.delivery = delivery;
@@ -69,16 +74,26 @@ export class ShareSession {
       sendDurable: (peer, packet, event) => delivery.sendDurable(peer, packet, event),
       stop: () => delivery.stop(),
     });
+    const contacts = await this.engine.contacts();
+    const byNumber = await this.host
+      .savedNames(
+        contacts.flatMap((contact) => (contact.phone && !contact.blocked ? [contact.phone] : [])),
+        this.engine.currentEnrollment()!.phone,
+      )
+      .catch(() => new Map<string, string>());
     const view = new ContactView(
       this.engine,
-      new Map((await this.engine.contacts()).map((contact) => [contact.key, contact.name])),
+      new Map(
+        contacts.flatMap((contact) => {
+          const name = contact.phone && !contact.blocked ? byNumber.get(contact.phone) : undefined;
+          return name ? [[contact.key, name] as const] : [];
+        }),
+      ),
     );
     const result: { id: string; title: string; group: boolean }[] = [];
     let cursor: ChatCursor | undefined;
     const blocked = new Set(
-      (await this.engine.contacts())
-        .filter((contact) => contact.blocked)
-        .map((contact) => contact.key),
+      contacts.filter((contact) => contact.blocked).map((contact) => contact.key),
     );
     do {
       const page = await view.chatPage('all', '', cursor);
@@ -96,33 +111,54 @@ export class ShareSession {
     } while (cursor && result.length < 1000);
     return result;
   }
-  private async uploaded() {
-    if (!this.committed.length) return false;
+  private async tokens() {
     return this.engine.deliveryAtomic(async (db) => {
+      const tokens: string[] = [];
       for (const id of this.committed) {
         const event = bytesToHex(sha256(new TextEncoder().encode(JSON.stringify(['message', id]))));
         const peers = await db.all<{ peer: string }>(
           'SELECT peer FROM deliveries WHERE message_id=?',
           id,
         );
-        if (!peers.length) return false;
         for (const { peer } of peers) {
           const token = bytesToHex(
             sha256(new TextEncoder().encode(JSON.stringify([peer, ['event', event]]))),
           );
-          if (
-            !(
-              await db.all<{ uploaded: number }>(
-                'SELECT uploaded FROM signal_outbox WHERE token=?',
-                token,
-              )
-            )[0]?.uploaded
-          )
-            return false;
+          tokens.push(token);
         }
       }
-      return true;
+      return tokens;
     });
+  }
+  private async uploaded() {
+    const tokens = await this.tokens();
+    if (!tokens.length) return false;
+    return this.engine.deliveryAtomic(
+      async (db) =>
+        (
+          await db.all(
+            `SELECT id FROM signal_outbox WHERE uploaded=1 AND token IN (${tokens.map(() => '?').join(',')})`,
+            ...tokens,
+          )
+        ).length === tokens.length,
+    );
+  }
+  private async canAdvance() {
+    const tokens = await this.tokens();
+    if (!tokens.length || this.state === 'offline') return false;
+    return this.engine.deliveryAtomic(
+      async (db) =>
+        (
+          await db.all(
+            `SELECT o.id FROM signal_outbox o WHERE o.uploaded=0
+        AND o.token IN (${tokens.map(() => '?').join(',')})
+        AND NOT EXISTS (SELECT 1 FROM signal_retries r WHERE r.phase='send'
+          AND r.peer=o.peer AND r.id=o.id AND r.next_at>?) LIMIT 1`,
+            ...tokens,
+            Date.now(),
+          )
+        ).length > 0,
+    );
   }
   async send(recipient: string) {
     if (this.busy || !this.delivery) throw new Error('SHARE_BUSY');
@@ -156,7 +192,7 @@ export class ShareSession {
         do {
           await this.delivery.pump.tick();
           if (await this.uploaded()) break;
-        } while (Date.now() < deadline && this.state === 'ready');
+        } while (Date.now() < deadline && (await this.canAdvance()));
       }
       const uploaded = await this.uploaded();
       return { committed: this.committed.length, total: this.host.count, uploaded, failure };

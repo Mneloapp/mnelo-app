@@ -14,6 +14,7 @@ export type DeliveryHooks = {
   beforeSend?: (peer: string, body: string) => Promise<boolean>;
   afterCycle?: () => Promise<void>;
   outgoingOnly?: boolean;
+  outgoingTokens?: () => Promise<readonly string[]>;
 };
 
 // Transport orchestration only: retries never re-encrypt an existing outbox
@@ -134,10 +135,11 @@ export class DeliveryPump {
     await this.maintainKeys();
     await this.journal.prune();
     if (!this.hooks.outgoingOnly) await this.receiveCycle();
-    let outgoing = await this.journal.pending(this.outgoingCursor);
+    const tokens = await this.hooks.outgoingTokens?.();
+    let outgoing = await this.journal.pending(this.outgoingCursor, tokens);
     if (!outgoing.length) {
       this.outgoingCursor = 0;
-      outgoing = await this.journal.pending();
+      outgoing = await this.journal.pending(0, tokens);
     }
     for (const row of outgoing) {
       if (this.stopped) return;

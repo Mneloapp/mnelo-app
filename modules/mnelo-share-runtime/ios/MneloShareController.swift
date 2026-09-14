@@ -34,7 +34,6 @@ final class ShareModel: ObservableObject {
   @Published var loading = true
   @Published var sending = false
   @Published var issue = ""
-  @Published var completed = false
   @Published var partial = false
   @Published var committed = 0
   var finish: ((Bool) -> Void)?
@@ -78,18 +77,18 @@ final class ShareModel: ObservableObject {
       case .success(let value):
         guard let value = value as? [String: Any], let count = value["committed"] as? Int else { self.issue = self.message(shareError("SHARE_FAILED")); return }
         self.committed = count
-        if count == self.items.count && value["uploaded"] as? Bool == true { self.close(completed: true); return }
-        self.completed = count == self.items.count
-        self.partial = count > 0 && !self.completed
-        if self.completed { self.issue = self.text("Saved to your chat. Open Mnelo to retry sending when a connection is available.", "შეტყობინება ჩატში შენახულია. კავშირის აღდგენის შემდეგ გასაგზავნად გახსენით Mnelo.") }
-        else if self.partial { self.issue = self.text("\(count) of \(self.items.count) items saved. Retry to send the remaining items.", "შენახულია \(count)/\(self.items.count). დარჩენილი ფაილების გასაგზავნად სცადეთ ხელახლა.") }
+        // Send has durably committed every item to the same outbox as the app.
+        // Close both online and queued shares; a second Done screen adds no action.
+        if count == self.items.count { self.close(completed: true); return }
+        self.partial = count > 0
+        if self.partial { self.issue = self.text("\(count) of \(self.items.count) items saved. Retry to send the remaining items.", "შენახულია \(count)/\(self.items.count). დარჩენილი ფაილების გასაგზავნად სცადეთ ხელახლა.") }
         else { self.issue = self.message(shareError(value["failure"] as? String ?? "SHARE_FAILED")) }
       }
     }
   }
   func close(completed: Bool = false) {
     guard !closed else { return }; closed = true
-    runtime.close(); loader.cancel(); finish?(completed || self.completed || committed > 0)
+    runtime.close(); loader.cancel(); finish?(completed || committed > 0)
   }
   func dispose() { runtime.close(); loader.cancel() }
   private func message(_ error: Error) -> String {
@@ -133,10 +132,10 @@ struct ShareView: View {
       }
       if model.loading {
         Spacer(); ProgressView(model.text("Preparing…", "მზადდება…")); Spacer()
-      } else if model.recipients.isEmpty || model.completed {
+      } else if model.recipients.isEmpty {
         Spacer()
         VStack(spacing: 16) {
-          Image(systemName: model.completed ? "checkmark.circle" : "person.2").font(.system(size: 36)).foregroundStyle(.secondary)
+          Image(systemName: "person.2").font(.system(size: 36)).foregroundStyle(.secondary)
           Text(model.issue.isEmpty ? model.text("Your conversations will appear here after you start a chat in Mnelo.", "ჩატების დაწყების შემდეგ ისინი აქ გამოჩნდება.") : model.issue).multilineTextAlignment(.center).foregroundStyle(.secondary)
         }.padding(30)
         Spacer()
@@ -166,17 +165,17 @@ struct ShareView: View {
         }.scrollDismissesKeyboard(.interactively)
         if !model.issue.isEmpty { Text(model.issue).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center).padding(.horizontal, 24).padding(.top, 12) }
       }
-      if !model.loading && (!model.recipients.isEmpty || model.completed) {
+      if !model.loading && (!model.recipients.isEmpty) {
         Button {
-          if model.completed { model.close(completed: true) } else { model.send() }
+          model.send()
         } label: {
           HStack {
             Spacer()
             if model.sending { ProgressView().tint(.black) }
-            Text(model.completed ? model.text("Done", "დასრულება") : model.sending ? model.text("Sending…", "იგზავნება…") : model.partial ? model.text("Retry remaining items", "დარჩენილის გაგზავნა") : model.text("Send", "გაგზავნა")).font(.body.weight(.semibold))
+            Text(model.sending ? model.text("Sending…", "იგზავნება…") : model.partial ? model.text("Retry remaining items", "დარჩენილის გაგზავნა") : model.text("Send", "გაგზავნა")).font(.body.weight(.semibold))
             Spacer()
           }.padding(.vertical, 16).background(accent, in: Capsule())
-        }.disabled((model.selected == nil && !model.completed) || model.sending).opacity(model.selected == nil && !model.completed ? 0.45 : 1).padding(20)
+        }.disabled(model.selected == nil || model.sending).opacity(model.selected == nil ? 0.45 : 1).padding(20)
       }
     }.foregroundStyle(.black).background(Color(red: 0.94, green: 0.94, blue: 0.93)).preferredColorScheme(.light)
   }

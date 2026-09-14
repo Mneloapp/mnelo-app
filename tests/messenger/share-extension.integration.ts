@@ -20,6 +20,8 @@ import { NodeSignal } from './node-signal';
 import { emptyProfile } from '../../src/messenger/local-profile';
 import { SignalJournal } from '../../src/messenger/delivery/journal';
 import { createKeys } from '../../src/messenger/crypto';
+import { ContactView } from '../../src/messenger/contact-view';
+import { rememberPhonebookName, type PhonebookMatch } from '../../src/messenger/phonebook-match';
 
 test('native share engine sends actual encrypted photo/text, skips the inbox and retries only uncommitted items', async () => {
   const a = deliveryDatabase(),
@@ -110,11 +112,15 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     uuid: randomUUID,
     signal: new NodeSignal(),
     count: items.length,
-    savedNames: async (numbers: readonly string[], own: string) => {
+    savedContacts: async (numbers: readonly string[], own: string) => {
       assert.equal(own, '+12025550101');
-      return new Map(
-        phoneName && numbers.includes('+12025550102') ? [['+12025550102', phoneName]] : [],
-      );
+      const matches = new Map<string, PhonebookMatch>();
+      if (phoneName && numbers.includes('+12025550102')) {
+        rememberPhonebookName(matches, '+12025550102', phoneName);
+        rememberPhonebookName(matches, '+12025550102', 'Bob <3');
+        rememberPhonebookName(matches, '+12025550102', phoneName);
+      }
+      return matches;
     },
     item: (index: number) => {
       if (index === 1 && unavailable) throw new Error('SHARE_FILE_UNAVAILABLE');
@@ -132,7 +138,13 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     await bob.start();
     await bob.pump.tick();
     bob.pump.stop();
-    assert.equal((await session.open()).find((row) => row.id === chat)?.title, 'ჩემი ბობი');
+    const recipients = await session.open();
+    const recipient = recipients.find((row) => row.id === chat)!;
+    const chats = new ContactView(ae, new Map([[br.key, phoneName!]]));
+    assert.equal(recipient.title, (await chats.chat(chat))?.title);
+    assert.equal(recipient.title, 'ჩემი ბობი');
+    assert.deepEqual(recipient.searchTerms, ['ჩემი ბობი', 'Bob <3', '+12025550102']);
+    assert.equal(recipients.filter((row) => row.id === chat).length, 1);
     assert.equal((await ae.messages(chat)).length, 0, 'opening picker never sends');
     // More than one delivery page of older, not-yet-ready peers must not starve
     // this explicit share or stop a multi-chunk image after its first step.
@@ -169,11 +181,15 @@ test('native share engine sends actual encrypted photo/text, skips the inbox and
     await queued.close();
     phoneName = 'ახალი სახელი';
     const renamed = new ShareSession({ ...host, count: 1 });
-    assert.equal((await renamed.open()).find((row) => row.id === chat)?.title, phoneName);
+    const renamedRecipient = (await renamed.open()).find((row) => row.id === chat)!;
+    assert.equal(renamedRecipient.title, phoneName);
+    assert.deepEqual(renamedRecipient.searchTerms, [phoneName, 'Bob <3', '+12025550102']);
     await renamed.close();
     phoneName = null; // Permission denied or contact removed: current profile, never old alias.
     const cancelled = new ShareSession({ ...host, count: 1 });
-    assert.equal((await cancelled.open()).find((row) => row.id === chat)?.title, 'Current Profile');
+    const fallback = (await cancelled.open()).find((row) => row.id === chat)!;
+    assert.equal(fallback.title, 'Current Profile');
+    assert.deepEqual(fallback.searchTerms, ['Current Profile', '+12025550102']);
     assert.equal((await ae.contacts()).find((row) => row.key === br.key)?.name, 'Old Mnelo alias');
     await cancelled.close();
     assert.equal((await ae.messages(chat)).length, 3, 'cancel only closes the picker');

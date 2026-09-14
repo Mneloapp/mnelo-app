@@ -2,7 +2,11 @@ import { ShareSession, type ShareItem } from '../../src/messenger/share-extensio
 import { VendorSignal } from '../../src/messenger/delivery/signal';
 import { bytesToBase64, base64ToBytes } from '../../src/messenger/delivery/media-crypto';
 import type { SQLValue } from '../../src/messenger/model';
-import { phonebookName, phonebookNumber } from '../../src/messenger/phonebook-match';
+import {
+  phonebookNumber,
+  rememberPhonebookName,
+  type PhonebookMatch,
+} from '../../src/messenger/phonebook-match';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 
 declare function __native(operation: string, input: string): string;
@@ -46,17 +50,14 @@ const session = new ShareSession({
   request: fetch,
   item: (index) => native<ShareItem>('item', index),
   count: native<number>('count'),
-  async savedNames(numbers, ownNumber) {
+  async savedContacts(numbers, ownNumber) {
     const country = parsePhoneNumberFromString(ownNumber)?.country;
     const rows: [string, string][] = JSON.parse(
       __contactNames(JSON.stringify(numbers), (raw) => phonebookNumber(raw, country) ?? ''),
     );
-    return new Map(
-      rows.flatMap(([number, raw]) => {
-        const name = phonebookName(raw);
-        return name ? [[number, name] as const] : [];
-      }),
-    );
+    const matches = new Map<string, PhonebookMatch>();
+    for (const [number, raw] of rows) rememberPhonebookName(matches, number, raw);
+    return matches;
   },
 });
 // The only native entry points; no eval, remote modules or arbitrary file paths.

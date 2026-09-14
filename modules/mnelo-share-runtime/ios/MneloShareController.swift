@@ -25,7 +25,6 @@ open class MneloShareController: UIViewController {
   deinit { model.dispose() }
 }
 
-struct ShareRecipient: Identifiable { let id: String; let title: String; let group: Bool }
 final class ShareModel: ObservableObject {
   @Published var items: [ShareAttachment] = []
   @Published var recipients: [ShareRecipient] = []
@@ -42,7 +41,7 @@ final class ShareModel: ObservableObject {
   private var closed = false
   let georgian = Locale.preferredLanguages.first?.hasPrefix("ka") == true
   func text(_ en: String, _ ka: String) -> String { georgian ? ka : en }
-  var filtered: [ShareRecipient] { query.isEmpty ? recipients : recipients.filter { $0.title.localizedStandardContains(query) } }
+  var filtered: [ShareRecipient] { recipients.filter { $0.matches(query) } }
   func load(_ providers: [NSItemProvider], suggestion: String?) {
     loader.load(providers) { [weak self] result in
       guard let self, !self.closed else { return }
@@ -58,7 +57,7 @@ final class ShareModel: ObservableObject {
           case .success(let value):
             self.recipients = (value as? [[String: Any]] ?? []).compactMap { row in
               guard let id = row["id"] as? String, let title = row["title"] as? String else { return nil }
-              return ShareRecipient(id: id, title: title, group: row["group"] as? Bool ?? false)
+              return ShareRecipient(id: id, title: title, group: row["group"] as? Bool ?? false, searchTerms: row["searchTerms"] as? [String] ?? [])
             }
             if self.recipients.contains(where: { $0.id == suggestion }) { self.selected = suggestion }
           }

@@ -13,24 +13,28 @@ enum SharePhonebook {
   static func names(_ numbers: [String], normalize: (String) -> String) -> [[String]] {
     guard !numbers.isEmpty, numbers.count <= 1000, permitted() else { return [] }
     let wanted = Set(numbers)
-    var matches: [String: String] = [:]
+    var matches: [[String]] = []
     let request = CNContactFetchRequest(keysToFetch: [
       CNContactFormatter.descriptorForRequiredKeys(for: .fullName),
       CNContactPhoneNumbersKey as CNKeyDescriptor
     ])
+    // Expo Contacts uses userDefault + unified contacts for Chats. The Contacts
+    // default is unsorted, which can choose a different duplicate for one phone.
+    request.sortOrder = .userDefault
+    request.unifyResults = true
     do {
-      try CNContactStore().enumerateContacts(with: request) { contact, stop in
+      try CNContactStore().enumerateContacts(with: request) { contact, _ in
+        var seen = Set<String>()
         for phone in contact.phoneNumbers {
           let number = normalize(phone.value.stringValue)
-          if wanted.contains(number), matches[number] == nil {
-            matches[number] = CNContactFormatter.string(from: contact, style: .fullName) ?? ""
+          if wanted.contains(number), seen.insert(number).inserted {
+            matches.append([number, CNContactFormatter.string(from: contact, style: .fullName) ?? ""])
           }
         }
-        if matches.count == wanted.count { stop.pointee = true }
       }
       // A revoked or reduced grant must not leave previously read names behind.
       guard permitted() else { return [] }
-      return matches.map { [$0.key, $0.value] }
+      return matches
     } catch { return [] }
   }
 }

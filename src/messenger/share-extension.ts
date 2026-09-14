@@ -7,6 +7,7 @@ import { enrollmentAllowsAccess } from './enrollment';
 import { bytesToHex } from './crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
 import type { LocalDatabase, Media } from './model';
+import type { PhonebookMatch } from './phonebook-match';
 
 export type ShareItem = { kind: 'text'; text: string } | { kind: 'image' | 'file'; media: Media };
 export type ShareHost = {
@@ -17,10 +18,10 @@ export type ShareHost = {
   request: typeof fetch;
   item: (index: number) => ShareItem;
   count: number;
-  savedNames: (
+  savedContacts: (
     numbers: readonly string[],
     ownNumber: string,
-  ) => Promise<ReadonlyMap<string, string>>;
+  ) => Promise<ReadonlyMap<string, PhonebookMatch>>;
 };
 
 // The extension uses the same encrypted vault, transactions, protocol and media
@@ -76,21 +77,23 @@ export class ShareSession {
     });
     const contacts = await this.engine.contacts();
     const byNumber = await this.host
-      .savedNames(
+      .savedContacts(
         contacts.flatMap((contact) => (contact.phone && !contact.blocked ? [contact.phone] : [])),
         this.engine.currentEnrollment()!.phone,
       )
-      .catch(() => new Map<string, string>());
+      .catch(() => new Map<string, PhonebookMatch>());
     const view = new ContactView(
       this.engine,
       new Map(
         contacts.flatMap((contact) => {
-          const name = contact.phone && !contact.blocked ? byNumber.get(contact.phone) : undefined;
+          const name =
+            contact.phone && !contact.blocked ? byNumber.get(contact.phone)?.name : undefined;
           return name ? [[contact.key, name] as const] : [];
         }),
       ),
     );
-    const result: { id: string; title: string; group: boolean }[] = [];
+    const phones = new Map(contacts.map((contact) => [contact.key, contact.phone]));
+    const result: { id: string; title: string; group: boolean; searchTerms: string[] }[] = [];
     let cursor: ChatCursor | undefined;
     const blocked = new Set(
       contacts.filter((contact) => contact.blocked).map((contact) => contact.key),
@@ -104,8 +107,18 @@ export class ShareSession {
           members.length > 1 &&
           members.some((member) => member.key === identity.key) &&
           !members.some((member) => blocked.has(member.key))
-        )
-          result.push({ id: chat.id, title: chat.title, group: chat.kind === 'group' });
+        ) {
+          const phone = chat.kind === 'direct' && chat.peer ? phones.get(chat.peer) : undefined;
+          // Alternate phone-book names are search-only and never change the
+          // displayed title, create duplicate recipients or enter the message.
+          const aliases = phone ? (byNumber.get(phone)?.aliases ?? []) : [];
+          result.push({
+            id: chat.id,
+            title: chat.title,
+            group: chat.kind === 'group',
+            searchTerms: [...new Set([chat.title, ...aliases, ...(phone ? [phone] : [])])],
+          });
+        }
       }
       cursor = page.next;
     } while (cursor && result.length < 1000);

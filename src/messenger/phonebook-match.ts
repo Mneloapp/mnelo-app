@@ -18,3 +18,19 @@ export function phonebookName(raw?: string | null) {
       .replace(/[\uD800-\uDBFF]$/, '') || null
   );
 }
+
+export type PhonebookMatch = { name: string | null; aliases: string[] };
+
+// Callers enumerate in the phone's contact order. Keep that first nonempty name
+// for presentation, while retaining other names for the same full phone locally.
+export function rememberPhonebookName(
+  matches: Map<string, PhonebookMatch>,
+  number: string,
+  raw?: string | null,
+) {
+  const name = phonebookName(raw);
+  const match = matches.get(number) ?? { name: null, aliases: [] };
+  if (name && !match.aliases.includes(name)) match.aliases.push(name);
+  match.name ??= name;
+  matches.set(number, match);
+}

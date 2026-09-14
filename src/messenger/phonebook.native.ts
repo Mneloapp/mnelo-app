@@ -10,7 +10,12 @@ import { phonebookChanged } from './phonebook-events';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min';
 import type { PhonebookAccess } from './phonebook-access';
 import { internationalPhone } from './phone-protocol';
-import { phonebookName, phonebookNumber } from './phonebook-match';
+import {
+  phonebookName,
+  phonebookNumber,
+  rememberPhonebookName,
+  type PhonebookMatch,
+} from './phonebook-match';
 
 let permissionRequest: Promise<void> | undefined;
 // Contextual first use only. Denied/limited access is never expanded automatically.
@@ -96,7 +101,7 @@ async function savePhoneContact(number: string, name: string, ownNumber?: string
 }
 
 async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: string) {
-  const matches = new Map<string, { name: string | null }>();
+  const matches = new Map<string, PhonebookMatch>();
   if (!numbers.length || !(await phonebookPermission())) return matches;
   const wanted = new Set(numbers);
   const country = parsePhoneNumberFromString(ownNumber ?? numbers[0] ?? '')?.country;
@@ -109,15 +114,16 @@ async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: stri
     for (const row of rows) {
       for (const phone of row.phones ?? []) {
         const number = phone.number && phonebookNumber(phone.number, country);
-        if (number && wanted.has(number) && !matches.has(number))
-          matches.set(number, {
-            name: phonebookName(row.fullName),
-          });
+        if (number && wanted.has(number)) rememberPhonebookName(matches, number, row.fullName);
       }
     }
     // Recheck even the last page: revocation must discard any earlier matches.
     if (!(await phonebookPermission())) return new Map();
-    if (rows.length < 200 || matches.size === wanted.size) return matches;
+    if (
+      rows.length < 200 ||
+      (matches.size === wanted.size && [...matches.values()].every((contact) => contact.name))
+    )
+      return matches;
   }
 }
 

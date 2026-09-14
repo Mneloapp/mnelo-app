@@ -9,6 +9,7 @@ import {
 import { Contact, getPermissionsAsync, requestPermissionsAsync } from 'expo-contacts';
 import { Linking } from 'react-native';
 import { observePhonebook } from '@/messenger/phonebook-events';
+import { rememberPhonebookName, type PhonebookMatch } from '@/messenger/phonebook-match';
 jest.mock('expo-contacts', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: true })),
   requestPermissionsAsync: jest.fn(),
@@ -60,6 +61,48 @@ test('permission revoked during a contact read discards already read names', asy
       { fullName: 'Private local name', phones: [{ number: '+12025550101' }] },
     ] as never);
   expect((await savedPhoneNames(['+12025550101'])).size).toBe(0);
+});
+
+test('duplicate phone contacts keep the first nonempty name in device order and every distinct alias', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  const rows = [
+    { fullName: ' ', phones: [{ number: '+12025550101' }] },
+    { fullName: 'ჩემი მეგობარი ❣️', phones: [{ number: '(202) 555-0101' }] },
+    { fullName: 'Friend <3', phones: [{ number: '+12025550101' }] },
+    { fullName: ' Friend <3 ', phones: [{ number: '+12025550101' }] },
+  ];
+  jest.mocked(Contact.getAllDetails).mockResolvedValueOnce(rows as never);
+  expect(await savedPhoneName('+12025550101', '+12025550102')).toBe('ჩემი მეგობარი ❣️');
+  const matches = new Map<string, PhonebookMatch>();
+  for (const row of rows) rememberPhonebookName(matches, '+12025550101', row.fullName);
+  expect(matches.get('+12025550101')).toEqual({
+    name: 'ჩემი მეგობარი ❣️',
+    aliases: ['ჩემი მეგობარი ❣️', 'Friend <3'],
+  });
+  const reversed = new Map<string, PhonebookMatch>();
+  for (const row of [...rows].reverse())
+    rememberPhonebookName(reversed, '+12025550101', row.fullName);
+  expect(reversed.get('+12025550101')?.name).toBe('Friend <3');
+});
+
+test('a blank duplicate on a full first page does not hide a named contact on the next page', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValueOnce(
+      Array.from({ length: 200 }, () => ({
+        fullName: '',
+        phones: [{ number: '+12025550101' }],
+      })) as never,
+    )
+    .mockResolvedValueOnce([
+      { fullName: 'Later named contact', phones: [{ number: '+12025550101' }] },
+    ] as never);
+  expect(await savedPhoneName('+12025550101')).toBe('Later named contact');
+  expect(Contact.getAllDetails).toHaveBeenLastCalledWith(['fullName', 'phones'], {
+    limit: 200,
+    offset: 200,
+  });
 });
 
 test('Georgian local and international numbers match including copied direction marks, but a foreign number never matches by suffix', async () => {

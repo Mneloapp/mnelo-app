@@ -914,6 +914,7 @@ export class DeviceMessenger {
       kind?: 'text' | 'image' | 'file' | 'voice' | 'location' | 'contact';
       media?: Media;
       replyTo?: string;
+      deferDelivery?: boolean;
     } = {},
   ) {
     const own = this.own().key;
@@ -958,7 +959,7 @@ export class DeviceMessenger {
     });
     this.conversationActivity({ type: 'message', chat, outgoing: true });
     this.changed();
-    await this.flush().catch(() => undefined);
+    if (!options.deferDelivery) await this.flush().catch(() => undefined);
     return packet.id;
   }
   private async insertMessage(
@@ -994,44 +995,50 @@ export class DeviceMessenger {
     );
     await applyMessageChange(this.db, peer, packet.id, packet.chat);
   }
-  async flush(peer?: string) {
+  async flush(peer?: string, messageId?: string) {
     await this.tail;
     if (!this.transport || !this.identity) return;
-    const controls = await this.db.all<{
-      id: string;
-      peer: string;
-      packet: string;
-      created_at: number;
-    }>(
-      `SELECT o.* FROM control_outbox o JOIN contacts c ON c.public_key=o.peer WHERE c.blocked=0 ${peer ? 'AND o.peer=?' : ''} ORDER BY o.rowid LIMIT 50`,
-      ...(peer ? [peer] : []),
-    );
-    for (const row of controls) {
-      if (
-        await this.transmit(row.peer, packetSchema.parse(JSON.parse(row.packet)), {
-          id: row.id,
-          createdAt: row.created_at,
-        })
-      )
-        await this.transaction(() => this.db.run('DELETE FROM control_outbox WHERE id=?', row.id));
+    if (!messageId) {
+      const controls = await this.db.all<{
+        id: string;
+        peer: string;
+        packet: string;
+        created_at: number;
+      }>(
+        `SELECT o.* FROM control_outbox o JOIN contacts c ON c.public_key=o.peer WHERE c.blocked=0 ${peer ? 'AND o.peer=?' : ''} ORDER BY o.rowid LIMIT 50`,
+        ...(peer ? [peer] : []),
+      );
+      for (const row of controls) {
+        if (
+          await this.transmit(row.peer, packetSchema.parse(JSON.parse(row.packet)), {
+            id: row.id,
+            createdAt: row.created_at,
+          })
+        )
+          await this.transaction(() =>
+            this.db.run('DELETE FROM control_outbox WHERE id=?', row.id),
+          );
+      }
+      const states = await this.db.all<{ chat_id: string; peer: string }>(
+        `SELECT g.chat_id,g.peer FROM group_deliveries g JOIN chats c ON c.id=g.chat_id WHERE c.owner=? AND g.revision<c.revision ${peer ? 'AND g.peer=?' : ''} LIMIT 50`,
+        this.own().key,
+        ...(peer ? [peer] : []),
+      );
+      for (const state of states)
+        if (await this.acceptsPeer(state.peer))
+          await this.sendGroupState(state.chat_id, state.peer);
+      const leaving = await this.db.all<{ id: string; owner: string }>(
+        "SELECT id,owner FROM chats WHERE kind='group' AND left_group=1 AND owner!=?",
+        this.own().key,
+      );
+      for (const group of leaving)
+        if ((!peer || peer === group.owner) && (await this.acceptsPeer(group.owner)))
+          await this.transmit(group.owner, { type: 'group_leave', id: group.id });
     }
-    const states = await this.db.all<{ chat_id: string; peer: string }>(
-      `SELECT g.chat_id,g.peer FROM group_deliveries g JOIN chats c ON c.id=g.chat_id WHERE c.owner=? AND g.revision<c.revision ${peer ? 'AND g.peer=?' : ''} LIMIT 50`,
-      this.own().key,
-      ...(peer ? [peer] : []),
-    );
-    for (const state of states)
-      if (await this.acceptsPeer(state.peer)) await this.sendGroupState(state.chat_id, state.peer);
-    const leaving = await this.db.all<{ id: string; owner: string }>(
-      "SELECT id,owner FROM chats WHERE kind='group' AND left_group=1 AND owner!=?",
-      this.own().key,
-    );
-    for (const group of leaving)
-      if ((!peer || peer === group.owner) && (await this.acceptsPeer(group.owner)))
-        await this.transmit(group.owner, { type: 'group_leave', id: group.id });
     const pending = await this.db.all<{ peer: string; message_id: string }>(
-      `SELECT d.peer,d.message_id FROM deliveries d JOIN contacts c ON c.public_key=d.peer WHERE d.acknowledged=0 AND d.held=0 AND c.blocked=0 ${peer ? 'AND d.peer=?' : ''} LIMIT 50`,
+      `SELECT d.peer,d.message_id FROM deliveries d JOIN contacts c ON c.public_key=d.peer WHERE d.acknowledged=0 AND d.held=0 AND c.blocked=0 ${peer ? 'AND d.peer=?' : ''} ${messageId ? 'AND d.message_id=?' : ''} LIMIT 50`,
       ...(peer ? [peer] : []),
+      ...(messageId ? [messageId] : []),
     );
     for (const item of pending) {
       const row = (

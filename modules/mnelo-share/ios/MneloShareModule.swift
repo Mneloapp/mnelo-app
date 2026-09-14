@@ -4,9 +4,24 @@ import CryptoKit
 
 public final class MneloShareModule: Module {
   private let group = "group.com.mnelo.messenger.sharing"
+  private let files = DispatchQueue(label: "com.mnelo.share.files")
 
   public func definition() -> ModuleDefinition {
     Name("MneloShare")
+
+    AsyncFunction("claimIncomingFiles") { (values: [String]) throws -> [String: String] in
+      guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group) else {
+        throw NSError(domain: "SHARE_FILE_UNAVAILABLE", code: 1)
+      }
+      let cache = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+      return try MneloIncomingFile.claim(values, inbox: container.appendingPathComponent("MneloIncoming"), cache: cache)
+    }.runOnQueue(files)
+
+    AsyncFunction("discardIncomingFiles") { (values: [String]) in
+      guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group),
+        let cache = try? FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return }
+      MneloIncomingFile.discard(values, inbox: container.appendingPathComponent("MneloIncoming"), cache: cache)
+    }.runOnQueue(files)
 
     Function("resolveIncomingFile") { (value: String) -> String? in
       guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group)

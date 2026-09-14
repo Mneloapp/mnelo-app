@@ -8,7 +8,9 @@
     "noFallthroughCasesInSwitch": true,
     "noEmit": true,
     "types": ["react", "react-native", "node", "jest"],
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"]
+    }
   },
   "include": [
     "app/**/*.tsx",
@@ -19,7 +21,8 @@
     "scripts/**/*.ts",
     "app.config.ts",
     "expo-env.d.ts",
-    ".expo/types/**/*.ts"
+    ".expo/types/**/*.ts",
+    "modules/mnelo-share-runtime/entry.ts"
   ],
   "exclude": ["node_modules", "supabase/functions", "ios", "android", "dist", "coverage"]
 }

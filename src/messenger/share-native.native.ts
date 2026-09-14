@@ -4,10 +4,13 @@ import type { NativeConversationSuggestions } from './share-native';
 type ShareBridge = NativeConversationSuggestions & {
   resolveIncomingFile(uri: string): string | null;
   sharedConversation(values: string[]): string | null;
+  claimIncomingFiles(values: string[]): Promise<Record<string, string>>;
+  discardIncomingFiles(values: string[]): Promise<void>;
 };
 const native =
   Platform.OS === 'ios' ? requireOptionalNativeModule<ShareBridge>('MneloShare') : null;
 export const conversationSuggestions: NativeConversationSuggestions | null = native;
+export const incomingFileBridge = native?.claimIncomingFiles ? native : null;
 export const resolveSharedFile = native ? (uri: string) => native.resolveIncomingFile(uri) : null;
 export function sharedConversation(values: string[]): string | null {
   try {

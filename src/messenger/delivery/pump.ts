@@ -13,6 +13,7 @@ export type DeliveryHooks = {
   beforeCycle?: () => Promise<void>;
   beforeSend?: (peer: string, body: string) => Promise<boolean>;
   afterCycle?: () => Promise<void>;
+  outgoingOnly?: boolean;
 };
 
 // Transport orchestration only: retries never re-encrypt an existing outbox
@@ -132,6 +133,46 @@ export class DeliveryPump {
     await this.hooks.beforeCycle?.();
     await this.maintainKeys();
     await this.journal.prune();
+    if (!this.hooks.outgoingOnly) await this.receiveCycle();
+    let outgoing = await this.journal.pending(this.outgoingCursor);
+    if (!outgoing.length) {
+      this.outgoingCursor = 0;
+      outgoing = await this.journal.pending();
+    }
+    for (const row of outgoing) {
+      if (this.stopped) return;
+      this.outgoingCursor = row.sequence;
+      const retry = await this.journal.retry('send', row.peer, row.id);
+      if (retry && retry.next_at > this.now()) {
+        this.issue = retry.code;
+        continue;
+      }
+      try {
+        await this.pin(row.peer);
+        if (this.hooks.beforeSend && !(await this.hooks.beforeSend(row.peer, row.body))) continue;
+        const needBundle = await this.journal.needsBundle(row.peer);
+        const leased = needBundle
+          ? (await this.command({ action: 'delivery-keys', peer: row.peer, request: row.id })).keys
+          : undefined;
+        if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
+        if (leased) {
+          const { oneTime: _oneTime, ...identity } = leased.bundle;
+          await this.journal.pin({ ...identity, owner: row.peer, signature: leased.signature });
+        }
+        const envelope = await this.journal.seal(row.id, leased?.bundle);
+        if (this.stopped) return;
+        const { accepted } = await this.command({ action: 'delivery-submit', envelope });
+        if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
+        await this.journal.uploaded(row.id);
+        await this.journal.recovered('send', row.peer, row.id);
+      } catch (error) {
+        this.issue = this.failureCode(error);
+        await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
+      }
+    }
+    await this.hooks.afterCycle?.();
+  }
+  private async receiveCycle() {
     // Project durable local inbox first; a crash cannot consume another prekey or
     // advance a ratchet twice while replaying this stage.
     await this.project();
@@ -174,43 +215,6 @@ export class DeliveryPump {
       await this.command({ action: 'delivery-ack', sender: row.sender, id: row.id });
       await this.journal.acknowledged(row.sender, row.id);
     }
-    let outgoing = await this.journal.pending(this.outgoingCursor);
-    if (!outgoing.length) {
-      this.outgoingCursor = 0;
-      outgoing = await this.journal.pending();
-    }
-    for (const row of outgoing) {
-      if (this.stopped) return;
-      this.outgoingCursor = row.sequence;
-      const retry = await this.journal.retry('send', row.peer, row.id);
-      if (retry && retry.next_at > this.now()) {
-        this.issue = retry.code;
-        continue;
-      }
-      try {
-        await this.pin(row.peer);
-        if (this.hooks.beforeSend && !(await this.hooks.beforeSend(row.peer, row.body))) continue;
-        const needBundle = await this.journal.needsBundle(row.peer);
-        const leased = needBundle
-          ? (await this.command({ action: 'delivery-keys', peer: row.peer, request: row.id })).keys
-          : undefined;
-        if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
-        if (leased) {
-          const { oneTime: _oneTime, ...identity } = leased.bundle;
-          await this.journal.pin({ ...identity, owner: row.peer, signature: leased.signature });
-        }
-        const envelope = await this.journal.seal(row.id, leased?.bundle);
-        if (this.stopped) return;
-        const { accepted } = await this.command({ action: 'delivery-submit', envelope });
-        if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
-        await this.journal.uploaded(row.id);
-        await this.journal.recovered('send', row.peer, row.id);
-      } catch (error) {
-        this.issue = this.failureCode(error);
-        await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
-      }
-    }
-    await this.hooks.afterCycle?.();
   }
   private async project() {
     let inbox = await this.journal.inbox(this.projectCursor);

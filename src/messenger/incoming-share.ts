@@ -3,7 +3,7 @@ import { File, Paths } from 'expo-file-system';
 import { Image, Platform } from 'react-native';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { discardCachedMedia } from '@/features/chats/media-files';
-import { resolveSharedFile } from './share-native';
+import { incomingFileBridge, resolveSharedFile } from './share-native';
 import type { Media } from './model';
 
 export const shareGroup = 'group.com.mnelo.messenger.sharing';
@@ -18,6 +18,26 @@ export type IncomingItem = {
   mime: string;
   image: boolean;
 };
+
+export async function claimIncoming(payloads: readonly SharePayload[]) {
+  if (payloads.length > 10) throw new Error('SHARE_TOO_MANY');
+  if (!incomingFileBridge) return incomingItems(payloads);
+  const files = payloads.filter((item) => item.shareType !== 'text' && item.shareType !== 'url');
+  const claimed = await incomingFileBridge.claimIncomingFiles(files.map((item) => item.value));
+  return incomingItems(
+    payloads.map((item) => ({ ...item, value: claimed[item.value] ?? item.value })),
+  ).map((item, index) => ({
+    ...item,
+    // Keep the sender's filename, without the cache's unique prefix.
+    ...(item.uri
+      ? {
+          label: decodeURIComponent(payloads[index]!.value.split('/').at(-1) ?? 'file')
+            .replace(/[\x00-\x1f\x7f/\\]/g, '_')
+            .slice(-160),
+        }
+      : {}),
+  }));
+}
 
 const filePath = (value: string) =>
   decodeURIComponent(new URL(value).pathname).replace(/^\/private\/var\//, '/var/');
@@ -138,6 +158,16 @@ export async function prepareIncoming(
 }
 
 export function discardIncoming(payloads: readonly SharePayload[]) {
+  if (incomingFileBridge) {
+    void incomingFileBridge
+      .discardIncomingFiles(
+        payloads
+          .filter((item) => item.shareType !== 'url' && item.shareType !== 'text')
+          .map((item) => item.value),
+      )
+      .catch(() => undefined);
+    return;
+  }
   for (const item of payloads) {
     if (item.shareType === 'url' || item.shareType === 'text' || !ownedShareFile(item.value))
       continue;

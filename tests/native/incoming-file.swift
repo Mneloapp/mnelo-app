@@ -22,6 +22,22 @@ import Foundation
     precondition(MneloIncomingFile.resolve(inbox.absoluteString, inbox: inbox) == nil)
     precondition(MneloIncomingFile.resolve("https://example.com/photo.png", inbox: inbox) == nil)
     precondition(MneloIncomingFile.resolve(inbox.appendingPathComponent("../private.db").absoluteString, inbox: inbox) == nil)
+    let cache = root.appendingPathComponent("cache")
+    let claimed = try MneloIncomingFile.claim([photo.absoluteString], inbox: inbox, cache: cache)
+    let local = URL(string: claimed[photo.absoluteString]!)!
+    let content = try Data(contentsOf: local)
+    precondition(content == Data([1, 2, 3]))
+    let repeated = try MneloIncomingFile.claim([photo.absoluteString], inbox: inbox, cache: cache)
+    precondition(repeated == claimed)
+    MneloIncomingFile.discard([photo.absoluteString], inbox: inbox, cache: cache)
+    precondition(!manager.fileExists(atPath: local.path))
+    precondition(!manager.fileExists(atPath: photo.path))
+    precondition(manager.fileExists(atPath: outside.path))
+    do {
+      _ = try MneloIncomingFile.claim([outside.absoluteString], inbox: inbox, cache: cache)
+      preconditionFailure("Escaping file was imported")
+    } catch {}
+    precondition(!manager.fileExists(atPath: MneloIncomingFile.batch([outside.absoluteString], cache: cache).path))
     print("PASS: canonical owned files, aliases, escaped links, traversal, directories and remote URLs")
   }
 }

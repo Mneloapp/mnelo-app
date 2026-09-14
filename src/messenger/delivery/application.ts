@@ -86,6 +86,7 @@ export class ApplicationDelivery {
     changed: (state: DeliveryState) => void,
     private readonly savedName: (phone: string) => Promise<string | null>,
     private readonly now = Date.now,
+    outgoingOnly = false,
   ) {
     const own = engine.currentIdentity();
     if (!own) throw new Error('IDENTITY_REQUIRED');
@@ -99,7 +100,9 @@ export class ApplicationDelivery {
       changed,
       now,
       {
+        outgoingOnly,
         beforeCycle: async () => {
+          if (outgoingOnly) return;
           await this.calls?.recover?.();
           for (const row of await engine.deliveryBlocks()) {
             const result = await client.execute({
@@ -131,7 +134,7 @@ export class ApplicationDelivery {
             : true;
         },
         afterCycle: async () => {
-          await this.transfer.acknowledge();
+          if (!outgoingOnly) await this.transfer.acknowledge();
           await this.media.prune();
         },
       },

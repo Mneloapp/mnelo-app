@@ -9,6 +9,10 @@ export type NativeConversationSuggestions = {
 };
 export const conversationSuggestions: NativeConversationSuggestions | null = null;
 export const resolveSharedFile: ((uri: string) => string | null) | null = null;
+export const incomingFileBridge: {
+  claimIncomingFiles(values: string[]): Promise<Record<string, string>>;
+  discardIncomingFiles(values: string[]): Promise<void>;
+} | null = null;
 export function sharedConversation(_values: string[]): string | null {
   return null;
 }

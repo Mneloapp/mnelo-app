@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
   type PropsWithChildren,
 } from 'react';
+import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Page, StateView } from '@/components/ui';
@@ -111,6 +112,15 @@ export function DeviceProvider({ children }: PropsWithChildren) {
     // A reopened database (including Fast Refresh) has a new engine. Cached
     // queries may still hold an error from the old, already closed connection.
     if (engine) void cache.invalidateQueries({ queryKey: ['device'] });
+  }, [engine, cache]);
+  useEffect(() => {
+    const listener = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && engine) {
+        void cache.invalidateQueries({ queryKey: ['device'] });
+        void engine.flush().catch(() => undefined);
+      }
+    });
+    return () => listener.remove();
   }, [engine, cache]);
   const runtime = useSyncExternalStore(
     observeDeviceNetwork,

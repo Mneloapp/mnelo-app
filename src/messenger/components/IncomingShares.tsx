@@ -20,7 +20,7 @@ import { theme } from '@/theme/tokens';
 import { useDevice } from '../DeviceProvider';
 import {
   discardIncoming,
-  incomingItems,
+  claimIncoming,
   prepareIncoming,
   type IncomingItem,
 } from '../incoming-share';
@@ -42,7 +42,6 @@ export function IncomingShares() {
   const [payloads, setPayloads] = useState<SharePayload[] | null>(null);
   const pending = useRef<SharePayload[] | null>(null);
   const sending = useRef(false);
-  const { t } = useTranslation();
   useEffect(() => {
     if (Platform.OS === 'web') return;
     function refresh() {
@@ -71,49 +70,79 @@ export function IncomingShares() {
     setPayloads(pending.current);
   }
   if (!payloads || !authenticated) return null;
-  let items: IncomingItem[] = [];
-  let invalid:
+  return (
+    <Modal visible animationType="fade" presentationStyle="fullScreen" onRequestClose={finish}>
+      <SafeAreaProvider>
+        <IncomingBatch
+          key={signature(payloads)}
+          payloads={payloads}
+          onClose={finish}
+          onBusy={(value) => {
+            sending.current = value;
+          }}
+        />
+      </SafeAreaProvider>
+    </Modal>
+  );
+}
+
+function IncomingBatch({
+  payloads,
+  onClose,
+  onBusy,
+}: {
+  payloads: readonly SharePayload[];
+  onClose: () => void;
+  onBusy: (busy: boolean) => void;
+}) {
+  const { t } = useTranslation();
+  const [items, setItems] = useState<IncomingItem[] | null>(null);
+  const [invalid, setInvalid] = useState<
     | 'incomingShare.fileSize'
     | 'incomingShare.imageSize'
     | 'incomingShare.tooMany'
     | 'incomingShare.unavailable'
-    | null = null;
-  try {
-    items = incomingItems(payloads);
-  } catch (error) {
-    const code = error instanceof Error ? error.message : '';
-    invalid =
-      code === 'SHARE_FILE_SIZE'
-        ? 'incomingShare.fileSize'
-        : code === 'SHARE_IMAGE_SIZE'
-          ? 'incomingShare.imageSize'
-          : code === 'SHARE_TOO_MANY'
-            ? 'incomingShare.tooMany'
-            : 'incomingShare.unavailable';
-  }
+    | null
+  >(null);
+  useEffect(() => {
+    let alive = true;
+    void claimIncoming(payloads)
+      .then((next) => {
+        if (alive) setItems(next);
+      })
+      .catch((error: unknown) => {
+        const code = error instanceof Error ? error.message : '';
+        if (alive)
+          setInvalid(
+            code.includes('SHARE_FILE_SIZE')
+              ? 'incomingShare.fileSize'
+              : code.includes('SHARE_IMAGE_SIZE')
+                ? 'incomingShare.imageSize'
+                : code.includes('SHARE_TOO_MANY')
+                  ? 'incomingShare.tooMany'
+                  : 'incomingShare.unavailable',
+          );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [payloads]);
+  if (!items)
+    return (
+      <Page
+        title={t('incomingShare.title')}
+        right={<IconButton icon="x" label={t('common.cancel')} onPress={onClose} />}
+      >
+        <StateView loading={!invalid} error={invalid ? t(invalid) : undefined} />
+      </Page>
+    );
   return (
-    <Modal visible animationType="fade" presentationStyle="fullScreen" onRequestClose={finish}>
-      <SafeAreaProvider>
-        {invalid ? (
-          <Page
-            title={t('incomingShare.title')}
-            right={<IconButton icon="x" label={t('common.cancel')} onPress={finish} />}
-          >
-            <AppText accessibilityRole="alert">{t(invalid)}</AppText>
-          </Page>
-        ) : (
-          <ShareReview
-            key={signature(payloads)}
-            items={items}
-            suggestedChat={sharedConversation(payloads.map((payload) => payload.value))}
-            onClose={finish}
-            onBusy={(value) => {
-              sending.current = value;
-            }}
-          />
-        )}
-      </SafeAreaProvider>
-    </Modal>
+    <ShareReview
+      items={items}
+      suggestedChat={sharedConversation(payloads.map((payload) => payload.value))}
+      onClose={onClose}
+      onBusy={onBusy}
+    />
   );
 }
 

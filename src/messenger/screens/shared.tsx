@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { AppIcon } from '@/components/AppIcon';
 import { theme } from '@/theme/tokens';
+import { mediaErrorMessage } from '../media-send-error';
 
 export function useLocalAction() {
   const locked = useRef(false);
@@ -17,8 +18,13 @@ export function useLocalAction() {
     setError(null);
     try {
       await action();
-    } catch {
-      setError(t('messenger.genericError'));
+    } catch (cause) {
+      const { key, values } = mediaErrorMessage(cause);
+      setError(
+        key === 'mediaBatchPartial'
+          ? t('messenger.mediaBatchPartial', { sent: values.sent!, total: values.total! })
+          : t(`messenger.${key}`),
+      );
     } finally {
       locked.current = false;
       setBusy(false);

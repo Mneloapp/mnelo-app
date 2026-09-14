@@ -16,6 +16,58 @@ import {
   type PhoneCommand,
 } from '../../src/messenger/phone-protocol';
 const token = () => randomBytes(32).toString('hex');
+test('confirming an unchanged push route does not exhaust token-rotation limits', async () => {
+  const routes = new WakeRegistry(new DatabaseSync(':memory:'));
+  let now = Date.now();
+  const wake = new WakeService(
+    routes,
+    {
+      async send() {
+        return { accepted: true };
+      },
+    },
+    () => now,
+  );
+  const owner = createKeys(randomBytes).key;
+  const registration = {
+    platform: 'ios' as const,
+    channel: 'alert' as const,
+    environment: 'production' as const,
+    token: token(),
+  };
+  try {
+    for (let i = 0; i < 50; i++) {
+      now++;
+      await wake.execute(owner, { action: 'push-register', registration });
+    }
+    assert.equal(routes.ownerRoute(owner, 'alert')?.updated, now);
+    for (let i = 0; i < 29; i++) {
+      registration.token = token();
+      await wake.execute(owner, { action: 'push-register', registration });
+    }
+    await assert.rejects(
+      wake.execute(owner, {
+        action: 'push-register',
+        registration: { ...registration, token: token() },
+      }),
+      /PUSH_RATE_LIMITED/,
+    );
+    await wake.execute(owner, { action: 'push-register', registration });
+    const stranger = createKeys(randomBytes).key;
+    await assert.rejects(
+      wake.execute(stranger, { action: 'push-register', registration }),
+      /PUSH_REGISTRATION_CONFLICT/,
+    );
+    wake.disable(owner);
+    await assert.rejects(
+      wake.execute(owner, { action: 'push-register', registration }),
+      /PUSH_RATE_LIMITED/,
+      'revoked routes are not treated as unchanged',
+    );
+  } finally {
+    routes.close();
+  }
+});
 test('APNs uses a valid ES256 provider JWT, correct topics, zero retention and no private content', async () => {
   const pair = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
   const pem = pair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
@@ -71,6 +123,8 @@ test('APNs uses a valid ES256 provider JWT, correct topics, zero retention and n
     mnelo: { v: 1, kind: 'call', id, video: true, expires: now + 60000 },
   });
   assert.ok(JSON.stringify(apnsPayload({ kind: 'message', id })).length < 512);
+  assert.equal(JSON.parse(requests[1]!.body).aps['mutable-content'], 1);
+  assert.equal(JSON.parse(requests[0]!.body).aps['mutable-content'], undefined);
   const expiresAt = now + 120000;
   await provider.send(
     { channel: 'alert', environment: 'sandbox', token: token() },

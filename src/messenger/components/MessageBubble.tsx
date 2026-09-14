@@ -10,6 +10,8 @@ import { DeliveryLeaf } from './MessageMetadata';
 // Reactions are siblings of the bubble, never part of the message body or its copy action.
 export function MessageBubble({
   own,
+  highlighted = false,
+  interactiveChildren = false,
   containerStyle,
   bubbleRef,
   onLongPress,
@@ -23,6 +25,8 @@ export function MessageBubble({
   children,
 }: PropsWithChildren<{
   own: boolean;
+  highlighted?: boolean;
+  interactiveChildren?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   bubbleRef?: Ref<View>;
   onLongPress?: () => void;
@@ -44,10 +48,16 @@ export function MessageBubble({
         testID="message-bubble"
         ref={bubbleRef}
         collapsable={false}
-        style={[styles.bubble, own && styles.outgoing, visual && styles.visualBubble]}
+        style={[
+          styles.bubble,
+          own && styles.outgoing,
+          media && styles.mediaBubble,
+          visual && styles.visualBubble,
+          highlighted && styles.highlighted,
+        ]}
         onLongPress={onLongPress}
         delayLongPress={450}
-        accessible={!visual && Boolean(onLongPress)}
+        accessible={!visual && !interactiveChildren && Boolean(onLongPress)}
         accessibilityRole={!visual && onLongPress ? 'button' : undefined}
         accessibilityLabel={accessibilityLabel}
         accessibilityActions={
@@ -80,6 +90,9 @@ export function MessageBubble({
             {receipt && <DeliveryLeaf status={status} overMedia={overlayMetadata} />}
           </View>
         )}
+        {highlighted && (
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.highlightRing]} />
+        )}
       </Pressable>
       {counts.size > 0 && (
         <View testID="message-reactions" style={[styles.reactions, own && styles.ownReactions]}>
@@ -102,6 +115,17 @@ export function MessageBubble({
   );
 }
 const styles = StyleSheet.create({
+  highlightRing: {
+    borderWidth: 3,
+    borderRadius: theme.radii.lg,
+    borderColor: theme.colors.success,
+  },
+  highlighted: {
+    backgroundColor: theme.colors.accent,
+    shadowColor: theme.colors.success,
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+  },
   row: {
     alignSelf: 'flex-start',
     maxWidth: '86%',
@@ -115,7 +139,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.lg,
     padding: theme.spacing.md,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     alignItems: 'flex-end',
     columnGap: theme.spacing.sm,
     rowGap: theme.spacing.xs,
@@ -135,13 +158,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   overlayTime: { color: theme.colors.callText },
-  body: { maxWidth: '100%' },
+  body: { minWidth: 0, flexShrink: 1 },
+  mediaBubble: { flexDirection: 'column', alignItems: 'stretch' },
   mediaBody: { width: '100%' },
   metadata: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.xs,
     marginLeft: 'auto',
+    flexShrink: 0,
   },
   time: { fontSize: 12, lineHeight: 16 },
   reactions: {

@@ -25,7 +25,7 @@ import { MessageField } from '@/features/chats/MessageField';
 import { VoiceRecorder } from '@/features/chats/VoiceRecorder';
 import { AudioPlayback } from '@/features/chats/AudioPlayback';
 import {
-  imageSelection,
+  imageSelections,
   fileSelection,
   discardCachedMedia,
   type SelectedMedia,
@@ -33,10 +33,12 @@ import {
 import { useDevice } from '../DeviceProvider';
 import type { LocalMessage } from '../model';
 import { useLocalAction } from './shared';
+import { sendSelectedMedia } from '../send-media';
 import { RichMessageCard } from '../components/RichMessageCard';
 import { RichCardComposer } from '../components/RichCardComposer';
 import { readRichMedia, richMedia, voteEmoji, type RichCard } from '../rich-message';
 import { useAttachmentPanel } from '../useAttachmentPanel';
+import { useQuotedMessageScroll } from '../useQuotedMessageScroll';
 import { useSentMessageScroll } from '../useSentMessageScroll';
 import { useVisibleRead } from '../useVisibleRead';
 import { CallBackSheet, CallMessage } from '../components/CallMessage';
@@ -153,11 +155,15 @@ export function ChatMessageBubble({
   message,
   onSelect,
   onReply,
+  onQuote,
+  highlighted = false,
   menuOpen,
 }: {
   message: LocalMessage;
   onSelect: (anchor?: MessageAnchor) => void;
   onReply: () => void;
+  onQuote?: (id: string) => void;
+  highlighted?: boolean;
   menuOpen: boolean;
 }) {
   const { identity, engine } = useDevice();
@@ -192,6 +198,8 @@ export function ChatMessageBubble({
     <MessageTimeReveal onReply={menuOpen ? undefined : onReply}>
       <MessageBubble
         own={own}
+        highlighted={highlighted}
+        interactiveChildren={Boolean(message.replyTo && onQuote)}
         bubbleRef={bubbleRef}
         onLongPress={select}
         accessibilityLabel={
@@ -217,12 +225,22 @@ export function ChatMessageBubble({
         )}
         {visual && message.replyTo && (
           <View style={styles.visualText}>
-            <ReplyQuote chat={message.chatId} id={message.replyTo} />
+            <ReplyQuote
+              chat={message.chatId}
+              id={message.replyTo}
+              onPress={onQuote ? () => onQuote(message.replyTo!) : undefined}
+            />
           </View>
         )}
         {!visual && ((message.body.length > 0 && !card) || message.replyTo) ? (
           <View style={styles.messageBody}>
-            {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
+            {message.replyTo && (
+              <ReplyQuote
+                chat={message.chatId}
+                id={message.replyTo}
+                onPress={onQuote ? () => onQuote(message.replyTo!) : undefined}
+              />
+            )}
             {message.body.length > 0 && !card && <AppText>{message.body}</AppText>}
           </View>
         ) : null}
@@ -316,7 +334,16 @@ export function ChatScreen() {
   });
   const rows = messages.data?.pages.flat() ?? [];
   const { listRef, sent: didSend } = useSentMessageScroll(id, rows);
+  const quoteScroll = useQuotedMessageScroll(
+    id,
+    listRef,
+    rows,
+    async (message) => Boolean(await engine.replyPreview(id, message)),
+    () => messages.fetchNextPage({ cancelRefetch: false }),
+    reduceMotion,
+  );
   async function sendCurrent(body: string, options?: Parameters<typeof engine.send>[2]) {
+    quoteScroll.cancel();
     const messageId = await engine.send(id, body, options);
     didSend(messageId);
     return messageId;
@@ -327,27 +354,34 @@ export function ChatScreen() {
   useEffect(() => {
     if (remote?.key) void mesh?.focus(remote.key).catch(() => undefined);
   }, [mesh, remote?.key]);
-  async function sendFile(file: SelectedMedia | null, kind: 'image' | 'file' | 'voice') {
-    if (!file) return;
-    let committed = false;
+  async function sendFiles(files: SelectedMedia[], kind: 'image' | 'file' | 'voice') {
+    if (!files.length) return;
+    const committed: string[] = [];
     try {
-      const source = new File(file.uri);
-      if (source.size > 10 * 1024 * 1024) throw new Error('MEDIA_SIZE_LIMIT');
-      const bytes = await source.base64();
-      await sendCurrent('', {
-        kind: file.mime.startsWith('video/') ? 'file' : kind,
-        ...(reply ? { replyTo: reply } : {}),
-        media: { name: file.name, mime: file.mime, bytes, duration: file.duration ?? null },
-      });
-      committed = true;
+      await sendSelectedMedia(
+        files,
+        kind,
+        async (body, options) => {
+          const messageId = await sendCurrent(body, options);
+          committed.push(messageId);
+          return messageId;
+        },
+        reply,
+      );
       attachmentPanel.close();
       setRecording(false);
       setVoice(null);
       setReply(undefined);
     } finally {
-      // A voice preview must remain playable/retryable if the local commit fails.
-      if (committed || kind !== 'voice') discardCachedMedia(file.uri);
+      // Batch items enter the durable outbox in selection order before networking.
+      if (committed.length && files.length > 1)
+        void (async () => {
+          for (const messageId of committed) await engine.flush(undefined, messageId);
+        })().catch(() => undefined);
     }
+  }
+  async function sendFile(file: SelectedMedia | null, kind: 'image' | 'file' | 'voice') {
+    if (file) await sendFiles([file], kind);
   }
   async function sendCard(card: RichCard) {
     const body =
@@ -494,10 +528,14 @@ export function ChatScreen() {
           )}
           <FlatList
             ref={listRef}
+            onScrollBeginDrag={quoteScroll.cancel}
+            onScrollToIndexFailed={quoteScroll.onScrollToIndexFailed}
+            onViewableItemsChanged={quoteScroll.onViewableItemsChanged}
             data={rows}
             scrollEnabled={!selected}
             inverted
             keyExtractor={(row) => row.id}
+            removeClippedSubviews={false}
             initialNumToRender={8}
             windowSize={5}
             keyboardShouldPersistTaps="handled"
@@ -520,6 +558,11 @@ export function ChatScreen() {
               ) : (
                 <ChatMessageBubble
                   message={item}
+                  highlighted={quoteScroll.highlighted === item.id}
+                  onQuote={(id) => {
+                    Keyboard.dismiss();
+                    void quoteScroll.jump(id);
+                  }}
                   menuOpen={Boolean(selected)}
                   onSelect={(anchor) => {
                     Keyboard.dismiss();
@@ -548,6 +591,11 @@ export function ChatScreen() {
               </View>
             }
           />
+          {quoteScroll.unavailable && (
+            <AppText variant="caption" tone="secondary">
+              {t('messenger.quoteUnavailable')}
+            </AppText>
+          )}
           {callBack && (
             <CallBackSheet
               message={callBack}
@@ -588,7 +636,14 @@ export function ChatScreen() {
           {!editing && reply && (
             <View style={ui.row}>
               <View style={ui.flex}>
-                <ReplyQuote chat={id} id={reply} />
+                <ReplyQuote
+                  chat={id}
+                  id={reply}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    void quoteScroll.jump(reply);
+                  }}
+                />
               </View>
               <IconButton icon="x" label={t('common.cancel')} onPress={() => setReply(undefined)} />
             </View>
@@ -733,7 +788,7 @@ export function ChatScreen() {
                     label={t('messenger.photo')}
                     busy={action.busy}
                     onPress={() =>
-                      void action.run(async () => sendFile(await imageSelection(), 'image'))
+                      void action.run(async () => sendFiles(await imageSelections(), 'image'))
                     }
                   />
                   <AttachmentAction
@@ -742,7 +797,7 @@ export function ChatScreen() {
                     label={t('messenger.camera')}
                     busy={action.busy}
                     onPress={() =>
-                      void action.run(async () => sendFile(await imageSelection(true), 'image'))
+                      void action.run(async () => sendFiles(await imageSelections(true), 'image'))
                     }
                   />
                   <AttachmentAction

@@ -28,7 +28,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     config.supportsVideo = true
     config.maximumCallGroups = 1
     config.maximumCallsPerCallGroup = 1
-    config.supportedHandleTypes = [.generic]
+    config.supportedHandleTypes = [.generic, .phoneNumber]
     config.includesCallsInRecents = false
     provider = CXProvider(configuration: config)
     super.init()
@@ -137,6 +137,15 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     }
     arm(id)
   }
+  func identify(_ id: UUID, name: String, phone: String, video: Bool) {
+    guard live.contains(id), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    let update = CXCallUpdate()
+    update.localizedCallerName = String(name.prefix(160))
+    update.remoteHandle = CXHandle(type: phone.hasPrefix("+") ? .phoneNumber : .generic,
+                                  value: phone.isEmpty ? String(name.prefix(160)) : phone)
+    update.hasVideo = video
+    provider.reportCall(with: id, updated: update)
+  }
   func answer(_ id: UUID) {
     guard live.contains(id), !answeredCalls.contains(id) else { return }
     answeredCalls.insert(id)
@@ -232,6 +241,9 @@ public class MneloCallsModule: Module {
           MneloCallManager.shared.incoming(id, video: video) { continuation.resume() }
         }
       }
+    }
+    AsyncFunction("identify") { (value: String, name: String, phone: String, video: Bool) async in
+      await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.identify(id, name: name, phone: phone, video: video) } }
     }
     AsyncFunction("answer") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.answer(id) } } }
     AsyncFunction("outgoing") { (value: String, video: Bool) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.outgoing(id, video: video) } } }

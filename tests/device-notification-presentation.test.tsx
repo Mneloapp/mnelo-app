@@ -1,7 +1,13 @@
-import { act, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { AppState } from 'react-native';
 import { DeviceNotifications } from '@/messenger/DeviceNotifications';
 import type { IncomingMessage } from '@/messenger/engine';
+const mockPreview = jest.fn(
+  async (): Promise<{ title: string; body: string; chat: string } | null> => null,
+);
+jest.mock('@/messenger/notification-presentation', () => ({
+  localNotificationPreview: (...args: unknown[]) => mockPreview(...(args as [])),
+}));
 let mockPath = '/chat/open';
 let mockReceive = (_message: IncomingMessage) => {};
 const mockChat = jest.fn(async () => ({ title: 'Development Alice' }));
@@ -10,20 +16,19 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), navigate: jest.fn() },
 }));
 jest.mock('@/hooks/useAppActive', () => ({ useAppActive: () => true }));
-jest.mock('@/messenger/DeviceProvider', () => ({
-  useDevice: () => ({
-    authenticated: true,
-    identity: { key: 'fixture' },
-    calls: null,
-    engine: {
-      subscribeIncoming: (fn: typeof mockReceive) => {
-        mockReceive = fn;
-        return () => {};
-      },
-      chat: mockChat,
+const mockDevice = {
+  authenticated: true,
+  identity: { key: 'fixture' },
+  calls: null,
+  engine: {
+    subscribeIncoming: (fn: typeof mockReceive) => {
+      mockReceive = fn;
+      return () => {};
     },
-  }),
-}));
+    chat: mockChat,
+  },
+};
+jest.mock('@/messenger/DeviceProvider', () => ({ useDevice: () => mockDevice }));
 jest.mock('@/messenger/attention', () => ({ useAttentionCounts: () => ({ data: undefined }) }));
 jest.mock('@/messenger/useNotificationEnrollment', () => ({ useNotificationEnrollment: () => {} }));
 jest.mock('@/messenger/system-calls', () => ({ systemCallAudio: () => true }));
@@ -45,4 +50,18 @@ test('same visible conversation is silent; another conversation shows its local 
   mockPath = '/chat/other';
   await view.rerender(<DeviceNotifications />);
   expect(screen.queryByText('Development Alice')).toBeNull();
+});
+
+test('foreground message presents its locally resolved sender and body, and opens its exact conversation', async () => {
+  mockPath = '/(tabs)/chats';
+  mockPreview.mockResolvedValue({ title: 'Saved friend ❤️', body: 'Private hello', chat: 'other' });
+  await render(<DeviceNotifications />);
+  await act(async () => mockReceive({ id: 'three', chat: 'other', type: 'message' }));
+  await screen.findByText('Saved friend ❤️');
+  expect(screen.getByText('Private hello')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByText('Private hello'));
+  expect(jest.requireMock('expo-router').router.push).toHaveBeenCalledWith({
+    pathname: '/chat/[id]',
+    params: { id: 'other' },
+  });
 });

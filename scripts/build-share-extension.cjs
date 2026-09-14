@@ -2,10 +2,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const esbuild = require('esbuild');
 
-function buildShareExtension(root, destination) {
+function buildShareExtension(root, destination, entry = 'entry.ts') {
   const runtime = path.join(root, 'modules/mnelo-share-runtime');
   const result = esbuild.buildSync({
-    entryPoints: [path.join(runtime, 'entry.ts')],
+    entryPoints: [path.join(runtime, entry)],
     bundle: true,
     platform: 'browser',
     format: 'iife',
@@ -41,6 +41,10 @@ function buildShareExtension(root, destination) {
   ])
     fs.copyFileSync(path.join(root, source), path.join(generated, name));
 }
-module.exports = { buildShareExtension };
+module.exports = {
+  buildShareExtension,
+  buildNotificationExtension: (root, destination) =>
+    buildShareExtension(root, destination, 'notification-entry.ts'),
+};
 if (require.main === module)
   buildShareExtension(process.cwd(), process.argv[2] ?? 'artifacts/MneloShare.js');

@@ -26,6 +26,8 @@ export type CallParticipant = {
   sharing: boolean;
 };
 export type DeviceCall = {
+  connectedAt?: number;
+  endedAt?: number;
   screen?: MediaStream | null;
   screenStarting?: boolean;
   remoteState?: CallMediaState;
@@ -46,6 +48,7 @@ export type DeviceCall = {
 };
 export class DeviceCalls {
   private value: DeviceCall | null = null;
+  private replying = new Set<string>();
   private listeners = new Set<() => void>();
   private controls = new Set<(value: CallControl) => void>();
   observeControl(listener: (value: CallControl) => void) {
@@ -78,6 +81,14 @@ export class DeviceCalls {
     };
   };
   private update(next: DeviceCall | null) {
+    if (next?.status === 'active' && !next.connectedAt)
+      next = {
+        ...next,
+        connectedAt:
+          this.value?.id === next.id ? (this.value.connectedAt ?? Date.now()) : Date.now(),
+      };
+    if (next && ['ended', 'failed'].includes(next.status) && !next.endedAt)
+      next = { ...next, endedAt: Date.now() };
     this.value = next;
     this.listeners.forEach((listener) => listener());
   }
@@ -666,6 +677,32 @@ export class DeviceCalls {
   async failed(peer: string, id: string) {
     if (this.value?.group) return this.leaveParticipant(peer, id, 'failed');
     if (this.value?.peer === peer && this.value.id === id && this.active()) await this.end(true);
+  }
+  async replyAndDecline(id: string, text: string) {
+    const call = this.value;
+    if (
+      !call ||
+      call.id !== id ||
+      call.status !== 'incoming' ||
+      this.replying.has(id) ||
+      !text.trim() ||
+      text.length > 240
+    )
+      throw new Error('CALL_UNAVAILABLE');
+    const own = this.engine.currentIdentity();
+    if (!own) throw new Error('CALL_UNAVAILABLE');
+    this.replying.add(id);
+    try {
+      // Persist the reply before declining; a network outage must not lose it.
+      const message = await this.engine.send(directChatId(own.key, call.peer), text.trim(), {
+        deferDelivery: true,
+      });
+      if (this.value?.id === id && this.value.status === 'incoming')
+        await this.end(false, true, 'decline');
+      void this.engine.flush(undefined, message).catch(() => undefined);
+    } finally {
+      this.replying.delete(id);
+    }
   }
   async end(
     failed = false,

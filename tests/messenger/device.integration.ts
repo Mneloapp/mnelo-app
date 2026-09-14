@@ -44,6 +44,32 @@ async function pair() {
   await b.trustContact({ key: alice.key, name: alice.name });
   return { a, b, alice, bob, chat };
 }
+test('a new message bypasses more than fifty unacknowledged older deliveries', async () => {
+  const { a, b, chat } = await pair();
+  const transmitted: Packet[] = [];
+  try {
+    for (let i = 0; i < 60; i++) await a.send(chat, `OLDER_${i}`, { deferDelivery: true });
+    a.attachTransport({
+      send: () => false,
+      async sendDurable(_peer, packet) {
+        transmitted.push(packet);
+        return true;
+      },
+      stop() {},
+    });
+    const id = await a.send(chat, 'CURRENT_MESSAGE');
+    assert.ok(transmitted.some((packet) => packet.type === 'message' && packet.id === id));
+    assert.equal(transmitted.filter((packet) => packet.type === 'message').length, 1);
+    assert.equal(
+      (await a.messages(chat)).find((message) => message.id === id)?.status,
+      'pending',
+      'queueing alone is never a receipt',
+    );
+  } finally {
+    await a.close();
+    await b.close();
+  }
+});
 test('attention counts only committed inbound messages; duplicates, blocks, calls and own messages do not inflate unread', async () => {
   const { a, b, alice, bob, chat } = await pair();
   const events: unknown[] = [];
@@ -714,5 +740,27 @@ test('blocking while wake registration is pending revokes the grant before it ca
   } finally {
     await a.close();
     await b.close();
+  }
+});
+
+test('editable call replies persist in the vault, reject empty/oversized input, and clear on account erasure', async () => {
+  const db = database();
+  const a = new DeviceMessenger(db, randomBytes, randomUUID);
+  await a.initialize();
+  await a.createIdentity('Reply fixture');
+  const replies = ['შეხვედრაზე ვარ', 'მოგვიანებით გადმოგირეკავ', 'ახლა ვერ ვსაუბრობ'];
+  try {
+    await a.saveCallQuickReplies(replies);
+    const reopened = new DeviceMessenger(db, randomBytes, randomUUID);
+    await reopened.initialize();
+    assert.deepEqual(await reopened.callQuickReplies(), replies);
+    await assert.rejects(a.saveCallQuickReplies(['', 'valid', 'valid']));
+    await assert.rejects(a.saveCallQuickReplies(['x'.repeat(241), 'valid', 'valid']));
+    assert.deepEqual(await a.callQuickReplies(), replies);
+    await a.eraseLocalData();
+    await a.createIdentity('New fixture');
+    assert.deepEqual(await a.callQuickReplies(), []);
+  } finally {
+    await a.close();
   }
 });

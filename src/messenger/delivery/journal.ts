@@ -37,7 +37,7 @@ type Incoming = {
   acknowledged: number;
   created_at: number;
 };
-export type RetryPhase = 'receive' | 'project' | 'send';
+export type RetryPhase = 'receive' | 'project' | 'send' | 'identity';
 export type RetryCode = 'message-error' | 'identity-changed' | 'update-required' | 'peer-not-ready';
 const frame = z
   .object({
@@ -83,6 +83,12 @@ export class SignalJournal {
         )
       )
         await db.exec('ALTER TABLE signal_outbox ADD COLUMN notify TEXT');
+      if (
+        !(await db.all<{ name: string }>('PRAGMA table_info(signal_outbox)')).some(
+          (row) => row.name === 'priority',
+        )
+      )
+        await db.exec('ALTER TABLE signal_outbox ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
       const existing = (
         await db.all<{ owner: string; state: SignalState }>(
           'SELECT owner,state FROM signal_state WHERE singleton=1',
@@ -187,6 +193,7 @@ export class SignalJournal {
     createdAt = this.now(),
     eventKey?: string,
     notify?: WakeEvent,
+    priority = 0,
   ) {
     peerKey.parse(peer);
     z.string().uuid().parse(id);
@@ -195,7 +202,7 @@ export class SignalJournal {
     if (createdAt + DELIVERY_TTL_MS <= this.now() || createdAt > this.now() + 300000)
       throw new Error('DELIVERY_EXPIRED');
     return this.atomic((db) =>
-      this.insertOutgoing(db, peer, id, body, createdAt, eventKey, notify),
+      this.insertOutgoing(db, peer, id, body, createdAt, eventKey, notify, priority),
     );
   }
   private async insertOutgoing(
@@ -206,6 +213,7 @@ export class SignalJournal {
     createdAt: number,
     eventKey?: string,
     notify?: WakeEvent,
+    priority = 0,
   ) {
     const token = hash(JSON.stringify([peer, eventKey ? ['event', eventKey] : ['body', body]]));
     const previous = (
@@ -223,13 +231,14 @@ export class SignalJournal {
     )[0]!.count;
     if (total >= 200000) throw new Error('DELIVERY_LOCAL_CAPACITY');
     await db.run(
-      'INSERT INTO signal_outbox(id,peer,token,created_at,body,notify) VALUES(?,?,?,?,?,?)',
+      'INSERT INTO signal_outbox(id,peer,token,created_at,body,notify,priority) VALUES(?,?,?,?,?,?,?)',
       id,
       peer,
       token,
       createdAt,
       body,
       notify ? JSON.stringify(wakeEvent.parse(notify)) : null,
+      priority ? 1 : 0,
     );
     return id;
   }
@@ -243,6 +252,37 @@ export class SignalJournal {
         after,
         ...(tokens ?? []),
       ),
+    );
+  }
+  async readyOutgoing(tokens?: readonly string[]) {
+    if (tokens?.length === 0) return [];
+    return this.atomic((db) =>
+      db.all<Outgoing>(
+        `SELECT o.rowid AS sequence,o.* FROM signal_outbox o
+        LEFT JOIN signal_retries r ON r.phase='send' AND r.peer=o.peer AND r.id=o.id
+        WHERE o.uploaded=0 AND (r.next_at IS NULL OR r.next_at<=?)
+        ${tokens ? `AND o.token IN (${tokens.map(() => '?').join(',')})` : ''}
+        ORDER BY o.priority DESC,(o.created_at>=?) DESC,o.rowid LIMIT 5`,
+        this.now(),
+        ...(tokens ?? []),
+        this.now() - 120000,
+      ),
+    );
+  }
+  async outgoingIssue(tokens?: readonly string[]) {
+    if (tokens?.length === 0) return undefined;
+    return this.atomic(
+      async (db) =>
+        (
+          await db.all<{ code: RetryCode }>(
+            `SELECT r.code FROM signal_outbox o JOIN signal_retries r
+          ON r.phase='send' AND r.peer=o.peer AND r.id=o.id
+          WHERE o.uploaded=0 AND r.next_at>? ${tokens ? `AND o.token IN (${tokens.map(() => '?').join(',')})` : ''}
+          ORDER BY r.next_at LIMIT 1`,
+            this.now(),
+            ...(tokens ?? []),
+          )
+        )[0]?.code,
     );
   }
   async seal(id: string, bundle?: SignalBundle): Promise<DeliveryEnvelope> {
@@ -383,7 +423,16 @@ export class SignalJournal {
         z.string().uuid().parse(receipt.id);
         if (new TextEncoder().encode(receipt.body).length > 60000)
           throw new Error('DELIVERY_PAYLOAD_LIMIT');
-        await this.insertOutgoing(db, sender, receipt.id, receipt.body, this.now());
+        await this.insertOutgoing(
+          db,
+          sender,
+          receipt.id,
+          receipt.body,
+          this.now(),
+          undefined,
+          undefined,
+          1,
+        );
       }
       await db.run("UPDATE signal_inbox SET applied=1,body='' WHERE sender=? AND id=?", sender, id);
     });
@@ -447,7 +496,8 @@ export class SignalJournal {
         id,
         code,
         attempts,
-        this.now() + Math.min(300000, 2500 * 2 ** Math.min(7, attempts)),
+        this.now() +
+          Math.min(300000, (phase === 'identity' ? 15000 : 2500) * 2 ** Math.min(7, attempts)),
         createdAt + DELIVERY_TTL_MS,
       );
     });

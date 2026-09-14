@@ -21,6 +21,7 @@ import {
 import { shouldAlert } from './notification-policy';
 import { useNotificationEnrollment } from './useNotificationEnrollment';
 import { systemCallAudio } from './system-calls';
+import { localNotificationPreview } from './notification-presentation';
 
 export function DeviceNotifications() {
   const { engine, calls, identity, authenticated } = useDevice();
@@ -28,10 +29,10 @@ export function DeviceNotifications() {
   const path = usePathname();
   useNotificationEnrollment(authenticated && Boolean(identity), path);
   const currentPath = useRef(path);
-  const { t } = useTranslation();
-  const [banner, setBanner] = useState<(IncomingMessage & { path: string; name?: string }) | null>(
-    null,
-  );
+  const { t, i18n } = useTranslation();
+  const [banner, setBanner] = useState<
+    (IncomingMessage & { path: string; name?: string; body?: string }) | null
+  >(null);
   const [error, setError] = useState(false);
   const active = useAppActive();
   const insets = useSafeAreaInsets();
@@ -53,32 +54,48 @@ export function DeviceNotifications() {
       if (!shouldAlert(foreground, currentPath.current, message.chat, message.type)) return;
       if (foreground) {
         setBanner({ ...message, path: currentPath.current });
-        // Names stay inside the unlocked app; never copy them into push data.
-        void engine
-          .chat(message.chat)
-          .then((chat) => {
-            if (!current || AppState.currentState !== 'active') return;
-            setBanner((value) =>
-              value?.id === message.id ? { ...value, name: chat?.title ?? t('brand') } : value,
-            );
-          })
-          .catch(() => undefined);
-      } else
-        void showDeviceAlert(
-          message.id,
-          message.type,
-          t(
+        void (async () => {
+          const preview =
             message.type === 'message'
-              ? 'messenger.notificationNewMessage'
-              : 'messenger.callMissed',
-          ),
-        ).catch(() => setError(true));
+              ? await localNotificationPreview(engine, message.id, i18n.language).catch(() => null)
+              : null;
+          const chat = await engine.chat(message.chat);
+          if (!current || AppState.currentState !== 'active') return;
+          setBanner((value) =>
+            value?.id === message.id
+              ? {
+                  ...value,
+                  name: preview?.title ?? chat?.title ?? t('brand'),
+                  ...(preview ? { body: preview.body } : {}),
+                }
+              : value,
+          );
+        })().catch(() => undefined);
+      } else
+        void (async () => {
+          const preview =
+            message.type === 'message'
+              ? await localNotificationPreview(engine, message.id, i18n.language).catch(() => null)
+              : null;
+          if (!current || AppState.currentState !== 'background') return;
+          await showDeviceAlert(
+            message.id,
+            message.type,
+            preview?.body ??
+              t(
+                message.type === 'message'
+                  ? 'messenger.notificationNewMessage'
+                  : 'messenger.callMissed',
+              ),
+            preview?.title,
+          );
+        })().catch(() => setError(true));
     });
     return () => {
       current = false;
       unsubscribe();
     };
-  }, [engine, identity, authenticated, t]);
+  }, [engine, identity, authenticated, t, i18n.language]);
   useEffect(() => {
     if (!calls || systemCallAudio()) return;
     let ringing: string | undefined;
@@ -103,13 +120,26 @@ export function DeviceNotifications() {
   }, [calls, t]);
   useEffect(() => {
     if (!identity || !authenticated) return;
-    return observeAlertTaps((kind) => {
+    let current = true;
+    const stop = observeAlertTaps((kind, messageId) => {
       const call = calls?.snapshot();
       if (kind === 'incoming-call' && call?.status === 'incoming')
         router.push({ pathname: '/call/[id]', params: { id: call.chat } });
-      else router.navigate(kind === 'message' ? '/(tabs)/chats' : '/(tabs)/calls');
+      else if (kind === 'message' && messageId) {
+        void localNotificationPreview(engine, messageId, i18n.language)
+          .catch(() => null)
+          .then((preview) => {
+            if (!current) return;
+            if (preview) router.push({ pathname: '/chat/[id]', params: { id: preview.chat } });
+            else router.navigate('/(tabs)/chats');
+          });
+      } else router.navigate(kind === 'message' ? '/(tabs)/chats' : '/(tabs)/calls');
     });
-  }, [calls, identity, authenticated]);
+    return () => {
+      current = false;
+      stop();
+    };
+  }, [calls, engine, identity, authenticated, i18n.language]);
   useEffect(() => {
     if (!authenticated || !counts) return;
     let cancelled = false;
@@ -173,7 +203,7 @@ export function DeviceNotifications() {
                 )}
           </AppText>
           <AppText variant="caption" tone="secondary">
-            {t('messenger.notificationOpen')}
+            {banner?.body ?? t('messenger.notificationOpen')}
           </AppText>
         </FocusPressable>
         <IconButton

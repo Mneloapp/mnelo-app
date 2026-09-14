@@ -2,10 +2,19 @@ import { StyleSheet, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
+import { FocusPressable } from '@/components/FocusPressable';
 import { theme } from '@/theme/tokens';
 import { useDevice } from '../DeviceProvider';
 
-export function ReplyQuote({ chat, id }: { chat: string; id: string }) {
+export function ReplyQuote({
+  chat,
+  id,
+  onPress,
+}: {
+  chat: string;
+  id: string;
+  onPress?: (() => void) | undefined;
+}) {
   const { identity, view } = useDevice();
   const { t } = useTranslation();
   const q = useQuery({
@@ -25,7 +34,7 @@ export function ReplyQuote({ chat, id }: { chat: string; id: string }) {
           : quote?.kind === 'file'
             ? t('messenger.file')
             : t('messenger.quoteUnavailable'));
-  return (
+  const content = (
     <View style={styles.quote}>
       <AppText variant="label" numberOfLines={1}>
         {quote?.sender === identity?.key ? t('messenger.you') : quote?.name || t('messenger.reply')}
@@ -34,6 +43,17 @@ export function ReplyQuote({ chat, id }: { chat: string; id: string }) {
         {body}
       </AppText>
     </View>
+  );
+  return onPress ? (
+    <FocusPressable
+      accessibilityRole="button"
+      accessibilityLabel={t('messenger.viewOriginal')}
+      onPress={onPress}
+    >
+      {content}
+    </FocusPressable>
+  ) : (
+    content
   );
 }
 const styles = StyleSheet.create({

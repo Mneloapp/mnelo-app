@@ -1,7 +1,7 @@
 import { Platform, AppState } from 'react-native';
 import { requireOptionalNativeModule, type NativeModule } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
-import type { DeviceCalls } from './calls';
+import type { DeviceCalls, DeviceCall } from './calls';
 import type { PhoneClient } from './phone-client';
 import { pushRegistration } from './wake-protocol';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ type NativeCalls = NativeModule<{ changed: () => void }> & {
   drain(): Promise<unknown[]>;
   incoming(id: string, video: boolean): Promise<void>;
   outgoing(id: string, video: boolean): Promise<void>;
+  identify?(id: string, name: string, phone: string, video: boolean): Promise<void>;
   answer(id: string): Promise<void>;
   connected(id: string): Promise<void>;
   end(id: string): Promise<void>;
@@ -38,7 +39,11 @@ const event = z
     reason: z.enum(['local', 'remote', 'decline', 'timeout']).optional(),
   })
   .strict();
-export function observeSystemCalls(calls: DeviceCalls, phone: PhoneClient) {
+export function observeSystemCalls(
+  calls: DeviceCalls,
+  phone: PhoneClient,
+  caller?: (call: DeviceCall) => Promise<{ name: string; phone: string } | null>,
+) {
   if (!native) {
     setBackgroundStatus('unavailable');
     return () => undefined;
@@ -58,6 +63,7 @@ export function observeSystemCalls(calls: DeviceCalls, phone: PhoneClient) {
   >();
   let shown: string | null = null;
   let connected: string | null = null;
+  const identifying = new Set<string>();
   const registered = new Map<string, string>();
   let registering: Promise<void> | null = null;
   let registerAgain = false;
@@ -140,6 +146,23 @@ export function observeSystemCalls(calls: DeviceCalls, phone: PhoneClient) {
       await (call.incoming
         ? bridge.incoming(call.id, call.media === 'video')
         : bridge.outgoing(call.id, call.media === 'video'));
+    }
+    if (caller && bridge.identify && !identifying.has(call.id)) {
+      identifying.add(call.id);
+      // Report PushKit immediately; resolve only the authenticated invite's peer.
+      void caller(call)
+        .then(async (info) => {
+          const latest = calls.snapshot();
+          if (
+            stopped ||
+            !info ||
+            latest?.id !== call.id ||
+            ['ended', 'failed'].includes(latest.status)
+          )
+            return;
+          await bridge.identify?.(call.id, info.name, info.phone, call.media === 'video');
+        })
+        .catch(() => identifying.delete(call.id));
     }
     if (answers.has(call.id) && call.status === 'incoming') {
       // Camera capture requires a foreground application. A locked-screen answer

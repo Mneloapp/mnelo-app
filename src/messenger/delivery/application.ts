@@ -38,7 +38,7 @@ export type DeliveryCallReceiver = {
   signal: (peer: string, envelope: z.infer<typeof signedSignal>) => Promise<void>;
 };
 
-const content = z
+export const deliveryContent = z
   .object({
     version: z.literal(2),
     phone: internationalPhone,
@@ -66,6 +66,7 @@ const content = z
     )
       ctx.addIssue({ code: 'custom', message: 'MEDIA_BINDING_INVALID' });
   });
+const content = deliveryContent;
 
 // Application adapter above the vendor protocol. No crypto keys or plaintext
 // application content are sent to the delivery API outside a Signal envelope.
@@ -217,6 +218,7 @@ export class ApplicationDelivery {
         : packet.type === 'call' && packet.action === 'invite'
           ? { kind: 'call', id: packet.id, video: packet.media === 'video' }
           : undefined,
+      packet.type === 'message' ? 0 : 1,
     );
     if (wake) this.pump.wake();
     return true;

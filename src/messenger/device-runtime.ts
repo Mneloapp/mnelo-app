@@ -174,7 +174,26 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
         signal: (peer, envelope) => mesh.receiveCallSignal(peer, envelope),
       };
     }
-    const stopSystem = phone ? observeSystemCalls(calls, phone) : () => undefined;
+    const stopSystem = phone
+      ? observeSystemCalls(calls, phone, async (call) => {
+          const contact = (await engine.contacts()).find(
+            (peer) => peer.key === call.peer && !peer.blocked,
+          );
+          if (!contact) return null;
+          const names = await engine.contactDisplayNames();
+          const saved = contact.phone
+            ? await savedPhoneName(contact.phone, engine.currentEnrollment()?.phone).catch(
+                () => null,
+              )
+            : null;
+          const name = saved ?? names.get(contact.key) ?? contact.name;
+          const chat = call.group ? await engine.chat(call.chat) : null;
+          return {
+            name: chat ? `${name} · ${chat.title}` : name,
+            phone: call.group ? '' : (contact.phone ?? ''),
+          };
+        })
+      : () => undefined;
     engine.attachTransport(
       delivery
         ? {

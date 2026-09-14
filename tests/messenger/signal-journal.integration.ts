@@ -55,6 +55,43 @@ function fixture() {
     },
   };
 }
+test('receipts and current messages precede historical backlog while failed records remain durable', async () => {
+  const f = fixture(),
+    journal = f.journal(),
+    peer = createKeys(randomBytes).key;
+  try {
+    await journal.initialize();
+    const now = Date.now(),
+      first = randomUUID();
+    await journal.enqueue(peer, first, 'OLD_FAILED', now - 300000);
+    await journal.failed('send', peer, first, now - 300000, 'message-error');
+    for (let i = 0; i < 20; i++)
+      await journal.enqueue(peer, randomUUID(), `OLD_${i}`, now - 300000);
+    const current = randomUUID(),
+      receipt = randomUUID();
+    await journal.enqueue(peer, current, 'CURRENT', now);
+    f.db
+      .prepare('INSERT INTO signal_inbox(sender,id,hash,body,created_at) VALUES(?,?,?,?,?)')
+      .run(peer, current, 'FIXTURE_VERIFIED', 'INCOMING', now);
+    await journal.applied(peer, current, { id: receipt, body: 'RECEIPT' });
+    const due = await journal.readyOutgoing();
+    assert.deepEqual(
+      due.slice(0, 2).map((row) => row.id),
+      [receipt, current],
+    );
+    assert.ok(!due.some((row) => row.id === first));
+    assert.equal((await journal.pending())[0]?.id, first, 'the failed record is retained');
+    await journal.uploaded(receipt);
+    await journal.uploaded(current);
+    assert.equal(
+      (await journal.readyOutgoing())[0]?.body,
+      'OLD_0',
+      'the historical backlog still progresses',
+    );
+  } finally {
+    f.db.close();
+  }
+});
 test('Signal journal persists ciphertext with the ratchet and recovers inbox across crashes without re-decrypting or repeating side effects', async () => {
   const a = fixture(),
     b = fixture();

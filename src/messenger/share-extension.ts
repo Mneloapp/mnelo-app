@@ -2,7 +2,7 @@ import { DeviceMessenger, type ChatCursor } from './engine';
 import { ContactView } from './contact-view';
 import { ApplicationDelivery } from './delivery/application';
 import type { SignalProvider } from './delivery/signal';
-import { PhoneClient } from './phone-client';
+import { scheduledPhoneClient } from './phone-client';
 import { enrollmentAllowsAccess } from './enrollment';
 import { bytesToHex } from './crypto';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -56,7 +56,7 @@ export class ShareSession {
       throw new Error('SHARE_OPEN_MNELO_FIRST');
     const delivery = new ApplicationDelivery(
       this.engine,
-      new PhoneClient(service, identity, this.host.request),
+      scheduledPhoneClient(service, identity, this.host.request),
       this.host.signal,
       this.host.random,
       this.host.uuid,

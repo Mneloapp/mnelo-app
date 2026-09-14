@@ -31,7 +31,6 @@ export class DeliveryPump {
   private keyCapacityReached = false;
   private serverCursor: { acceptedAt: number; sender: string; id: string } | undefined;
   private projectCursor: { createdAt: number; sender: string; id: string } | undefined;
-  private outgoingCursor = 0;
   constructor(
     private readonly client: Pick<PhoneClient, 'execute'>,
     private readonly journal: SignalJournal,
@@ -119,9 +118,30 @@ export class DeliveryPump {
   }
   private async pin(peer: string) {
     if (await this.journal.known(peer)) return;
-    const { identity } = await this.command({ action: 'delivery-identity', peer });
-    if (!identity) throw new Error('DELIVERY_PEER_NOT_READY');
-    await this.journal.pin(identity);
+    // Every queued message to an unready recipient shares this lookup. Without
+    // a durable peer-level delay, a backlog exhausts the directory quota before
+    // that recipient publishes their keys, blocking replies as well as sends.
+    const retry = await this.journal.retry('identity', peer, peer);
+    if (retry && retry.next_at > this.now()) {
+      throw new Error(
+        retry.code === 'peer-not-ready'
+          ? 'DELIVERY_PEER_NOT_READY'
+          : retry.code === 'identity-changed'
+            ? 'SIGNAL_IDENTITY_CHANGED'
+            : retry.code === 'update-required'
+              ? 'DELIVERY_UNAVAILABLE'
+              : 'DELIVERY_PEER_BACKOFF',
+      );
+    }
+    try {
+      const { identity } = await this.command({ action: 'delivery-identity', peer });
+      if (!identity) throw new Error('DELIVERY_PEER_NOT_READY');
+      await this.journal.pin(identity);
+      await this.journal.recovered('identity', peer, peer);
+    } catch (error) {
+      await this.journal.failed('identity', peer, peer, this.now(), this.failureCode(error));
+      throw error;
+    }
   }
   private async cycle() {
     if (!this.initialized) {
@@ -136,14 +156,9 @@ export class DeliveryPump {
     await this.journal.prune();
     if (!this.hooks.outgoingOnly) await this.receiveCycle();
     const tokens = await this.hooks.outgoingTokens?.();
-    let outgoing = await this.journal.pending(this.outgoingCursor, tokens);
-    if (!outgoing.length) {
-      this.outgoingCursor = 0;
-      outgoing = await this.journal.pending(0, tokens);
-    }
+    const outgoing = await this.journal.readyOutgoing(tokens);
     for (const row of outgoing) {
       if (this.stopped) return;
-      this.outgoingCursor = row.sequence;
       const retry = await this.journal.retry('send', row.peer, row.id);
       if (retry && retry.next_at > this.now()) {
         this.issue = retry.code;
@@ -172,6 +187,7 @@ export class DeliveryPump {
         await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
       }
     }
+    this.issue ??= await this.journal.outgoingIssue(tokens);
     await this.hooks.afterCycle?.();
   }
   private async receiveCycle() {

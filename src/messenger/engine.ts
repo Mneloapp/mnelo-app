@@ -959,7 +959,7 @@ export class DeviceMessenger {
     });
     this.conversationActivity({ type: 'message', chat, outgoing: true });
     this.changed();
-    if (!options.deferDelivery) await this.flush().catch(() => undefined);
+    if (!options.deferDelivery) await this.flush(undefined, packet.id).catch(() => undefined);
     return packet.id;
   }
   private async insertMessage(
@@ -1700,6 +1700,23 @@ export class DeviceMessenger {
     if (inserted && status === 'missed')
       this.incomingListeners.forEach((listener) => listener({ id, chat, type: 'missed-call' }));
   }
+  async callQuickReplies() {
+    await this.tail;
+    this.own();
+    return (
+      await this.db.all<{ body: string }>('SELECT body FROM call_quick_replies ORDER BY position')
+    ).map((row) => row.body);
+  }
+  async saveCallQuickReplies(replies: string[]) {
+    this.own();
+    const values = z.array(z.string().trim().min(1).max(240)).length(3).parse(replies);
+    await this.transaction(async () => {
+      await this.db.run('DELETE FROM call_quick_replies');
+      for (const [index, body] of values.entries())
+        await this.db.run('INSERT INTO call_quick_replies VALUES(?,?)', index, body);
+    });
+    this.changed();
+  }
   async quickReactionChoices() {
     await this.tail;
     const recent = await this.db.all<{ emoji: string }>(
@@ -1857,6 +1874,7 @@ export class DeviceMessenger {
         'delivery_media_inbox',
         'delivery_media_outbox',
         'signal_inbox',
+        'call_quick_replies',
         'signal_outbox',
         'signal_peers',
         'signal_state',

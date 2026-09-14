@@ -72,13 +72,14 @@ export async function enableAlertsByDefault(isCurrent: () => boolean) {
     return permission;
   return requestAlerts(isCurrent);
 }
-export async function showDeviceAlert(id: string, kind: AlertKind, body: string) {
+export async function showDeviceAlert(id: string, kind: AlertKind, body: string, title = 'Mnelo') {
   if (!(await alertPermission()).allowed) return;
   await ensureChannel();
-  // No message, contact name, key, phone number, room or URL enters OS notification data.
+  // Local title/body follow the user's OS preview settings. Routing data remains
+  // an opaque kind; no plaintext is transmitted to the push provider.
   await Notifications.scheduleNotificationAsync({
     identifier: prefix + id,
-    content: { title: 'Mnelo', body, data: { kind }, sound: 'default' },
+    content: { title, body, data: { kind }, sound: 'default' },
     trigger: Platform.OS === 'android' ? { channelId } : null,
   });
 }
@@ -94,18 +95,18 @@ export async function presentedAlertIds() {
 export async function setDeviceBadge(count: number) {
   await Notifications.setBadgeCountAsync(count);
 }
-export function observeAlertTaps(listener: (kind: AlertKind) => void) {
+export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string) => void) {
   const consume = (response: Notifications.NotificationResponse | null) => {
     if (!response) return;
     const remote = response.notification.request.content.data?.mnelo;
     if (remote && typeof remote === 'object' && 'kind' in remote && remote.kind === 'message') {
-      listener('message');
+      listener('message', 'id' in remote && typeof remote.id === 'string' ? remote.id : undefined);
       void Notifications.clearLastNotificationResponseAsync();
       return;
     }
     if (!response.notification.request.identifier.startsWith(prefix)) return;
     const kind = alertKind(response.notification.request.content.data);
-    if (kind) listener(kind);
+    if (kind) listener(kind, response.notification.request.identifier.slice(prefix.length));
     void Notifications.clearLastNotificationResponseAsync();
   };
   const subscription = Notifications.addNotificationResponseReceivedListener(consume);

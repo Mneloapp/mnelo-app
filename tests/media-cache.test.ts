@@ -22,6 +22,6 @@ test('rejected oversized picker copies are discarded from the app cache', async 
     canceled: false,
     assets: [{ uri: 'file:///development/cache/large.pdf', size: 21 * 1024 * 1024 }],
   });
-  await expect(fileSelection()).rejects.toMatchObject({ code: 'INVALID' });
+  await expect(fileSelection()).rejects.toThrow('MEDIA_SIZE_LIMIT');
   expect(mockDelete).toHaveBeenCalledTimes(1);
 });

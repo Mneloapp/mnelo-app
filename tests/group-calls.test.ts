@@ -35,6 +35,8 @@ function setup() {
       chat: async () => ({ kind: 'group', left_group: 0 }),
       members: async () => keys.slice(0, 3).map((key) => ({ key })),
       recordCall: jest.fn(async () => {}),
+      send: jest.fn(async () => 'reply-id'),
+      flush: jest.fn(async () => {}),
     };
     const mesh = {
       calls: null as DeviceCalls | null,
@@ -165,4 +167,22 @@ test('outsiders, mismatched rosters and non-host invitations cannot authorize ca
   } finally {
     nodes.forEach((node) => node.calls.stop());
   }
+});
+
+test('quick reply commits a private message before declining, never captures media, and rejects an old call', async () => {
+  const f = setup();
+  const caller = f.nodes[0]!,
+    receiver = f.nodes[1]!;
+  await receiver.calls.receive(caller.key, { type: 'call', action: 'invite', id, media: 'voice' });
+  expect(receiver.calls.snapshot()?.status).toBe('incoming');
+  await receiver.calls.replyAndDecline(id, '  In a meeting  ');
+  expect(receiver.engine.send).toHaveBeenCalledWith(
+    [caller.key, receiver.key].sort().join(':'),
+    'In a meeting',
+    { deferDelivery: true },
+  );
+  expect(receiver.calls.snapshot()?.status).toBe('ended');
+  expect(receiver.engine.flush).toHaveBeenCalledWith(undefined, 'reply-id');
+  await expect(receiver.calls.replyAndDecline(id, 'Again')).rejects.toThrow('CALL_UNAVAILABLE');
+  expect(receiver.engine.send).toHaveBeenCalledTimes(1);
 });

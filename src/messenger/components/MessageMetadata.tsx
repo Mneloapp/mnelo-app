@@ -31,7 +31,7 @@ export function DeliveryLeaf({
       >
         <Path
           d={geometry.leaf}
-          fill={read ? theme.colors.accent : 'none'}
+          fill={read ? theme.colors.success : 'none'}
           stroke={
             overMedia
               ? theme.colors.callText
@@ -81,6 +81,6 @@ export function MessageTimeReveal({
   );
 }
 const styles = StyleSheet.create({
-  row: { overflow: 'hidden' },
+  row: { minWidth: 0 },
   leaf: { alignItems: 'center', justifyContent: 'center' },
 });

@@ -17,6 +17,7 @@ import { bytesToHex, openArchive, sealArchive } from '../crypto';
 import { Check, useLocalAction } from './shared';
 import { discardCachedMedia } from '@/features/chats/media-files';
 import { deliveryV2 } from '../delivery-mode';
+import { CallQuickReplies } from '../components/CallQuickReplies';
 export { EditProfileScreen } from './LocalProfileScreen';
 
 export { MeScreen } from './MeScreen';
@@ -75,9 +76,16 @@ export function AccountScreen() {
   const { t } = useTranslation();
   const action = useLocalAction();
   const [confirmed, setConfirmed] = useState(false);
+  const [replySettings, setReplySettings] = useState(false);
   const locale = usePreferences((state) => state.locale);
   return (
     <Page title={t('messenger.settings')} back>
+      {replySettings && <CallQuickReplies editOnly onClose={() => setReplySettings(false)} />}
+      <SettingsRow
+        title={t('messenger.callQuickReplies')}
+        icon="message-circle"
+        onPress={() => setReplySettings(true)}
+      />
       <Section title={t('account.language')}>
         <Choice
           value={locale}

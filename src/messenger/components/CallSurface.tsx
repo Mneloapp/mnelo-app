@@ -11,6 +11,7 @@ import { theme } from '@/theme/tokens';
 import type { DeviceCall } from '../calls';
 import { VideoView } from '../VideoView';
 import { GroupCallStage } from './GroupCallStage';
+import { useCallDuration } from '../useCallDuration';
 
 export function CallSurface({
   call,
@@ -29,6 +30,7 @@ export function CallSurface({
   onSpeaker,
   onCamera,
   onSwitchCamera,
+  onReply,
 }: {
   call: DeviceCall | null;
   title: string;
@@ -46,8 +48,10 @@ export function CallSurface({
   onSpeaker: () => void;
   onCamera: () => void;
   onSwitchCamera: () => void;
+  onReply?: () => void;
 }) {
   const { t } = useTranslation();
+  const duration = useCallDuration(call);
   const insets = useSafeAreaInsets();
   const [stageHeight, setStageHeight] = useState(0);
   const previewHeight = Math.min(156, Math.max(0, stageHeight - theme.spacing.lg * 2));
@@ -115,11 +119,15 @@ export function CallSurface({
           >
             <CallControl icon="chevron-down" label={t('calls.returnToChat')} onPress={onBack} />
             <View style={styles.heading}>
+              <AppText variant="caption" centered tone="secondary">
+                {t('brand')} ·{' '}
+                {t(call?.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice')}
+              </AppText>
               <AppText variant="headline" centered numberOfLines={2} accessibilityRole="header">
                 {title}
               </AppText>
               <AppText variant="caption" centered tone="secondary" accessibilityLiveRegion="polite">
-                {status}
+                {duration ?? status}
               </AppText>
             </View>
             {video && call?.local ? (
@@ -181,6 +189,15 @@ export function CallSurface({
             <View style={styles.controls}>
               {incoming ? (
                 <>
+                  {onReply && (
+                    <CallControl
+                      icon="message-circle"
+                      label={t('messenger.callReply')}
+                      caption={t('messenger.callReply')}
+                      disabled={busy || ending}
+                      onPress={onReply}
+                    />
+                  )}
                   <CallControl
                     icon="phone"
                     label={t('messenger.callDecline')}

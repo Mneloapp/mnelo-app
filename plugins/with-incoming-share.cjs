@@ -28,7 +28,7 @@ module.exports = function withIncomingShare(config) {
     return mod;
   });
   config = withPodfile(config, (mod) => {
-    if (!mod.modResults.contents.includes("pod 'MneloShareRuntime'"))
+    if (!mod.modResults.contents.includes("target 'expo-sharing-extension'"))
       mod.modResults.contents +=
         "\ntarget 'expo-sharing-extension' do\n  use_frameworks! :linkage => :static\n  pod 'MneloShareRuntime', :path => '../modules/mnelo-share-runtime/ios'\nend\n";
     return mod;

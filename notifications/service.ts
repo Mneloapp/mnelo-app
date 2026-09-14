@@ -62,7 +62,15 @@ export class WakeService {
     if (command.action === 'push-register') {
       if (this.provider.available && !this.provider.available(command.registration))
         throw new Error('PUSH_UNAVAILABLE');
-      this.limit('register:' + key, 30, 3600000);
+      const current = this.registry.ownerRoute(key, command.registration.channel);
+      const unchanged =
+        current?.token === command.registration.token &&
+        current.environment === command.registration.environment &&
+        current.platform === command.registration.platform;
+      // Reopening the same installation confirms its existing route. Only new
+      // registrations or token changes consume the mutation quota; ownership
+      // checks and the authenticated HTTP request limits still apply.
+      if (!unchanged) this.limit('register:' + key, 30, 3600000);
       this.registry.register(key, command.registration, this.now());
       return;
     }

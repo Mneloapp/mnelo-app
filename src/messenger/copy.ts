@@ -1,6 +1,17 @@
 import { deliveryV2 } from './delivery-mode';
 
 export const messengerEn = {
+  callReply: 'Reply with a message',
+  callQuickReplies: 'Quick call replies',
+  callQuickRepliesHint:
+    'Choose a reply to decline the call and send a message. You can edit these replies.',
+  callQuickReplyLabel: 'Reply {{number}}',
+  callReplyMeeting: "I'm in a meeting. I'll call you back.",
+  callReplyLater: "I can't talk now. I'll call you later.",
+  callReplySoon: "I'll call you back in a few minutes.",
+  editReplies: 'Edit replies',
+  viewOriginal: 'Go to original message',
+
   sendPoll: 'Send poll',
   sendEvent: 'Send event',
   pollHint: 'Ask the chat and let everyone vote.',
@@ -193,6 +204,15 @@ export const messengerEn = {
   openFile: 'Open file',
   openLocation: 'Open in Maps',
   mediaLimit: 'Choose a file up to 10 MB.',
+  videoLimit: 'This video is over 10 MB. Trim it in Photos or choose a shorter video.',
+  videoDurationLimit: 'Choose a video shorter than 1 hour.',
+  mediaSelectionLimit: 'Choose up to 10 photos or videos at a time.',
+  mediaPickerFailed:
+    'Could not prepare this photo or video. Open it in Photos to download it, then try again.',
+  mediaReadFailed: 'Could not read this file. Please select it again.',
+  mediaBatchPartial:
+    '{{sent}} of {{total}} items were saved to the chat. Select the remaining items to send them.',
+  cameraPermission: 'Allow camera access in Settings to take a photo or video.',
   backups: 'Backup & recovery',
   backupRecoveryPending:
     'This development version can export your history, but restoring messaging access on another device is not yet supported. Keep the original installation. An export does not transfer your active encryption sessions.',
@@ -262,6 +282,17 @@ export const messengerEn = {
     'I understand that I will need my own backup and recovery key to restore this history',
 } as const;
 export const messengerKa: Record<keyof typeof messengerEn, string> = {
+  callReply: 'შეტყობინებით პასუხი',
+  callQuickReplies: 'ზარის სწრაფი პასუხები',
+  callQuickRepliesHint:
+    'აირჩიე პასუხი ზარის უარსაყოფად და შეტყობინების გასაგზავნად. ამ პასუხების შეცვლა შეგიძლია.',
+  callQuickReplyLabel: 'პასუხი {{number}}',
+  callReplyMeeting: 'შეხვედრაზე ვარ. მოგვიანებით გადმოგირეკავ.',
+  callReplyLater: 'ახლა ვერ ვსაუბრობ. მოგვიანებით დაგირეკავ.',
+  callReplySoon: 'რამდენიმე წუთში გადმოგირეკავ.',
+  editReplies: 'პასუხების რედაქტირება',
+  viewOriginal: 'თავდაპირველ შეტყობინებაზე გადასვლა',
+
   sendPoll: 'გამოკითხვის გაგზავნა',
   sendEvent: 'ღონისძიების გაგზავნა',
   pollHint: 'დასვი კითხვა და მიეცი მონაწილეებს ხმის მიცემის საშუალება.',
@@ -461,6 +492,15 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   openFile: 'ფაილის გახსნა',
   openLocation: 'რუკაში გახსნა',
   mediaLimit: 'აირჩიე მაქსიმუმ 10 მბ ზომის ფაილი.',
+  videoLimit: 'ვიდეო 10 მბ-ზე დიდია. შეამოკლე Photos-ში ან აირჩიე უფრო მოკლე ვიდეო.',
+  videoDurationLimit: 'აირჩიე 1 საათზე მოკლე ვიდეო.',
+  mediaSelectionLimit: 'ერთდროულად აირჩიე მაქსიმუმ 10 ფოტო ან ვიდეო.',
+  mediaPickerFailed:
+    'ფოტო ან ვიდეო ვერ მომზადდა. გახსენი Photos-ში ჩამოსატვირთად და სცადე ხელახლა.',
+  mediaReadFailed: 'ფაილი ვერ წავიკითხეთ. აირჩიე ხელახლა.',
+  mediaBatchPartial:
+    'ჩატში შეინახა {{sent}} ფაილი {{total}}-დან. გასაგზავნად აირჩიე დარჩენილი ფაილები.',
+  cameraPermission: 'ფოტოს ან ვიდეოს გადასაღებად Settings-ში დაუშვი კამერის წვდომა.',
   backups: 'სარეზერვო ასლი და აღდგენა',
   backupRecoveryPending:
     'ამ სატესტო ვერსიას ისტორიის ასლის შენახვა შეუძლია, მაგრამ სხვა მოწყობილობაზე მიმოწერის წვდომის აღდგენა ჯერ მზად არ არის. შეინარჩუნე საწყისი აპი. ასლი დაშიფვრის მოქმედ სესიებს არ გადაიტანს.',

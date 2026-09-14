@@ -109,3 +109,18 @@ test('Android creates its notification channel before the first permission reque
     jest.mocked(Notifications.setNotificationChannelAsync).mock.invocationCallOrder[0],
   ).toBeLessThan(jest.mocked(Notifications.requestPermissionsAsync).mock.invocationCallOrder[0]!);
 });
+
+test('approved local notification shows the resolved caller and text without registering remote plaintext', async () => {
+  await showDeviceAlert('fixture-id', 'message', 'Hello from the encrypted vault', 'Friend ❤️');
+  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
+    identifier: 'mnelo-local-fixture-id',
+    content: {
+      title: 'Friend ❤️',
+      body: 'Hello from the encrypted vault',
+      data: { kind: 'message' },
+      sound: 'default',
+    },
+    trigger: null,
+  });
+  expect(Notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
+});

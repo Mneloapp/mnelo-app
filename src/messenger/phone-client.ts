@@ -8,11 +8,13 @@ import {
   type PhoneCommand,
 } from './phone-protocol';
 import type { LocalIdentity } from './model';
+import { phoneRequestScheduler, type PhoneRequestScheduler } from './phone-request-queue';
 export class PhoneClient {
   constructor(
     private readonly address: string,
     private readonly identity: Pick<LocalIdentity, 'key' | 'secret'>,
     private readonly request: typeof fetch = fetch,
+    private readonly schedule: PhoneRequestScheduler = (operation) => operation(),
   ) {}
   private async post(path: string, body: unknown) {
     const controller = new AbortController();
@@ -50,6 +52,9 @@ export class PhoneClient {
   }
   async execute(input: PhoneCommand) {
     const command = phoneCommand.parse(input);
+    return this.schedule(() => this.executeCommand(command));
+  }
+  private async executeCommand(command: PhoneCommand) {
     const { nonce } = z
       .object({ nonce: z.string().regex(/^[a-f0-9]{64}$/) })
       .strict()
@@ -76,5 +81,12 @@ export function configuredPhoneService() {
 }
 export function devicePhoneClient(identity: LocalIdentity | null) {
   const address = configuredPhoneService();
-  return address && identity ? new PhoneClient(address, identity) : null;
+  return address && identity ? scheduledPhoneClient(address, identity) : null;
+}
+export function scheduledPhoneClient(
+  address: string,
+  identity: Pick<LocalIdentity, 'key' | 'secret'>,
+  request: typeof fetch = fetch,
+) {
+  return new PhoneClient(address, identity, request, phoneRequestScheduler(address, identity.key));
 }

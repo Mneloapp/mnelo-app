@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
   s.swift_version = '5.9'
   s.source_files = '**/*.{swift,h,c}'
   s.public_header_files = 'Generated/sqlite3.h'
-  s.frameworks = 'JavaScriptCore', 'Security', 'SwiftUI', 'ImageIO', 'UniformTypeIdentifiers', 'Intents', 'Contacts'
+  s.frameworks = 'JavaScriptCore', 'Security', 'SwiftUI', 'ImageIO', 'UniformTypeIdentifiers', 'Intents', 'Contacts', 'UserNotifications'
   s.dependency 'LibSignalClient', '= 0.102.2'
   s.compiler_flags = '-DHAVE_USLEEP=1 -DSQLITE_ENABLE_LOCKING_STYLE=0 -DSQLITE_TEMP_STORE=2 -DSQLITE_ENABLE_SESSION=1 -DSQLITE_ENABLE_PREUPDATE_HOOK=1 -DSQLITE_ENABLE_MATH_FUNCTIONS=1 -DSQLITE_HAS_CODEC=1 -DSQLCIPHER_CRYPTO_CC -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown -DNDEBUG'
   s.pod_target_xcconfig = {

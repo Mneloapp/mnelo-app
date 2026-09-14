@@ -192,6 +192,7 @@ CREATE TABLE IF NOT EXISTS reaction_versions (message_id TEXT NOT NULL REFERENCE
 CREATE TABLE IF NOT EXISTS group_deliveries (chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE, peer TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(chat_id,peer));
 CREATE TABLE IF NOT EXISTS forgotten_messages (id TEXT PRIMARY KEY, peer TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS message_changes (message_id TEXT NOT NULL, peer TEXT NOT NULL, chat TEXT NOT NULL, revision INTEGER NOT NULL, action TEXT NOT NULL CHECK(action IN ('edit','delete')), body TEXT NOT NULL, changed_at INTEGER NOT NULL, PRIMARY KEY(message_id,peer));
+CREATE TABLE IF NOT EXISTS call_quick_replies (position INTEGER PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS recent_reactions (emoji TEXT PRIMARY KEY, used_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS control_outbox (id TEXT PRIMARY KEY,peer TEXT NOT NULL,packet TEXT NOT NULL,created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS delivery_block_changes (peer TEXT PRIMARY KEY,blocked INTEGER NOT NULL CHECK(blocked IN (0,1)),revision TEXT NOT NULL);

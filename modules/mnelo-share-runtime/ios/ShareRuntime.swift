@@ -12,13 +12,13 @@ final class ShareRuntime {
   private var requests: [Int: ShareNetwork] = [:]
   private var sequence = 0
   private var stopped = false
-  func open(items: [ShareAttachment], completion: @escaping (Result<Any, Error>) -> Void) {
+  func open(items: [ShareAttachment], bundle: String = "MneloShare", operation: String = "open", argument: String = "", completion: @escaping (Result<Any, Error>) -> Void) {
     queue.async {
       do {
         guard !self.stopped else { return }
         self.items = items
         self.database = try ShareDatabase()
-        guard let context = JSContext(), let url = Bundle.main.url(forResource: "MneloShare", withExtension: "js") else { throw shareError("SHARE_FAILED") }
+        guard let context = JSContext(), let url = Bundle.main.url(forResource: bundle, withExtension: "js") else { throw shareError("SHARE_FAILED") }
         self.context = context
         let bridge: @convention(block) (String, String) -> String = { [weak self] operation, text in
           autoreleasepool {
@@ -73,7 +73,7 @@ final class ShareRuntime {
         context.setObject(cancel, forKeyedSubscript: "__cancelRequest" as NSString)
         context.evaluateScript(try String(contentsOf: url, encoding: .utf8))
         guard context.exception == nil, context.objectForKeyedSubscript("MneloShare")?.isUndefined == false else { throw shareError("SHARE_FAILED") }
-        self.invoke("open", "", completion)
+        self.invoke(operation, argument, completion)
       } catch { DispatchQueue.main.async { completion(.failure(error)) } }
     }
   }
@@ -104,6 +104,7 @@ final class ShareRuntime {
       let rows = try database.all(sql, fields["params"] as? [Any] ?? [])
       return operation == "all" ? shareJSON(rows) : NSNull()
     case "close": database?.close(); database = nil; return NSNull()
+    case "language": return Locale.preferredLanguages.first ?? "en"
     case "count": return items.count
     case "item":
       guard let index = input as? Int, items.indices.contains(index) else { throw shareError("SHARE_FILE_UNAVAILABLE") }

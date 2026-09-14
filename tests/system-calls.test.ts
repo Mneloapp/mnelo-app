@@ -13,6 +13,7 @@ jest.mock('expo-modules-core', () => {
     outgoing: jest.fn(async () => {}),
     answer: jest.fn(async () => {}),
     connected: jest.fn(async () => {}),
+    identify: jest.fn(async () => {}),
     end: jest.fn(async () => {}),
     addListener: jest.fn((_name: string, fn: () => void) => {
       native.changed = fn;
@@ -37,7 +38,10 @@ const id = 'b9870ee4-4c80-4bb3-9b52-a9c77f905b9a';
 const tick = async () => {
   for (let i = 0; i < 30; i++) await Promise.resolve();
 };
-function fixture(execute = jest.fn(async () => ({ ok: true }))) {
+function fixture(
+  execute = jest.fn(async () => ({ ok: true })),
+  caller?: (call: DeviceCall) => Promise<{ name: string; phone: string } | null>,
+) {
   let value: DeviceCall | null = null;
   let changed = () => {};
   let control = (_value: CallControl) => {};
@@ -64,6 +68,7 @@ function fixture(execute = jest.fn(async () => ({ ok: true }))) {
   const stop = observeSystemCalls(
     calls as unknown as DeviceCalls,
     { execute } as unknown as PhoneClient,
+    caller,
   );
   const update = (status: DeviceCall['status'], media: DeviceCall['media'] = 'voice') => {
     value = { id, incoming: true, media, status } as DeviceCall;
@@ -254,6 +259,52 @@ test('a locked-screen video answer waits for foreground camera access', async ()
     expect(f.calls.accept).toHaveBeenCalledTimes(1);
   } finally {
     AppState.currentState = previous;
+    f.stop();
+  }
+});
+
+test('caller identity updates the reported call from authenticated local data without delaying reporting', async () => {
+  let finish!: (value: { name: string; phone: string }) => void;
+  const caller = jest.fn(
+    () =>
+      new Promise<{ name: string; phone: string }>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const f = fixture(undefined, caller);
+  try {
+    f.update('incoming');
+    await tick();
+    expect(native.incoming).toHaveBeenCalledWith(id, false);
+    expect(native.identify).not.toHaveBeenCalled();
+    finish({ name: 'მეგობარი ❤️', phone: '+12025550101' });
+    await tick();
+    expect(native.identify).toHaveBeenCalledWith(id, 'მეგობარი ❤️', '+12025550101', false);
+    f.update('active');
+    await tick();
+    expect(caller).toHaveBeenCalledTimes(1);
+  } finally {
+    f.stop();
+  }
+});
+test('a delayed name lookup never renames a call that already ended', async () => {
+  let finish!: (value: { name: string; phone: string }) => void;
+  const f = fixture(
+    undefined,
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  try {
+    f.update('incoming');
+    await tick();
+    f.update('ended');
+    await tick();
+    finish({ name: 'Old caller', phone: '+12025550101' });
+    await tick();
+    expect(native.identify).not.toHaveBeenCalled();
+  } finally {
     f.stop();
   }
 });

@@ -58,6 +58,77 @@ function device(now = Date.now) {
   return { root, journal, sql };
 }
 
+test('an unready peer shares lookup backoff across a large backlog and restart, then recovers without discarding messages', async () => {
+  let clock = Date.now();
+  const a = device(() => clock),
+    b = device(() => clock),
+    c = device(() => clock);
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  let lookups = 0,
+    submitted = 0;
+  const client = {
+    async execute(command: Parameters<PhoneClient['execute']>[0]) {
+      if (command.action === 'delivery-identity' && command.peer === b.root.key) lookups++;
+      if (command.action === 'delivery-submit' && command.envelope.recipient === b.root.key)
+        submitted++;
+      return { delivery: delivery.execute(a.root.key, command) };
+    },
+  };
+  const makePump = () =>
+    new DeliveryPump(
+      client,
+      a.journal,
+      async () => ({}),
+      () => {},
+      () => clock,
+    );
+  let pump = makePump();
+  try {
+    await a.journal.initialize();
+    const cKeys = await c.journal.initialize();
+    delivery.directory.publish(c.root.key, cKeys, c.journal.binding(cKeys));
+    for (let i = 0; i < 111; i++)
+      await a.journal.enqueue(b.root.key, randomUUID(), `QUEUED_${i}`, clock);
+    await a.journal.enqueue(c.root.key, randomUUID(), 'OTHER_PEER', clock);
+    pump.start();
+    for (let i = 0; i < 25; i++) await pump.tick();
+    assert.equal(lookups, 1, 'the backlog consumes one directory lookup');
+    assert.equal(delivery.store.fetch(c.root.key).length, 1, 'another peer can still receive');
+    assert.equal(
+      a.sql.prepare('SELECT count(*) AS n FROM signal_outbox WHERE uploaded=0').get()?.n,
+      111,
+    );
+    pump.stop();
+    pump = makePump();
+    pump.start();
+    for (let i = 0; i < 25; i++) await pump.tick();
+    assert.equal(lookups, 1, 'reopening does not bypass the saved peer delay');
+    const bKeys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, bKeys, b.journal.binding(bKeys));
+    clock += 60000;
+    for (let i = 0; i < 25; i++) await pump.tick();
+    assert.equal(lookups, 2);
+    assert.equal(submitted, 111, 'every queued event survives and is sent exactly once');
+    assert.equal(
+      a.sql.prepare('SELECT count(*) AS n FROM signal_outbox WHERE uploaded=0').get()?.n,
+      0,
+    );
+    assert.equal(await a.journal.retry('identity', b.root.key, b.root.key), undefined);
+  } finally {
+    pump.stop();
+    delivery.close();
+    a.sql.close();
+    b.sql.close();
+    c.sql.close();
+  }
+});
+
 test('two real Signal clients use authenticated HTTP delivery without a live sender, with durable reverse receipts and no repeated projection', async () => {
   let clock = Date.now();
   const a = device(() => clock),

@@ -11,14 +11,28 @@ export async function imageSelection(camera = false): Promise<SelectedMedia | nu
     if (!permission.granted) throw new RepositoryError('CAMERA_PERMISSION_REQUIRED');
   }
   const result = camera
-    ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1, exif: false })
+    ? await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images', 'videos'],
+        quality: 1,
+        exif: false,
+      })
     : await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
+        mediaTypes: ['images', 'videos'],
         quality: 1,
         exif: false,
       });
   if (result.canceled || !result.assets[0]) return null;
   const asset = result.assets[0];
+  if (asset.type === 'video') {
+    return {
+      uri: asset.uri,
+      name: asset.fileName || 'video.mp4',
+      mime:
+        asset.mimeType ||
+        (asset.uri.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4'),
+      ...(asset.duration != null ? { duration: asset.duration / 1000 } : {}),
+    };
+  }
   try {
     const context = ImageManipulator.manipulate(asset.uri);
     context.resize(
@@ -46,7 +60,13 @@ export async function fileSelection(): Promise<SelectedMedia | null> {
     discardCachedMedia(asset.uri);
     throw new RepositoryError('INVALID');
   }
-  const mime = ['application/pdf', 'text/plain'].includes(asset.mimeType ?? '')
+  const mime = [
+    'application/pdf',
+    'text/plain',
+    'video/mp4',
+    'video/quicktime',
+    'video/webm',
+  ].includes(asset.mimeType ?? '')
     ? asset.mimeType!
     : 'application/octet-stream';
   return {

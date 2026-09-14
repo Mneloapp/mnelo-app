@@ -17,6 +17,8 @@ export function MessageBubble({
   status,
   sentAt,
   media,
+  visual = false,
+  overlayMetadata = false,
   reactions = [],
   children,
 }: PropsWithChildren<{
@@ -28,6 +30,8 @@ export function MessageBubble({
   status: LocalMessage['status'];
   sentAt?: number;
   media?: boolean;
+  visual?: boolean;
+  overlayMetadata?: boolean;
   reactions?: readonly { emoji: string }[];
 }>) {
   const { t } = useTranslation();
@@ -35,16 +39,16 @@ export function MessageBubble({
   for (const { emoji } of reactions) counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
   const receipt = own && (status === 'delivered' || status === 'read');
   return (
-    <View style={[styles.row, own && styles.own, media && styles.media, containerStyle]}>
+    <View style={[styles.row, own && styles.own, media && !visual && styles.media, containerStyle]}>
       <Pressable
         testID="message-bubble"
         ref={bubbleRef}
         collapsable={false}
-        style={[styles.bubble, own && styles.outgoing]}
+        style={[styles.bubble, own && styles.outgoing, visual && styles.visualBubble]}
         onLongPress={onLongPress}
         delayLongPress={450}
-        accessible={Boolean(onLongPress)}
-        accessibilityRole={onLongPress ? 'button' : undefined}
+        accessible={!visual && Boolean(onLongPress)}
+        accessibilityRole={!visual && onLongPress ? 'button' : undefined}
         accessibilityLabel={accessibilityLabel}
         accessibilityActions={
           onLongPress ? [{ name: 'longpress', label: t('common.more') }] : undefined
@@ -55,13 +59,25 @@ export function MessageBubble({
       >
         <View style={[styles.body, media && styles.mediaBody]}>{children}</View>
         {(sentAt !== undefined || receipt) && (
-          <View style={styles.metadata} testID="message-metadata">
+          <View
+            pointerEvents="none"
+            style={[
+              styles.metadata,
+              visual && styles.visualMetadata,
+              overlayMetadata && styles.overlayMetadata,
+            ]}
+            testID="message-metadata"
+          >
             {sentAt !== undefined && (
-              <AppText variant="caption" tone="secondary" style={styles.time}>
+              <AppText
+                variant="caption"
+                tone="secondary"
+                style={[styles.time, overlayMetadata && styles.overlayTime]}
+              >
                 {formatTime(new Date(sentAt).toISOString())}
               </AppText>
             )}
-            {receipt && <DeliveryLeaf status={status} />}
+            {receipt && <DeliveryLeaf status={status} overMedia={overlayMetadata} />}
           </View>
         )}
       </Pressable>
@@ -105,6 +121,20 @@ const styles = StyleSheet.create({
     rowGap: theme.spacing.xs,
   },
   outgoing: { backgroundColor: theme.colors.messageOutgoing },
+  visualBubble: { padding: 0, overflow: 'hidden', rowGap: 0, columnGap: 0 },
+  visualMetadata: { marginHorizontal: 8, marginBottom: 6 },
+  overlayMetadata: {
+    position: 'absolute',
+    right: 6,
+    bottom: 6,
+    marginHorizontal: 0,
+    marginBottom: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: theme.radii.pill,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  overlayTime: { color: theme.colors.callText },
   body: { maxWidth: '100%' },
   mediaBody: { width: '100%' },
   metadata: {

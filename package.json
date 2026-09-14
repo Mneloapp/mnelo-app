@@ -46,6 +46,7 @@
     "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
+    "expo-video": "57.0.4",
     "i18next": "26.4.2",
     "libphonenumber-js": "1.13.12",
     "livekit-client": "2.22.3",

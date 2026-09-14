@@ -6,7 +6,13 @@ import { theme } from '@/theme/tokens';
 import geometry from '../../../assets/brand/geometry.json';
 import type { LocalMessage } from '../model';
 
-export function DeliveryLeaf({ status }: { status: LocalMessage['status'] }) {
+export function DeliveryLeaf({
+  status,
+  overMedia = false,
+}: {
+  status: LocalMessage['status'];
+  overMedia?: boolean;
+}) {
   const { t } = useTranslation();
   if (status !== 'delivered' && status !== 'read') return null;
   const read = status === 'read';
@@ -26,7 +32,13 @@ export function DeliveryLeaf({ status }: { status: LocalMessage['status'] }) {
         <Path
           d={geometry.leaf}
           fill={read ? theme.colors.accent : 'none'}
-          stroke={read ? theme.colors.success : theme.colors.textSecondary}
+          stroke={
+            overMedia
+              ? theme.colors.callText
+              : read
+                ? theme.colors.success
+                : theme.colors.textSecondary
+          }
           strokeWidth={3}
         />
       </Svg>

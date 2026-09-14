@@ -1,0 +1,13 @@
+# Build 29: photo and video messages
+
+Photos no longer sit inside an oversized padded message bubble. The decoded image dimensions size the bubble and its preview together. Normal portrait, landscape and square media retain their proportions, with rounded edges and a contrasting time/delivery receipt over the lower right corner. Very tall screenshots and panoramas use a bounded, cropped preview; opening a photo still shows the complete original in the existing gallery. Captions stay below the picture, with the time below the caption. Reply quotes and reactions retain their separate positions.
+
+MP4, QuickTime and WebM attachments now show a local poster and play button. Opening a video presents a full-screen player with controls and a close button. Decoders used to make posters are released after generation; playback is created only when opened, pauses when the app loses the foreground, and releases on close. Video and poster cache files are removed when their message leaves the mounted list, including preparation that finishes after unmount. A missing poster still allows opening the original video. Photos/Camera can select videos and Files retains supported video MIME types. Existing encrypted transport, message kinds and the 10 MB send limit are unchanged.
+
+The player uses the SDK-compatible [Expo Video module](https://docs.expo.dev/versions/latest/sdk/video/), asynchronous source loading and local-only poster generation. No media is uploaded to a thumbnail service.
+
+Full checks passed: 455 UI/unit tests, 3 server tests and 145 device/protocol tests (603 total), plus TypeScript, lint, formatting, security, environment, localization and brand checks.
+
+Validation covers portrait/landscape/square/extreme aspect ratios, small phone widths, overlaid versus caption metadata, long press, poster decoder/cache cleanup, late completion after unmount, playback/close, and picker MIME/duration preservation. Existing gallery navigation and media delivery regressions are included in the full checks.
+
+Browser component review uses the production ChatMessageBubble, ChatPhoto and ChatVideo with fictional images and a locally generated H.264 video at 390 and 320 pixel phone widths. It checks equal media/bubble widths, timestamp containment, caption wrapping, video controls, return to chat and browser errors. This is layout and browser playback evidence, not a physical iPhone playback test. Signed iOS compilation, source verification and TestFlight availability are recorded separately in BUILD_LOG. Device acceptance should include a received portrait photo, a landscape photo with a caption, a short camera video, long press and opening/closing each viewer.

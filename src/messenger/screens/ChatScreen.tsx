@@ -1,6 +1,13 @@
 import { formatTime, formatDate } from '@/i18n/format';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Keyboard, StyleSheet, View, type TextInput } from 'react-native';
+import {
+  FlatList,
+  Keyboard,
+  StyleSheet,
+  View,
+  type TextInput,
+  useWindowDimensions,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -37,13 +44,25 @@ import { MessageTimeReveal } from '../components/MessageMetadata';
 import { MessageBubble } from '../components/MessageBubble';
 import { PeerAvatar } from '../components/ContactCard';
 import { ChatPhoto } from '../components/ChatPhoto';
+import { ChatVideo } from '../components/ChatVideo';
+import { mediaPreviewSize, visualMediaKind, type MediaDimensions } from '../media-preview';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
 import { ReplyQuote } from '../components/ReplyQuote';
 import { createMenuGesture, menuTouchPoint, type MenuTouch, type MenuPoint } from '../menu-gesture';
 import { MessageActions, type MessageAnchor } from '../components/MessageActions';
 
-function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: () => void }) {
+function MessageMedia({
+  message,
+  onSelect,
+  size,
+  onDimensions,
+}: {
+  message: LocalMessage;
+  onSelect: () => void;
+  size: MediaDimensions;
+  onDimensions: (size: MediaDimensions) => void;
+}) {
   const { engine } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
@@ -80,9 +99,15 @@ function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: 
         error={q.isError ? t('messenger.genericError') : undefined}
       />
     );
-  if (message.kind === 'image' && ['image/jpeg', 'image/png'].includes(q.data.mime))
+  if (visualMediaKind(q.data.mime) === 'video')
+    return (
+      <ChatVideo media={q.data} size={size} onDimensions={onDimensions} onLongPress={onSelect} />
+    );
+  if (visualMediaKind(q.data.mime) === 'photo')
     return (
       <ChatPhoto
+        size={size}
+        onDimensions={onDimensions}
         source={{
           id: message.id,
           chatId: message.chatId,
@@ -124,7 +149,7 @@ function MessageMedia({ message, onSelect }: { message: LocalMessage; onSelect: 
     </View>
   );
 }
-function Bubble({
+export function ChatMessageBubble({
   message,
   onSelect,
   onReply,
@@ -145,9 +170,13 @@ function Bubble({
   const attachment = useQuery({
     queryKey: ['device', 'media', message.attachment],
     queryFn: () => engine.media(message.attachment!),
-    enabled: message.kind === 'file' && Boolean(message.attachment),
+    enabled: Boolean(message.attachment),
     networkMode: 'always',
   });
+  const { width: windowWidth } = useWindowDimensions();
+  const [dimensions, setDimensions] = useState<MediaDimensions>({ width: 1, height: 1 });
+  const visual = Boolean(visualMediaKind(attachment.data?.mime));
+  const size = mediaPreviewSize(dimensions, (windowWidth - 32) * 0.86);
   const card = message.kind === 'file' ? readRichMedia(attachment.data) : null;
   const own = message.sender === identity?.key;
   const bubbleRef = useRef<View>(null);
@@ -174,6 +203,9 @@ function Bubble({
         sentAt={message.sentAt}
         status={message.status}
         media={Boolean(message.attachment)}
+        visual={visual}
+        overlayMetadata={visual && !message.body && !message.editedAt}
+        containerStyle={visual ? { width: size.width } : undefined}
         reactions={(reaction.data ?? []).filter(
           (reaction) =>
             card?.type !== 'poll' ||
@@ -183,12 +215,12 @@ function Bubble({
         {message.kind === 'deleted' && (
           <AppText tone="secondary">{t('messenger.deletedMessage')}</AppText>
         )}
-        {Boolean(message.editedAt) && (
-          <AppText variant="caption" tone="secondary">
-            {t('messenger.edited')}
-          </AppText>
+        {visual && message.replyTo && (
+          <View style={styles.visualText}>
+            <ReplyQuote chat={message.chatId} id={message.replyTo} />
+          </View>
         )}
-        {(message.body.length > 0 && !card) || message.replyTo ? (
+        {!visual && ((message.body.length > 0 && !card) || message.replyTo) ? (
           <View style={styles.messageBody}>
             {message.replyTo && <ReplyQuote chat={message.chatId} id={message.replyTo} />}
             {message.body.length > 0 && !card && <AppText>{message.body}</AppText>}
@@ -197,8 +229,23 @@ function Bubble({
         {card ? (
           <RichMessageCard id={message.id} card={card} />
         ) : message.attachment ? (
-          <MessageMedia message={message} onSelect={select} />
+          <MessageMedia
+            message={message}
+            onSelect={select}
+            size={size}
+            onDimensions={setDimensions}
+          />
         ) : null}
+        {visual && Boolean(message.body) && (
+          <View style={styles.visualText}>
+            <AppText>{message.body}</AppText>
+          </View>
+        )}
+        {Boolean(message.editedAt) && (
+          <AppText variant="caption" tone="secondary" style={visual && styles.visualText}>
+            {t('messenger.edited')}
+          </AppText>
+        )}
         {message.kind === 'location' && /^[-\d.]+,[-\d.]+$/.test(message.body) && (
           <LocationMessage coordinates={message.body} />
         )}
@@ -288,7 +335,7 @@ export function ChatScreen() {
       if (source.size > 10 * 1024 * 1024) throw new Error('MEDIA_SIZE_LIMIT');
       const bytes = await source.base64();
       await sendCurrent('', {
-        kind,
+        kind: file.mime.startsWith('video/') ? 'file' : kind,
         ...(reply ? { replyTo: reply } : {}),
         media: { name: file.name, mime: file.mime, bytes, duration: file.duration ?? null },
       });
@@ -471,7 +518,7 @@ export function ChatScreen() {
                   }}
                 />
               ) : (
-                <Bubble
+                <ChatMessageBubble
                   message={item}
                   menuOpen={Boolean(selected)}
                   onSelect={(anchor) => {
@@ -847,6 +894,7 @@ export function ChatScreen() {
   );
 }
 const styles = StyleSheet.create({
+  visualText: { paddingHorizontal: 12, paddingVertical: 8 },
   editingBanner: {
     flexDirection: 'row',
     alignItems: 'center',

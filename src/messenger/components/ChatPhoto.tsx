@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,6 +29,8 @@ export function ChatPhoto({
   error,
   square = false,
   source,
+  size,
+  onDimensions,
 }: {
   uri: string;
   name: string;
@@ -37,11 +40,30 @@ export function ChatPhoto({
   error: string | null;
   square?: boolean;
   source?: PhotoSource;
+  size?: { width: number; height: number };
+  onDimensions?: (size: { width: number; height: number }) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [ratio, setRatio] = useState(1);
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const { t } = useTranslation();
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let active = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (active && width > 0 && height > 0) {
+          setRatio(width / height);
+          onDimensions?.({ width, height });
+        }
+      },
+      () => undefined,
+    );
+    return () => {
+      active = false;
+    };
+  }, [uri, onDimensions]);
   return (
     <>
       <Pressable
@@ -49,6 +71,8 @@ export function ChatPhoto({
         accessibilityLabel={t('messenger.openPhoto')}
         onPress={() => setOpen(true)}
         onLongPress={onLongPress}
+        delayLongPress={450}
+        style={size}
       >
         <Image
           source={{ uri }}
@@ -57,9 +81,16 @@ export function ChatPhoto({
           onLoad={({ nativeEvent }) => {
             if (!nativeEvent.source) return;
             const { width, height } = nativeEvent.source;
-            if (width > 0 && height > 0) setRatio(width / height);
+            if (width > 0 && height > 0) {
+              setRatio(width / height);
+              onDimensions?.({ width, height });
+            }
           }}
-          style={[styles.thumbnail, { aspectRatio: square ? 1 : ratio }, square && styles.square]}
+          style={
+            size
+              ? StyleSheet.absoluteFill
+              : [styles.thumbnail, { aspectRatio: square ? 1 : ratio }, square && styles.square]
+          }
         />
       </Pressable>
       {open && source && (

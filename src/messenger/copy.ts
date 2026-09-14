@@ -73,6 +73,8 @@ export const messengerEn = {
   googleMaps: 'Google Maps',
   appleMaps: 'Apple Maps',
   openPhoto: 'Open photo',
+  openVideo: 'Play video',
+  videoUnavailable: 'Could not open this video.',
   saveSharePhoto: 'Save or share photo',
   messageRequests: 'Message requests',
   messageRequestHint:
@@ -332,6 +334,8 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   googleMaps: 'Google Maps',
   appleMaps: 'Apple Maps',
   openPhoto: 'ფოტოს გახსნა',
+  openVideo: 'ვიდეოს დაკვრა',
+  videoUnavailable: 'ვიდეოს გახსნა ვერ მოხერხდა.',
   saveSharePhoto: 'ფოტოს შენახვა ან გაზიარება',
   messageRequests: 'მიმოწერის მოთხოვნები',
   messageRequestHint:

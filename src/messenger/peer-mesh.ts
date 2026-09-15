@@ -13,6 +13,7 @@ import type { DeviceCalls } from './calls';
 import type { DeviceWake } from './wake-client';
 import { wakeGrantPacket } from './wake-protocol';
 import { bindProfileChannel } from './profile-channel';
+import { gatherCallCandidates, addCallCandidates } from './call-ice';
 
 type Link = {
   receiveTail: Promise<void>;
@@ -69,6 +70,7 @@ export class PeerMesh implements PeerTransport {
       id: string;
       deadline: ReturnType<typeof setTimeout>;
       state?: RTCDataChannel;
+      stopGathering?: () => void;
     }
   >();
   private socket: WebSocket | null = null;
@@ -686,7 +688,37 @@ export class PeerMesh implements PeerTransport {
     type: Signal['type'],
   ) {
     this.calls?.stage('MEDIA_ICE_GATHERING');
-    await this.gather(peer);
+    await gatherCallCandidates(peer);
+    const initial = peer.localDescription?.sdp;
+    await this.sendMediaDescription(remote, id, peer, type);
+    const link = this.mediaLinks.get(remote);
+    if (!link || link.peer !== peer || link.id !== id) return;
+    const complete = () => {
+      if (peer.iceGatheringState !== 'complete') return;
+      link.stopGathering?.();
+      if (peer.localDescription?.sdp !== initial)
+        void this.sendMediaDescription(remote, id, peer, type).catch(() => undefined);
+    };
+    const timeout = setTimeout(() => {
+      link.stopGathering?.();
+      if (peer.localDescription?.sdp !== initial)
+        void this.sendMediaDescription(remote, id, peer, type).catch(() => undefined);
+    }, 10000);
+    link.stopGathering = () => {
+      clearTimeout(timeout);
+      peer.removeEventListener('icegatheringstatechange', complete);
+      delete link.stopGathering;
+    };
+    peer.addEventListener('icegatheringstatechange', complete);
+    complete();
+    this.calls?.stage(type === 'offer' ? 'MEDIA_WAITING_ANSWER' : 'MEDIA_CONNECTING');
+  }
+  private async sendMediaDescription(
+    remote: string,
+    id: string,
+    peer: RTCPeerConnection,
+    type: Signal['type'],
+  ) {
     if (this.mediaLinks.get(remote)?.id !== id || !peer.localDescription?.sdp) return;
     const envelope = signSignal(this.own.secret, {
       protocol: 'mnelo-dtls-v1',
@@ -700,7 +732,6 @@ export class PeerMesh implements PeerTransport {
     });
     if (this.callSignaling) await this.callSignaling(remote, envelope);
     else this.sendSignal({ type: 'signal', to: remote, envelope });
-    this.calls?.stage(type === 'offer' ? 'MEDIA_WAITING_ANSWER' : 'MEDIA_CONNECTING');
   }
   async startMedia(remote: string, id: string, stream: MediaStream) {
     const peer = await this.createMedia(remote, id, stream);
@@ -725,6 +756,11 @@ export class PeerMesh implements PeerTransport {
     await this.mediaSignal(signal);
   }
   private async mediaSignal(signal: Signal) {
+    const existing = this.mediaLinks.get(signal.from);
+    if (existing?.id === signal.session && existing.peer.remoteDescription?.type === signal.type) {
+      await addCallCandidates(existing.peer, signal.sdp);
+      return;
+    }
     if (signal.type === 'offer') {
       const stream = this.calls?.allowedOffer(signal.from, signal.session);
       if (!stream || this.mediaLinks.has(signal.from) || this.pendingMedia.has(signal.from)) return;
@@ -829,6 +865,7 @@ export class PeerMesh implements PeerTransport {
     if (!link || link.id !== id) return;
     this.mediaLinks.delete(remote);
     clearTimeout(link.deadline);
+    link.stopGathering?.();
     link.peer.close();
   }
   stop() {

@@ -15,8 +15,9 @@ export type NotificationHost = Pick<
   'db' | 'random' | 'uuid' | 'signal' | 'request' | 'savedContacts'
 >;
 
-// A notification extension may decrypt into the durable inbox, but never ACK,
-// project messages, send user content, create an identity or publish new keys.
+// A notification extension may decrypt into the durable inbox and send a delivery
+// receipt. It never marks read, projects messages, sends user content, creates an
+// identity or publishes keys. Server deletion waits for normal app projection.
 // The app later projects that inbox using its ordinary crash-safe delivery path.
 export class NotificationSession {
   private readonly engine: DeviceMessenger;
@@ -49,15 +50,19 @@ export class NotificationSession {
       if (state[0]?.owner !== own.key) return null;
       const journal = new SignalJournal(this.engine.deliveryAtomic, this.host.signal, own);
       await journal.initialize();
-      const pending = await this.host.db.all<{ sender: string; body: string }>(
-        'SELECT sender,body FROM signal_inbox WHERE applied=0 ORDER BY created_at DESC LIMIT 40',
+      const client = scheduledPhoneClient(service, own, this.host.request, 3000);
+      let received: { sender: string; id: string } | undefined;
+      const pending = await this.host.db.all<{ sender: string; body: string; id: string }>(
+        'SELECT sender,body,id FROM signal_inbox WHERE applied=0 ORDER BY created_at DESC LIMIT 40',
       );
       for (const row of pending) {
         preview = await read(row);
-        if (preview) break;
+        if (preview) {
+          received = row;
+          break;
+        }
       }
       if (!preview) {
-        const client = scheduledPhoneClient(service, own, this.host.request);
         const contacts = await this.engine.contacts();
         let after: { acceptedAt: number; sender: string; id: string } | undefined;
         for (let page = 0; page < 2 && !preview; page++) {
@@ -91,10 +96,34 @@ export class NotificationSession {
               )
             )[0];
             preview = row ? await read(row) : await read();
+            if (row && preview) received = envelope;
             break;
           }
           const last = inbox[inbox.length - 1]!;
           after = { acceptedAt: last.acceptedAt, sender: last.sender, id: last.id };
+        }
+      }
+      if (preview && received) {
+        try {
+          const receipt = await journal.received(received.sender, received.id, {
+            id: this.host.uuid(),
+            body: JSON.stringify({
+              version: 2,
+              phone: enrollment.phone,
+              name: own.name,
+              packet: { type: 'ack', id: preview.id },
+            }),
+          });
+          // Decryption has already established this pinned Signal session. Do
+          // not publish/request keys or drain unrelated messages from the NSE.
+          if (receipt && !(await journal.needsBundle(receipt.peer))) {
+            const envelope = await journal.seal(receipt.id);
+            const result = await client.execute({ action: 'delivery-submit', envelope });
+            if (result.delivery?.accepted) await journal.uploaded(receipt.id);
+          }
+        } catch {
+          // The ordinary app pump retries the durable encrypted receipt after
+          // interruption/offline/expiry; notification text remains available.
         }
       }
     }

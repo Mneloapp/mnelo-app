@@ -25,7 +25,7 @@ import { deliveryDatabase } from './delivery-fixture';
 import { NodeSignal } from './node-signal';
 import { rememberPhonebookName } from '../../src/messenger/phonebook-match';
 
-test('notification decrypts into a shared vault without acknowledging or marking read; app resumes once with a real receipt', async () => {
+test('notification sends a durable delivery receipt while app is closed, without marking read; app resumes once', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mnelo-notification-'));
   const a = deliveryDatabase(),
     b = deliveryDatabase(join(directory, 'recipient.db'));
@@ -106,6 +106,7 @@ test('notification decrypts into a shared vault without acknowledging or marking
   });
   const extension = deliveryDatabase(join(directory, 'recipient.db'));
   const commands: string[] = [];
+  let dropReceipt = false;
   const session = new NotificationSession({
     db: extension.db,
     random: randomBytes,
@@ -119,6 +120,7 @@ test('notification decrypts into a shared vault without acknowledging or marking
     request: (async (input, init) => {
       const request = JSON.parse(String(init?.body));
       if (request.command) commands.push(request.command.action);
+      if (dropReceipt && request.command?.action === 'delivery-submit') throw new Error('OFFLINE');
       return fetch(input, init);
     }) as typeof fetch,
   });
@@ -147,9 +149,18 @@ test('notification decrypts into a shared vault without acknowledging or marking
     );
     assert.ok(
       !commands.some((action) =>
-        ['delivery-ack', 'delivery-submit', 'delivery-publish'].includes(action),
+        ['delivery-ack', 'delivery-publish', 'delivery-keys'].includes(action),
       ),
     );
+    assert.ok(commands.includes('delivery-submit'));
+    await alice.start();
+    for (let i = 0; i < 4; i++) await alice.pump.tick();
+    assert.equal(
+      (await ae.messages(chat)).find((row) => row.id === message)?.status,
+      'delivered',
+      'gray leaf before recipient opens app',
+    );
+    assert.equal((await be.messages(chat)).length, 0);
     const state = extension.sql.prepare('SELECT state FROM signal_state').get()?.state;
     assert.deepEqual(
       await session.preview(message),
@@ -160,6 +171,25 @@ test('notification decrypts into a shared vault without acknowledging or marking
     await b.db.run('UPDATE contacts SET blocked=1 WHERE public_key=?', ar.key);
     assert.equal(await session.preview(message), null, 'blocked caller cannot supply a preview');
     await b.db.run('UPDATE contacts SET blocked=0 WHERE public_key=?', ar.key);
+    const receipts = () =>
+      b.sql.prepare('SELECT count(*) AS n FROM signal_inbox WHERE receipt_id IS NOT NULL').get()?.n;
+    assert.equal(receipts(), 1);
+    // A failed upload still leaves one sealed, retryable receipt. Repeated alerts
+    // reuse its ciphertext, and foreground projection must not queue a second one.
+    const second = await ae.send(chat, 'Receipt will retry');
+    for (let i = 0; i < 4; i++) await alice.pump.tick();
+    dropReceipt = true;
+    assert.ok(await session.preview(second));
+    const sealed = extension.sql.prepare('SELECT wire FROM signal_outbox WHERE uploaded=0').all();
+    assert.ok(sealed.some((row) => row.wire));
+    const failedState = extension.sql.prepare('SELECT state FROM signal_state').get()?.state;
+    assert.ok(await session.preview(second));
+    assert.equal(extension.sql.prepare('SELECT state FROM signal_state').get()?.state, failedState);
+    assert.deepEqual(
+      extension.sql.prepare('SELECT wire FROM signal_outbox WHERE uploaded=0').all(),
+      sealed,
+    );
+    assert.equal(receipts(), 2);
     await session.close();
     await bob.start();
     for (let i = 0; i < 6; i++) await bob.pump.tick();
@@ -168,6 +198,8 @@ test('notification decrypts into a shared vault without acknowledging or marking
     await alice.start();
     for (let i = 0; i < 6; i++) await alice.pump.tick();
     assert.equal((await ae.messages(chat)).find((row) => row.id === message)?.status, 'delivered');
+    assert.equal((await ae.messages(chat)).find((row) => row.id === second)?.status, 'delivered');
+    assert.equal(receipts(), 2, 'app projection reuses extension receipts');
     await be.markRead(chat);
     for (let i = 0; i < 4; i++) {
       await bob.pump.tick();

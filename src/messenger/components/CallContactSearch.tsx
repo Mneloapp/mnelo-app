@@ -111,7 +111,7 @@ export function CallContactSearch({
           phone: contact.phone,
           name: contact.name,
         });
-      } else if (latest) id = await engine.trustContact(latest);
+      } else if (latest) id = await engine.trustContact({ key: latest.key, name: latest.name });
       else throw new Error('CONTACT_UNAVAILABLE');
       Keyboard.dismiss();
       if (!calls || (!calls.supportsQueuedSignaling && !mesh?.online(contact.key))) {

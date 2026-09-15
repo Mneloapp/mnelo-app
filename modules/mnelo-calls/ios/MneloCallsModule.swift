@@ -19,6 +19,10 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var live: Set<UUID> = []
   private var outgoingCalls: Set<UUID> = []
   private var answeredCalls: Set<UUID> = []
+  private var connectedCalls: Set<UUID> = []
+  private var ringbackID: UUID?
+  private var ringbackPlayer: AVAudioPlayer?
+  private var audioActive = false
   private var reporting: [UUID: [() -> Void]] = [:]
   private var deadlines: [UUID: Timer] = [:]
   private var ended: [UUID: Date] = [:]
@@ -155,10 +159,14 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func connected(_ id: UUID) {
     guard live.contains(id) else { return }
+    connectedCalls.insert(id)
+    ringback(id, enabled: false)
     deadlines.removeValue(forKey: id)?.invalidate()
     if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
   }
   func finish(_ id: UUID, reason: CXCallEndedReason = .remoteEnded) {
+    ringback(id, enabled: false)
+    connectedCalls.remove(id)
     deadlines.removeValue(forKey: id)?.invalidate()
     ended[id] = Date().addingTimeInterval(120)
     outgoingCalls.remove(id)
@@ -169,12 +177,57 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private func prepareAudio() throws {
     try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
   }
+  func ringback(_ id: UUID, enabled: Bool) {
+    if enabled {
+      guard live.contains(id), outgoingCalls.contains(id), !connectedCalls.contains(id) else { return }
+      ringbackID = id
+    } else if ringbackID == id {
+      ringbackID = nil
+    }
+    updateRingback()
+  }
+  private func updateRingback() {
+    guard audioActive, let id = ringbackID, live.contains(id), outgoingCalls.contains(id), !connectedCalls.contains(id) else {
+      ringbackPlayer?.stop()
+      ringbackPlayer = nil
+      return
+    }
+    guard ringbackPlayer == nil else { return }
+    // A quiet 425 Hz telephone ringback: one second on, four seconds off.
+    // Use CallKit's activated route (earpiece/Bluetooth), never a second session.
+    if let player = try? AVAudioPlayer(data: Self.ringbackWave) {
+      player.numberOfLoops = -1
+      player.volume = 0.7
+      player.prepareToPlay()
+      if player.play() { ringbackPlayer = player }
+    }
+  }
+  private static let ringbackWave: Data = {
+    let rate = 16000, frames = rate * 5
+    var data = Data()
+    func text(_ value: String) { data.append(contentsOf: value.utf8) }
+    func word(_ value: UInt16) { var little = value.littleEndian; withUnsafeBytes(of: &little) { data.append(contentsOf: $0) } }
+    func long(_ value: UInt32) { var little = value.littleEndian; withUnsafeBytes(of: &little) { data.append(contentsOf: $0) } }
+    text("RIFF"); long(UInt32(36 + frames * 2)); text("WAVEfmt "); long(16)
+    word(1); word(1); long(UInt32(rate)); long(UInt32(rate * 2)); word(2); word(16)
+    text("data"); long(UInt32(frames * 2))
+    for frame in 0..<frames {
+      let fade = max(0, min(1, min(Double(frame) / 160, Double(rate - frame) / 160)))
+      let sample = frame < rate ? Int16(5000 * fade * sin(2 * Double.pi * 425 * Double(frame) / Double(rate))) : 0
+      word(UInt16(bitPattern: sample))
+    }
+    return data
+  }()
   func providerDidReset(_ provider: CXProvider) {
     for id in live { event(["type":"end", "id":id.uuidString.lowercased()]) }
     MneloScreenShare.shared.stop()
     live.removeAll()
     answeredCalls.removeAll()
     outgoingCalls.removeAll()
+    connectedCalls.removeAll()
+    ringbackID = nil
+    audioActive = false
+    updateRingback()
     deadlines.values.forEach { $0.invalidate() }; deadlines.removeAll()
     RTCAudioSession.sharedInstance().isAudioEnabled = false
   }
@@ -201,8 +254,12 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
     RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
     RTCAudioSession.sharedInstance().isAudioEnabled = true
+    audioActive = true
+    updateRingback()
   }
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
+    audioActive = false
+    updateRingback()
     RTCAudioSession.sharedInstance().isAudioEnabled = false
     RTCAudioSession.sharedInstance().audioSessionDidDeactivate(audioSession)
   }
@@ -248,6 +305,7 @@ public class MneloCallsModule: Module {
     AsyncFunction("answer") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.answer(id) } } }
     AsyncFunction("outgoing") { (value: String, video: Bool) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.outgoing(id, video: video) } } }
     AsyncFunction("connected") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.connected(id) } } }
+    AsyncFunction("ringback") { (value: String, enabled: Bool) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.ringback(id, enabled: enabled) } } }
     AsyncFunction("end") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.finish(id) } } }
   }
 }

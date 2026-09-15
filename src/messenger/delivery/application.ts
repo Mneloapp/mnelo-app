@@ -218,7 +218,7 @@ export class ApplicationDelivery {
         : packet.type === 'call' && packet.action === 'invite'
           ? { kind: 'call', id: packet.id, video: packet.media === 'video' }
           : undefined,
-      packet.type === 'message' ? 0 : 1,
+      packet.type === 'message' ? 0 : ['call', 'call-signal'].includes(packet.type) ? 2 : 1,
     );
     if (wake) this.pump.wake();
     return true;

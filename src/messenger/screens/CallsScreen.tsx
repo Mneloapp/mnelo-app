@@ -16,7 +16,7 @@ import { CallHistoryRow } from '../components/CallHistoryRow';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 
 export function CallsScreen() {
-  const { engine, view } = useDevice();
+  const { engine, view, calls } = useDevice();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const { listRef: searchListRef, ...searchBar } = usePullSearch<LocalCall>(search);
@@ -85,7 +85,17 @@ export function CallsScreen() {
                 <PeerAvatar peer={item.peer} name={item.name} />
               )
             }
-            onPress={() => setSelected({ key: item.peer, name: item.name, history: item })}
+            onPress={() => {
+              const current = calls?.snapshot();
+              router.push({
+                pathname: '/call/[id]',
+                params:
+                  current && !['ended', 'failed'].includes(current.status)
+                    ? { id: current.chat }
+                    : { id: item.chatId, media: item.media },
+              });
+            }}
+            onInfo={() => setSelected({ key: item.peer, name: item.name, history: item })}
           />
         )}
         ListEmptyComponent={

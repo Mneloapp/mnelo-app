@@ -77,7 +77,7 @@ export function CallActions({
       }
       const saved = (await engine.contacts()).find((c) => c.key === target.key && !c.blocked);
       if (!saved) return;
-      const id = await engine.trustContact(saved);
+      const id = await engine.trustContact({ key: saved.key, name: saved.name });
       await calls.start(target.key, media);
       onClose();
       if (onStarted) onStarted(id);

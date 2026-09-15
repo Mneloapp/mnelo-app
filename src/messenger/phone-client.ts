@@ -15,10 +15,11 @@ export class PhoneClient {
     private readonly identity: Pick<LocalIdentity, 'key' | 'secret'>,
     private readonly request: typeof fetch = fetch,
     private readonly schedule: PhoneRequestScheduler = (operation) => operation(),
+    private readonly requestTimeout = 15000,
   ) {}
   private async post(path: string, body: unknown) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), this.requestTimeout);
     try {
       const response = await this.request(this.address + path, {
         method: 'POST',
@@ -87,6 +88,13 @@ export function scheduledPhoneClient(
   address: string,
   identity: Pick<LocalIdentity, 'key' | 'secret'>,
   request: typeof fetch = fetch,
+  requestTimeout = 15000,
 ) {
-  return new PhoneClient(address, identity, request, phoneRequestScheduler(address, identity.key));
+  return new PhoneClient(
+    address,
+    identity,
+    request,
+    phoneRequestScheduler(address, identity.key),
+    requestTimeout,
+  );
 }

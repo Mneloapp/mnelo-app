@@ -8,16 +8,19 @@ import { formatDate, formatTime } from '@/i18n/format';
 import { theme } from '@/theme/tokens';
 import type { LocalCall } from '../model';
 import { callOutcomeCopy } from '../call-record';
+import { IconButton } from '@/components/ui';
 
 export function CallHistoryRow({
   call,
   avatar,
   onPress,
+  onInfo,
   now,
 }: {
   call: LocalCall;
   avatar: ReactNode;
   onPress: () => void;
+  onInfo?: () => void;
   now?: number;
 }) {
   const [mountedAt] = useState(Date.now);
@@ -51,50 +54,65 @@ export function CallHistoryRow({
           : {}),
       }).format(date);
   return (
-    <FocusPressable
-      style={styles.row}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${call.name}. ${detail}. ${formatDate(date.toISOString())}, ${formatTime(date.toISOString())}`}
-    >
-      {avatar}
-      <View style={styles.content}>
-        <View style={styles.summary}>
-          <AppText
-            variant="bodyMedium"
-            numberOfLines={fontScale > 1.3 ? undefined : 1}
-            style={missed && styles.missed}
-          >
-            {call.name}
-          </AppText>
-          <View style={styles.detail}>
-            <AppIcon
-              name={
-                call.direction === 'incoming'
-                  ? 'phone-incoming'
-                  : call.direction === 'outgoing'
-                    ? 'phone-outgoing'
-                    : 'phone'
-              }
-              size={theme.icons.sm}
-              color={color}
-            />
-            {call.media === 'video' && <AppIcon name="video" size={theme.icons.sm} color={color} />}
-            <AppText variant="caption" style={[styles.description, { color }]}>
-              {detail}
+    <View style={styles.row}>
+      <FocusPressable
+        style={styles.call}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`${call.name}. ${detail}. ${formatDate(date.toISOString())}, ${formatTime(date.toISOString())}`}
+      >
+        {avatar}
+        <View style={styles.content}>
+          <View style={styles.summary}>
+            <AppText
+              variant="bodyMedium"
+              numberOfLines={fontScale > 1.3 ? undefined : 1}
+              style={missed && styles.missed}
+            >
+              {call.name}
             </AppText>
+            <View style={styles.detail}>
+              <AppIcon
+                name={
+                  call.direction === 'incoming'
+                    ? 'phone-incoming'
+                    : call.direction === 'outgoing'
+                      ? 'phone-outgoing'
+                      : 'phone'
+                }
+                size={theme.icons.sm}
+                color={color}
+              />
+              {call.media === 'video' && (
+                <AppIcon name="video" size={theme.icons.sm} color={color} />
+              )}
+              <AppText variant="caption" style={[styles.description, { color }]}>
+                {detail}
+              </AppText>
+            </View>
           </View>
+          <AppText variant="caption" tone="secondary" style={styles.stamp}>
+            {stamp}
+          </AppText>
         </View>
-        <AppText variant="caption" tone="secondary" style={styles.stamp}>
-          {stamp}
-        </AppText>
-        <AppIcon name="info" size={theme.icons.md} color={theme.colors.textSecondaryOnSoft} />
-      </View>
-    </FocusPressable>
+      </FocusPressable>
+      {onInfo && (
+        <IconButton
+          icon="info"
+          label={t('messenger.callInformation', { name: call.name })}
+          onPress={onInfo}
+        />
+      )}
+    </View>
   );
 }
 const styles = StyleSheet.create({
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  call: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.md,

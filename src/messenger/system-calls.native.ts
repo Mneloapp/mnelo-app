@@ -15,6 +15,7 @@ type NativeCalls = NativeModule<{ changed: () => void }> & {
   identify?(id: string, name: string, phone: string, video: boolean): Promise<void>;
   answer(id: string): Promise<void>;
   connected(id: string): Promise<void>;
+  ringback?(id: string, enabled: boolean): Promise<void>;
   end(id: string): Promise<void>;
   speaker(enabled: boolean): Promise<void>;
 };
@@ -63,6 +64,7 @@ export function observeSystemCalls(
   >();
   let shown: string | null = null;
   let connected: string | null = null;
+  let ringing: string | null = null;
   const identifying = new Set<string>();
   const registered = new Map<string, string>();
   let registering: Promise<void> | null = null;
@@ -131,6 +133,7 @@ export function observeSystemCalls(
         const previous = shown;
         shown = null;
         connected = null;
+        ringing = null;
         answers.delete(previous);
         nativeAnswered.delete(previous);
         await bridge.end(previous);
@@ -163,6 +166,15 @@ export function observeSystemCalls(
           await bridge.identify?.(call.id, info.name, info.phone, call.media === 'video');
         })
         .catch(() => identifying.delete(call.id));
+    }
+    const shouldRing = !call.incoming && call.status === 'ringing' && Boolean(call.local);
+    if (ringing && (!shouldRing || ringing !== call.id)) {
+      await bridge.ringback?.(ringing, false);
+      ringing = null;
+    }
+    if (shouldRing && ringing !== call.id) {
+      await bridge.ringback?.(call.id, true);
+      ringing = call.id;
     }
     if (answers.has(call.id) && call.status === 'incoming') {
       // Camera capture requires a foreground application. A locked-screen answer

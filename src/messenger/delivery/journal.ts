@@ -35,6 +35,7 @@ type Incoming = {
   body: string;
   applied: number;
   acknowledged: number;
+  receipt_id: string | null;
   created_at: number;
 };
 export type RetryPhase = 'receive' | 'project' | 'send' | 'identity';
@@ -89,6 +90,12 @@ export class SignalJournal {
         )
       )
         await db.exec('ALTER TABLE signal_outbox ADD COLUMN priority INTEGER NOT NULL DEFAULT 0');
+      if (
+        !(await db.all<{ name: string }>('PRAGMA table_info(signal_inbox)')).some(
+          (row) => row.name === 'receipt_id',
+        )
+      )
+        await db.exec('ALTER TABLE signal_inbox ADD COLUMN receipt_id TEXT');
       const existing = (
         await db.all<{ owner: string; state: SignalState }>(
           'SELECT owner,state FROM signal_state WHERE singleton=1',
@@ -238,7 +245,7 @@ export class SignalJournal {
       createdAt,
       body,
       notify ? JSON.stringify(wakeEvent.parse(notify)) : null,
-      priority ? 1 : 0,
+      Math.max(0, Math.min(2, Math.trunc(priority))),
     );
     return id;
   }
@@ -254,16 +261,17 @@ export class SignalJournal {
       ),
     );
   }
-  async readyOutgoing(tokens?: readonly string[]) {
+  async readyOutgoing(tokens?: readonly string[], minPriority = 0) {
     if (tokens?.length === 0) return [];
     return this.atomic((db) =>
       db.all<Outgoing>(
         `SELECT o.rowid AS sequence,o.* FROM signal_outbox o
         LEFT JOIN signal_retries r ON r.phase='send' AND r.peer=o.peer AND r.id=o.id
-        WHERE o.uploaded=0 AND (r.next_at IS NULL OR r.next_at<=?)
+        WHERE o.uploaded=0 AND (r.next_at IS NULL OR r.next_at<=?) AND o.priority>=?
         ${tokens ? `AND o.token IN (${tokens.map(() => '?').join(',')})` : ''}
         ORDER BY o.priority DESC,(o.created_at>=?) DESC,o.rowid LIMIT 5`,
         this.now(),
+        minPriority,
         ...(tokens ?? []),
         this.now() - 120000,
       ),
@@ -419,23 +427,49 @@ export class SignalJournal {
         await db.all<Incoming>('SELECT * FROM signal_inbox WHERE sender=? AND id=?', sender, id)
       )[0];
       if (!row || row.applied) return;
-      if (receipt) {
-        z.string().uuid().parse(receipt.id);
-        if (new TextEncoder().encode(receipt.body).length > 60000)
-          throw new Error('DELIVERY_PAYLOAD_LIMIT');
-        await this.insertOutgoing(
-          db,
-          sender,
-          receipt.id,
-          receipt.body,
-          this.now(),
-          undefined,
-          undefined,
-          1,
-        );
-      }
+      if (receipt) await this.receipt(db, row, receipt);
       await db.run("UPDATE signal_inbox SET applied=1,body='' WHERE sender=? AND id=?", sender, id);
     });
+  }
+  // A verified message durably received by the notification extension can be
+  // delivered while still unread/unprojected. Record its receipt in the same
+  // transaction so extension retries and the app cannot advance the ratchet twice.
+  async received(sender: string, id: string, receipt: { id: string; body: string }) {
+    return this.atomic(async (db) => {
+      const row = (
+        await db.all<Incoming>('SELECT * FROM signal_inbox WHERE sender=? AND id=?', sender, id)
+      )[0];
+      if (!row || row.applied) return null;
+      const receiptId = await this.receipt(db, row, receipt);
+      return (
+        (
+          await db.all<Outgoing>('SELECT * FROM signal_outbox WHERE id=? AND uploaded=0', receiptId)
+        )[0] ?? null
+      );
+    });
+  }
+  private async receipt(db: LocalDatabase, row: Incoming, receipt: { id: string; body: string }) {
+    if (row.receipt_id) return row.receipt_id;
+    z.string().uuid().parse(receipt.id);
+    if (new TextEncoder().encode(receipt.body).length > 60000)
+      throw new Error('DELIVERY_PAYLOAD_LIMIT');
+    const receiptId = await this.insertOutgoing(
+      db,
+      row.sender,
+      receipt.id,
+      receipt.body,
+      this.now(),
+      undefined,
+      undefined,
+      1,
+    );
+    await db.run(
+      'UPDATE signal_inbox SET receipt_id=? WHERE sender=? AND id=?',
+      receiptId,
+      row.sender,
+      row.id,
+    );
+    return receiptId;
   }
   async acknowledgements() {
     return this.atomic((db) =>

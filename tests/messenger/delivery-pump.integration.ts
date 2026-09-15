@@ -390,3 +390,60 @@ test('two real Signal clients use authenticated HTTP delivery without a live sen
     b.sql.close();
   }
 });
+
+test('call signaling is uploaded before maintenance or an old inbox backlog', async () => {
+  const a = device(),
+    b = device();
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  const urgent = randomUUID();
+  let maintenance = 0;
+  const pump = new DeliveryPump(
+    { execute: async (command) => ({ delivery: delivery.execute(a.root.key, command) }) },
+    a.journal,
+    async () => ({}),
+    () => {},
+    Date.now,
+    {
+      beforeCycle: async () => {
+        maintenance++;
+        assert.ok(
+          delivery.store.fetch(b.root.key).some((envelope) => envelope.id === urgent),
+          'urgent call bypasses maintenance',
+        );
+      },
+    },
+  );
+  try {
+    await a.journal.initialize();
+    const keys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+    for (let i = 0; i < 20; i++)
+      await a.journal.enqueue(b.root.key, randomUUID(), 'OLD_' + i, Date.now() - 300000);
+    await a.journal.enqueue(
+      b.root.key,
+      randomUUID(),
+      'RECEIPT',
+      Date.now(),
+      undefined,
+      undefined,
+      1,
+    );
+    await a.journal.enqueue(b.root.key, urgent, 'CALL_SIGNAL', Date.now(), undefined, undefined, 2);
+    pump.start();
+    await pump.tick();
+    assert.equal(maintenance, 1);
+    assert.equal(delivery.store.fetch(b.root.key)[0]?.id, urgent);
+    assert.ok((await a.journal.pending()).length > 0, 'bulk work remains durable');
+  } finally {
+    pump.stop();
+    delivery.close();
+    a.sql.close();
+    b.sql.close();
+  }
+});

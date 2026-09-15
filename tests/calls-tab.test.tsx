@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
+import type { LocalCall } from '@/messenger/model';
 import { CallsScreen, NewCallScreen } from '@/messenger/screens/CallsScreen';
 
 jest.mock('@/messenger/phone-client', () => ({ devicePhoneClient: () => null }));
@@ -18,11 +19,12 @@ const mockRuntime = {
       { key: 'alice', name: 'Development Alice', blocked: false },
       { key: 'blocked', name: 'Blocked contact', blocked: true },
     ]),
-    callHistory: jest.fn(async () => []),
+    callHistory: jest.fn(async (): Promise<LocalCall[]> => []),
     trustContact: jest.fn(async () => 'direct-chat'),
   },
   mesh: { online: jest.fn(() => false), focus: jest.fn(async () => undefined) },
   calls: {
+    supportsQueuedSignaling: false,
     subscribe: () => () => {},
     snapshot: () => null,
     start: jest.fn(async () => undefined),
@@ -36,6 +38,8 @@ async function show(children: React.ReactNode) {
   return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
 }
 beforeEach(() => {
+  jest.clearAllMocks();
+  mockRuntime.calls.supportsQueuedSignaling = false;
   mockRuntime.mesh.online.mockReturnValue(false);
 });
 test('Calls displays an empty local history and opens the new-call picker', async () => {
@@ -86,3 +90,43 @@ test('pulling the call list down reveals search, and cancelling restores the com
   // Closing scrolls the persistent header away; it must not unmount the input.
   expect(screen.getByLabelText('Name or phone number')).toHaveProp('value', '');
 });
+
+test.each(['voice', 'video'] as const)(
+  'history row starts a %s call directly; info opens actions separately',
+  async (media) => {
+    mockRuntime.calls.supportsQueuedSignaling = true;
+    mockRuntime.engine.callHistory.mockResolvedValueOnce([
+      {
+        id: 'record',
+        chatId: 'direct-chat',
+        peer: 'alice',
+        name: 'Development Alice',
+        media,
+        status: 'ended',
+        direction: 'outgoing',
+        unseen: 0,
+        endedAt: Date.now(),
+        sequence: 1,
+      },
+    ]);
+    await show(<CallsScreen />);
+    const row = await screen.findByRole('button', { name: /^Development Alice\. Outgoing/ });
+    await fireEvent.press(row);
+    expect(router.push).toHaveBeenLastCalledWith({
+      pathname: '/call/[id]',
+      params: { id: 'direct-chat', media },
+    });
+    expect(screen.queryByText('Remove from my history')).toBeNull();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Call details for Development Alice' }),
+    );
+    await screen.findByText('Remove from my history');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Voice call' })).toBeEnabled());
+    await fireEvent.press(screen.getByRole('button', { name: 'Voice call' }));
+    await waitFor(() => expect(mockRuntime.calls.start).toHaveBeenCalledWith('alice', 'voice'));
+    expect(mockRuntime.engine.trustContact).toHaveBeenLastCalledWith({
+      key: 'alice',
+      name: 'Development Alice',
+    });
+  },
+);

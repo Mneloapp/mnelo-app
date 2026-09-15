@@ -256,6 +256,7 @@ export const messengerEn = {
   callChoose: 'Choose a contact',
   callOpenChat: 'Open conversation',
   callHistoryDelete: 'Remove from my history',
+  callInformation: 'Call details for {{name}}',
   callHistoryDeleteHint:
     'This removes the call entry from Calls and its conversation on this device. The other person’s copy stays.',
   callVideo: 'Video call',
@@ -544,6 +545,7 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   callChoose: 'აირჩიე კონტაქტი',
   callOpenChat: 'მიმოწერის გახსნა',
   callHistoryDelete: 'ჩემი ისტორიიდან წაშლა',
+  callInformation: '{{name}} — ზარის ინფორმაცია',
   callHistoryDeleteHint:
     'ზარის ჩანაწერი წაიშლება ამ მოწყობილობის ზარებიდან და შესაბამისი ჩატიდან. მეორე ადამიანის ასლი დარჩება.',
   callVideo: 'ვიდეოზარი',

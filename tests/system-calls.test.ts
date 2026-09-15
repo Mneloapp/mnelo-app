@@ -13,6 +13,7 @@ jest.mock('expo-modules-core', () => {
     outgoing: jest.fn(async () => {}),
     answer: jest.fn(async () => {}),
     connected: jest.fn(async () => {}),
+    ringback: jest.fn(async () => {}),
     identify: jest.fn(async () => {}),
     end: jest.fn(async () => {}),
     addListener: jest.fn((_name: string, fn: () => void) => {
@@ -70,8 +71,12 @@ function fixture(
     { execute } as unknown as PhoneClient,
     caller,
   );
-  const update = (status: DeviceCall['status'], media: DeviceCall['media'] = 'voice') => {
-    value = { id, incoming: true, media, status } as DeviceCall;
+  const update = (
+    status: DeviceCall['status'],
+    media: DeviceCall['media'] = 'voice',
+    incoming = true,
+  ) => {
+    value = { id, incoming, media, status, local: {} } as DeviceCall;
     changed();
   };
   return {
@@ -306,5 +311,38 @@ test('a delayed name lookup never renames a call that already ended', async () =
     expect(native.identify).not.toHaveBeenCalled();
   } finally {
     f.stop();
+  }
+});
+
+test('outgoing ringback starts once and stops on answer, never playing for incoming calls', async () => {
+  const f = fixture();
+  try {
+    await tick();
+    f.update('ringing', 'voice', false);
+    await tick();
+    expect(native.ringback).toHaveBeenLastCalledWith(id, true);
+    f.update('ringing', 'voice', false);
+    await tick();
+    expect(native.ringback).toHaveBeenCalledTimes(1);
+    f.update('connecting', 'voice', false);
+    await tick();
+    expect(native.ringback).toHaveBeenLastCalledWith(id, false);
+    f.update('active', 'voice', false);
+    await tick();
+    expect(native.ringback).toHaveBeenCalledTimes(2);
+    f.update('ended', 'voice', false);
+    await tick();
+    expect(native.end).toHaveBeenCalledWith(id);
+  } finally {
+    f.stop();
+  }
+  native.ringback.mockClear();
+  const incoming = fixture();
+  try {
+    incoming.update('incoming');
+    await tick();
+    expect(native.ringback).not.toHaveBeenCalled();
+  } finally {
+    incoming.stop();
   }
 });

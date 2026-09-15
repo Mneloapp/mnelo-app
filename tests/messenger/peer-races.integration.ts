@@ -199,3 +199,117 @@ test('unknown offers require a verified directory match; blocked/spoofed introdu
     globalThis.WebSocket = original;
   }
 });
+
+test('call offer/answer connects using the first relay paths while slower candidates are added without renegotiation', async () => {
+  const alice = { ...createKeys(randomBytes), name: 'Fixture Alice' };
+  const bob = { ...createKeys(randomBytes), name: 'Fixture Bob' };
+  const id = randomUUID();
+  const relay = 'a=candidate:1 1 udp 100 192.0.2.1 4000 typ relay raddr 0.0.0.0 rport 0';
+  const fallback = 'a=candidate:2 1 udp 90 192.0.2.2 4001 typ relay raddr 0.0.0.0 rport 0';
+  class Peer extends EventTarget {
+    iceGatheringState = 'gathering';
+    signalingState = 'stable';
+    connectionState = 'new';
+    localDescription: RTCSessionDescriptionInit | null = null;
+    remoteDescription: RTCSessionDescriptionInit | null = null;
+    remoteSets = 0;
+    added: RTCIceCandidateInit[] = [];
+    addTrack() {}
+    createDataChannel(label: string) {
+      return Object.assign(new EventTarget(), { label, close() {} });
+    }
+    async createOffer() {
+      return { type: 'offer', sdp: this.sdp() };
+    }
+    async createAnswer() {
+      return { type: 'answer', sdp: this.sdp() };
+    }
+    sdp() {
+      return [
+        'v=0',
+        'a=fingerprint:sha-256 ' + Array(32).fill('AA').join(':'),
+        'm=audio 9 UDP/TLS/RTP/SAVPF 111',
+        'a=mid:0',
+        'a=ice-ufrag:fixture',
+        'a=ice-pwd:fixture-secret',
+        relay,
+        '',
+      ].join('\r\n');
+    }
+    async setLocalDescription(value: RTCSessionDescriptionInit) {
+      this.localDescription = value;
+      this.signalingState = value.type === 'offer' ? 'have-local-offer' : 'stable';
+    }
+    async setRemoteDescription(value: RTCSessionDescriptionInit) {
+      this.remoteDescription = value;
+      this.remoteSets++;
+      this.signalingState = value.type === 'offer' ? 'have-remote-offer' : 'stable';
+    }
+    async addIceCandidate(value: RTCIceCandidateInit) {
+      this.added.push(value);
+      this.remoteDescription!.sdp += 'a=' + value.candidate + '\r\n';
+    }
+    complete() {
+      this.localDescription!.sdp += fallback + '\r\n';
+      this.iceGatheringState = 'complete';
+      this.dispatchEvent(new Event('icegatheringstatechange'));
+    }
+    close() {
+      this.connectionState = 'closed';
+      this.dispatchEvent(new Event('connectionstatechange'));
+    }
+  }
+  const ap = new Peer(),
+    bp = new Peer();
+  const engine = { acceptsPeer: async () => true } as unknown as DeviceMessenger;
+  const a = new PeerMesh(
+    alice,
+    engine,
+    'ws://127.0.0.1:8084',
+    () => ap as unknown as RTCPeerConnection,
+    randomUUID,
+    () => {},
+    async () => ({ iceServers: [] }),
+  );
+  const b = new PeerMesh(
+    bob,
+    engine,
+    'ws://127.0.0.1:8084',
+    () => bp as unknown as RTCPeerConnection,
+    randomUUID,
+    () => {},
+    async () => ({ iceServers: [] }),
+  );
+  const stream = { getTracks: () => [] } as unknown as MediaStream;
+  const controller = {
+    snapshot: () => ({ id, status: 'connecting' }),
+    mediaAllowed: () => true,
+    allowedOffer: () => stream,
+    allowedAnswer: () => true,
+    outputStream: () => stream,
+    stage: () => {},
+    stop: () => {},
+    failed: async () => assert.fail('call failed'),
+  } as unknown as DeviceCalls;
+  a.calls = controller;
+  b.calls = controller;
+  a.callSignaling = async (_peer, envelope) => b.receiveCallSignal(alice.key, envelope);
+  b.callSignaling = async (_peer, envelope) => a.receiveCallSignal(bob.key, envelope);
+  try {
+    await a.startMedia(bob.key, id, stream);
+    assert.equal(ap.iceGatheringState, 'gathering');
+    assert.equal(bp.iceGatheringState, 'gathering');
+    assert.equal(ap.remoteDescription?.type, 'answer');
+    assert.equal(bp.remoteDescription?.type, 'offer');
+    ap.complete();
+    bp.complete();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(ap.added.length, 1);
+    assert.equal(bp.added.length, 1);
+    assert.equal(ap.remoteSets, 1);
+    assert.equal(bp.remoteSets, 1);
+  } finally {
+    a.stop();
+    b.stop();
+  }
+});

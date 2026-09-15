@@ -151,12 +151,20 @@ export class DeliveryPump {
       await this.publish(keys);
       this.initialized = true;
     }
+    const tokens = await this.hooks.outgoingTokens?.();
+    // Invite/answer/SDP must not wait for a backlog of media downloads or
+    // housekeeping acknowledgements. Keep the same durable, paced transport.
+    await this.sendOutgoing(tokens, 2);
     await this.hooks.beforeCycle?.();
     await this.maintainKeys();
     await this.journal.prune();
     if (!this.hooks.outgoingOnly) await this.receiveCycle();
-    const tokens = await this.hooks.outgoingTokens?.();
-    const outgoing = await this.journal.readyOutgoing(tokens);
+    await this.sendOutgoing(tokens);
+    this.issue ??= await this.journal.outgoingIssue(tokens);
+    await this.hooks.afterCycle?.();
+  }
+  private async sendOutgoing(tokens?: readonly string[], minPriority = 0) {
+    const outgoing = await this.journal.readyOutgoing(tokens, minPriority);
     for (const row of outgoing) {
       if (this.stopped) return;
       const retry = await this.journal.retry('send', row.peer, row.id);
@@ -187,8 +195,6 @@ export class DeliveryPump {
         await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
       }
     }
-    this.issue ??= await this.journal.outgoingIssue(tokens);
-    await this.hooks.afterCycle?.();
   }
   private async receiveCycle() {
     // Project durable local inbox first; a crash cannot consume another prekey or
@@ -202,6 +208,7 @@ export class DeliveryPump {
     if (!inbox.length) this.serverCursor = undefined;
     for (const envelope of inbox) {
       if (this.stopped) return;
+      await this.sendOutgoing(undefined, 2);
       const retry = await this.journal.retry('receive', envelope.sender, envelope.id);
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
@@ -230,6 +237,7 @@ export class DeliveryPump {
     await this.project();
     for (const row of await this.journal.acknowledgements()) {
       if (this.stopped) return;
+      await this.sendOutgoing(undefined, 2);
       await this.command({ action: 'delivery-ack', sender: row.sender, id: row.id });
       await this.journal.acknowledged(row.sender, row.id);
     }
@@ -242,6 +250,7 @@ export class DeliveryPump {
     }
     for (const row of inbox) {
       if (this.stopped) return;
+      await this.sendOutgoing(undefined, 2);
       const retry = await this.journal.retry('project', row.sender, row.id);
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
@@ -254,6 +263,7 @@ export class DeliveryPump {
             await this.journal.applied(row.sender, row.id, accepted.receipt);
             await this.journal.recovered('project', row.sender, row.id);
           }
+          await this.sendOutgoing(undefined, 2);
         } catch (error) {
           this.issue = this.failureCode(error);
           await this.journal.failed('project', row.sender, row.id, row.created_at, this.issue);

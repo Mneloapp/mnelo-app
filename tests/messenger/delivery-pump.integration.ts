@@ -58,6 +58,121 @@ function device(now = Date.now) {
   return { root, journal, sql };
 }
 
+test('accepting a call during an ongoing bulk upload sends its encrypted control before the remaining batch', async () => {
+  const a = device(),
+    b = device();
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  const first = randomUUID(),
+    urgent = randomUUID();
+  const order: string[] = [];
+  const pump = new DeliveryPump(
+    {
+      execute: async (command, priority) => {
+        const result = delivery.execute(a.root.key, command);
+        if (command.action === 'delivery-submit') {
+          order.push(command.envelope.id);
+          if (command.envelope.id === first)
+            await a.journal.enqueue(
+              b.root.key,
+              urgent,
+              'CALL_ACCEPT',
+              Date.now(),
+              undefined,
+              undefined,
+              2,
+            );
+          if (command.envelope.id === urgent)
+            assert.equal(priority, true, 'call keeps priority at the HTTP queue');
+        }
+        return { delivery: result };
+      },
+    },
+    a.journal,
+    async () => ({}),
+    () => {},
+  );
+  try {
+    await a.journal.initialize();
+    const keys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+    for (const id of [first, randomUUID(), randomUUID(), randomUUID()])
+      await a.journal.enqueue(b.root.key, id, `BULK_${id}`, Date.now());
+    pump.start();
+    await pump.tick();
+    assert.deepEqual(order.slice(0, 2), [first, urgent]);
+    assert.equal(new Set(order).size, order.length, 'preemption does not duplicate any upload');
+    const aKeys = await a.journal.initialize();
+    const { oneTime: _oneTime, ...identity } = aKeys;
+    await b.journal.pin({ ...identity, owner: a.root.key, signature: a.journal.binding(aKeys) });
+    const envelopes = delivery.store.fetch(b.root.key);
+    for (const envelope of envelopes) await b.journal.receive(envelope);
+    assert.ok(
+      (await b.journal.inbox()).some((row) => row.body === 'CALL_ACCEPT'),
+      'normal Signal decryption is preserved',
+    );
+  } finally {
+    pump.stop();
+    delivery.close();
+    a.sql.close();
+    b.sql.close();
+  }
+});
+
+test('remote wake interrupts a bulk batch and fetches the inbox at urgent priority on the next serial cycle', async () => {
+  const a = device(),
+    b = device();
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  const order: string[] = [];
+  let hinted = false;
+  const pump = new DeliveryPump(
+    {
+      execute: async (command, urgent) => {
+        const result = delivery.execute(a.root.key, command);
+        if (command.action === 'delivery-inbox') order.push(urgent ? 'urgent-inbox' : 'inbox');
+        if (command.action === 'delivery-submit') {
+          order.push('upload');
+          if (!hinted) {
+            hinted = true;
+            pump.receiveWake();
+          }
+        }
+        return { delivery: result };
+      },
+    },
+    a.journal,
+    async () => ({}),
+    () => {},
+  );
+  try {
+    await a.journal.initialize();
+    const keys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+    for (let n = 0; n < 4; n++) await a.journal.enqueue(b.root.key, randomUUID(), `BULK_${n}`);
+    pump.start();
+    await pump.tick();
+    assert.deepEqual(order, ['inbox', 'upload']);
+    await pump.tick();
+    assert.deepEqual(order, ['inbox', 'upload', 'urgent-inbox', 'upload', 'upload', 'upload']);
+  } finally {
+    pump.stop();
+    delivery.close();
+    a.sql.close();
+    b.sql.close();
+  }
+});
+
 test('an unready peer shares lookup backoff across a large backlog and restart, then recovers without discarding messages', async () => {
   let clock = Date.now();
   const a = device(() => clock),

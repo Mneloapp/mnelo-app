@@ -31,6 +31,7 @@ import {
 } from './local-profile';
 import { readCallRecord, type CallDirection, type CallOutcome } from './call-record';
 import type { DeliveryAtomic } from './delivery/journal';
+import { groupProfile, readGroupProfile, type GroupProfile } from './group-profile';
 import { readPhotoPage, readSharedContent, type ContentTab } from './shared-content';
 
 export type ChatFilter = 'all' | 'unread' | 'direct' | 'group';
@@ -171,6 +172,8 @@ export class DeviceMessenger {
     for (const [table, column, definition] of [
       ['messages', 'edited_at', 'INTEGER NOT NULL DEFAULT 0'],
       ['chats', 'left_group', 'INTEGER NOT NULL DEFAULT 0 CHECK(left_group IN (0,1))'],
+      ['chats', 'group_profile', "TEXT NOT NULL DEFAULT '{}'"],
+      ['chats', 'group_profile_revision', 'INTEGER NOT NULL DEFAULT 0'],
       ['deliveries', 'read_at', 'INTEGER'],
       ['identity', 'username', "TEXT NOT NULL DEFAULT ''"],
       ['identity', 'first_name', "TEXT NOT NULL DEFAULT ''"],
@@ -1082,8 +1085,9 @@ export class DeviceMessenger {
       }) ?? false
     );
   }
-  async createGroup(title: string, peers: string[]) {
+  async createGroup(title: string, peers: string[], details?: GroupProfile) {
     const name = z.string().trim().min(1).max(80).parse(title);
+    const profile = details ? groupProfile.parse(details) : undefined;
     const own = this.own().key;
     const unique = [...new Set(peers)];
     if (unique.length < 1 || unique.length > 15 || unique.includes(own))
@@ -1106,15 +1110,18 @@ export class DeviceMessenger {
           id,
           key,
         );
+      if (profile) await this.stageGroupProfile(id, 1, unique, profile);
     });
     this.changed();
     for (const key of unique) await this.sendGroupState(id, key);
+    if (profile) await this.flush().catch(() => undefined);
     return id;
   }
-  async updateGroup(id: string, title: string, peers: string[]) {
+  async updateGroup(id: string, title: string, peers: string[], details?: GroupProfile) {
     const own = this.own().key;
     const unique = [...new Set(peers)];
     const name = z.string().trim().min(1).max(80).parse(title);
+    const profile = details ? groupProfile.parse(details) : undefined;
     if (unique.length > 15 || unique.includes(own)) throw new Error('GROUP_INVALID');
     for (const key of unique)
       if (!(await this.acceptsPeer(key))) throw new Error('CONTACT_UNTRUSTED');
@@ -1122,9 +1129,35 @@ export class DeviceMessenger {
       const chat = (await this.db.all<Chat>('SELECT * FROM chats WHERE id=?', id))[0];
       if (chat?.kind !== 'group' || chat.owner !== own) throw new Error('GROUP_FORBIDDEN');
       await this.replaceMembers(id, name, [own, ...unique]);
+      if (profile || chat.group_profile_revision)
+        await this.stageGroupProfile(
+          id,
+          chat.revision + 1,
+          unique,
+          profile ?? readGroupProfile(chat),
+        );
     });
     this.changed();
     await this.flush().catch(() => undefined);
+  }
+  private async stageGroupProfile(
+    id: string,
+    revision: number,
+    peers: string[],
+    profile: GroupProfile,
+  ) {
+    await this.db.run(
+      'UPDATE chats SET group_profile=?,group_profile_revision=? WHERE id=?',
+      JSON.stringify(profile),
+      revision,
+      id,
+    );
+    await this.db.run(
+      "DELETE FROM control_outbox WHERE json_extract(packet,'$.type')='group_profile' AND json_extract(packet,'$.id')=?",
+      id,
+    );
+    for (const peer of peers)
+      await this.stageControl(peer, { type: 'group_profile', id, revision, profile });
   }
   private async replaceMembers(id: string, title: string, keys: string[]) {
     for (const row of await this.db.all<{ public_key: string }>(
@@ -1280,6 +1313,33 @@ export class DeviceMessenger {
               'DELETE FROM delivery_media_outbox WHERE message_id=? AND peer=?',
               packet.id,
               peer,
+            );
+          return;
+        }
+        if (packet.type === 'group_profile') {
+          const chat = (await this.db.all<Chat>('SELECT * FROM chats WHERE id=?', packet.id))[0];
+          // Membership snapshots remain compatible with older clients. Details
+          // are a separate encrypted control and may arrive before that snapshot.
+          if (!chat || chat.revision < packet.revision) throw new Error('GROUP_NOT_READY');
+          if (
+            chat.kind !== 'group' ||
+            chat.owner !== peer ||
+            chat.left_group ||
+            !(
+              await this.db.all(
+                'SELECT 1 FROM members WHERE chat_id=? AND public_key=?',
+                packet.id,
+                own,
+              )
+            ).length
+          )
+            throw new Error('GROUP_FORBIDDEN');
+          if (packet.revision > (chat.group_profile_revision ?? 0))
+            await this.db.run(
+              'UPDATE chats SET group_profile=?,group_profile_revision=? WHERE id=?',
+              JSON.stringify(packet.profile),
+              packet.revision,
+              packet.id,
             );
           return;
         }

@@ -26,6 +26,7 @@ export class DeliveryPump {
   private initialized = false;
   private retry = 1000;
   private wakePending = false;
+  private incomingPending = false;
   private issue: RetryCode | undefined;
   private keysCheckedAt = 0;
   private keyCapacityReached = false;
@@ -39,8 +40,8 @@ export class DeliveryPump {
     private readonly now = Date.now,
     private readonly hooks: DeliveryHooks = {},
   ) {}
-  private async command(input: DeliveryCommand) {
-    const response = await this.client.execute(input);
+  private async command(input: DeliveryCommand, urgent = false) {
+    const response = await this.client.execute(input, urgent);
     if (this.stopped) throw new Error('DELIVERY_STOPPED');
     return deliveryResponse.parse(response.delivery);
   }
@@ -70,6 +71,10 @@ export class DeliveryPump {
     if (this.stopped) return;
     if (this.running) this.wakePending = true;
     else this.schedule(0);
+  }
+  receiveWake() {
+    this.incomingPending = true;
+    this.wake();
   }
   stop() {
     this.stopped = true;
@@ -116,7 +121,7 @@ export class DeliveryPump {
       this.schedule(immediate ? 0 : Math.max(3000, this.retry));
     }
   }
-  private async pin(peer: string) {
+  private async pin(peer: string, urgent = false) {
     if (await this.journal.known(peer)) return;
     // Every queued message to an unready recipient shares this lookup. Without
     // a durable peer-level delay, a backlog exhausts the directory quota before
@@ -134,7 +139,7 @@ export class DeliveryPump {
       );
     }
     try {
-      const { identity } = await this.command({ action: 'delivery-identity', peer });
+      const { identity } = await this.command({ action: 'delivery-identity', peer }, urgent);
       if (!identity) throw new Error('DELIVERY_PEER_NOT_READY');
       await this.journal.pin(identity);
       await this.journal.recovered('identity', peer, peer);
@@ -156,9 +161,9 @@ export class DeliveryPump {
     // housekeeping acknowledgements. Keep the same durable, paced transport.
     await this.sendOutgoing(tokens, 2);
     await this.hooks.beforeCycle?.();
+    if (!this.hooks.outgoingOnly) await this.receiveCycle();
     await this.maintainKeys();
     await this.journal.prune();
-    if (!this.hooks.outgoingOnly) await this.receiveCycle();
     await this.sendOutgoing(tokens);
     this.issue ??= await this.journal.outgoingIssue(tokens);
     await this.hooks.afterCycle?.();
@@ -167,17 +172,30 @@ export class DeliveryPump {
     const outgoing = await this.journal.readyOutgoing(tokens, minPriority);
     for (const row of outgoing) {
       if (this.stopped) return;
+      // A remote delivery hint interrupts the bulk snapshot at a safe boundary.
+      // The next serial cycle fetches it before any more ordinary uploads.
+      if (minPriority < 2 && row.priority < 2 && this.incomingPending && !this.hooks.outgoingOnly)
+        return;
+      // Calls can arrive after readyOutgoing took its snapshot. Preempt between
+      // bulk sends instead of waiting for the entire paced upload batch.
+      if (minPriority < 2 && row.priority < 2) await this.sendOutgoing(tokens, 2);
+      const urgent = row.priority >= 2;
       const retry = await this.journal.retry('send', row.peer, row.id);
       if (retry && retry.next_at > this.now()) {
         this.issue = retry.code;
         continue;
       }
       try {
-        await this.pin(row.peer);
+        await this.pin(row.peer, urgent);
         if (this.hooks.beforeSend && !(await this.hooks.beforeSend(row.peer, row.body))) continue;
         const needBundle = await this.journal.needsBundle(row.peer);
         const leased = needBundle
-          ? (await this.command({ action: 'delivery-keys', peer: row.peer, request: row.id })).keys
+          ? (
+              await this.command(
+                { action: 'delivery-keys', peer: row.peer, request: row.id },
+                urgent,
+              )
+            ).keys
           : undefined;
         if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
         if (leased) {
@@ -186,7 +204,7 @@ export class DeliveryPump {
         }
         const envelope = await this.journal.seal(row.id, leased?.bundle);
         if (this.stopped) return;
-        const { accepted } = await this.command({ action: 'delivery-submit', envelope });
+        const { accepted } = await this.command({ action: 'delivery-submit', envelope }, urgent);
         if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
         await this.journal.uploaded(row.id);
         await this.journal.recovered('send', row.peer, row.id);
@@ -197,13 +215,18 @@ export class DeliveryPump {
     }
   }
   private async receiveCycle() {
+    const urgent = this.incomingPending;
+    this.incomingPending = false;
     // Project durable local inbox first; a crash cannot consume another prekey or
     // advance a ratchet twice while replaying this stage.
     await this.project();
-    const { inbox } = await this.command({
-      action: 'delivery-inbox',
-      ...(this.serverCursor ? { after: this.serverCursor } : {}),
-    });
+    const { inbox } = await this.command(
+      {
+        action: 'delivery-inbox',
+        ...(this.serverCursor ? { after: this.serverCursor } : {}),
+      },
+      urgent,
+    );
     if (!inbox) throw new Error('DELIVERY_RESPONSE_INVALID');
     if (!inbox.length) this.serverCursor = undefined;
     for (const envelope of inbox) {
@@ -213,7 +236,7 @@ export class DeliveryPump {
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
         try {
-          await this.pin(envelope.sender);
+          await this.pin(envelope.sender, urgent);
           await this.journal.receive(envelope);
           await this.journal.recovered('receive', envelope.sender, envelope.id);
         } catch (error) {
@@ -236,7 +259,7 @@ export class DeliveryPump {
     }
     await this.project();
     for (const row of await this.journal.acknowledgements()) {
-      if (this.stopped) return;
+      if (this.stopped || this.incomingPending) return;
       await this.sendOutgoing(undefined, 2);
       await this.command({ action: 'delivery-ack', sender: row.sender, id: row.id });
       await this.journal.acknowledged(row.sender, row.id);

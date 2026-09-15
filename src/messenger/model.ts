@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { CallDirection, CallOutcome } from './call-record';
+import { groupProfile } from './group-profile';
 
 export const peerKey = z.string().regex(/^[a-f0-9]{64}$/);
 export const MAX_CALL_PARTICIPANTS = 8;
@@ -36,6 +37,8 @@ export type LocalCall = {
   sequence: number;
 };
 export type Chat = {
+  group_profile?: string;
+  group_profile_revision?: number;
   peer?: string;
   id: string;
   kind: 'direct' | 'group';
@@ -75,6 +78,14 @@ export interface LocalDatabase {
 // Application packets travel inside authenticated Signal envelopes in delivery
 // v2, or the legacy authenticated DTLS channel while migration is disabled.
 export const packetSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('group_profile'),
+      id: identifier,
+      revision: z.number().int().min(1),
+      profile: groupProfile,
+    })
+    .strict(),
   z
     .object({
       type: z.literal('message_change'),

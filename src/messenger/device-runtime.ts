@@ -147,7 +147,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
         )
       : null;
     if (delivery) {
-      mesh.deliveryWake = () => delivery.pump.wake();
+      mesh.deliveryWake = () => delivery.pump.receiveWake();
       mesh.callSignaling = (peer, envelope) => delivery.sendSignal(peer, envelope);
     } else if (phone && !local) mesh.wake = new DeviceWake(engine, phone);
     const calls = new DeviceCalls(

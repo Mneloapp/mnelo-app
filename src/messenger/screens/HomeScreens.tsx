@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { FlatList, View } from 'react-native';
 import type { Chat } from '../model';
+import { readGroupProfile } from '../group-profile';
+import { avatarUri } from '../profile-avatar';
 import { theme } from '@/theme/tokens';
 import { router } from 'expo-router';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Avatar, Button, Field, IconButton, Page, StateView, ui } from '@/components/ui';
+import { Avatar, IconButton, Page, StateView, ui } from '@/components/ui';
 import { useDayBoundary } from '@/hooks/useDayBoundary';
-import { AppText } from '@/components/AppText';
 import { useDevice } from '../DeviceProvider';
-import { Check, useLocalAction } from './shared';
-import { useComposer } from './composer-navigation';
 import { PullSearch, usePullSearch } from '@/components/PullSearch';
 import { ChatHistoryRow } from '../components/ChatHistoryRow';
 import { ChatFilters } from './ChatFilters';
@@ -104,7 +103,7 @@ export function ChatsScreen() {
               item.kind === 'direct' && item.peer ? (
                 <PeerAvatar peer={item.peer} name={item.title} />
               ) : (
-                <Avatar name={item.title} />
+                <Avatar name={item.title} uri={avatarUri(readGroupProfile(item).avatar)} />
               )
             }
             onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
@@ -121,53 +120,6 @@ export function ChatsScreen() {
           />
         }
       />
-    </Page>
-  );
-}
-export function NewGroupScreen() {
-  const { engine, view } = useDevice();
-  const { t } = useTranslation();
-  const action = useLocalAction();
-  const [name, setName] = useState('');
-  const [selected, setSelected] = useState<string[]>([]);
-  const q = useQuery({
-    queryKey: ['device', 'contacts'],
-    queryFn: () => view.contacts(),
-    networkMode: 'always',
-  });
-  const { finish } = useComposer();
-  return (
-    <Page nativeHeader>
-      <Field label={t('messenger.groupName')} value={name} onChangeText={setName} maxLength={80} />
-      <AppText tone="secondary">{t('messenger.groupHint')}</AppText>
-      {q.data
-        ?.filter((contact) => !contact.blocked)
-        .map((contact) => (
-          <Check
-            key={contact.key}
-            label={contact.name}
-            value={selected.includes(contact.key)}
-            onChange={(checked) =>
-              setSelected((value) =>
-                checked
-                  ? [...value, contact.key].slice(0, 15)
-                  : value.filter((key) => key !== contact.key),
-              )
-            }
-          />
-        ))}
-      <Button
-        label={t('messenger.createGroup')}
-        disabled={!name.trim() || !selected.length}
-        busy={action.busy}
-        onPress={() =>
-          void action.run(async () => {
-            const id = await engine.createGroup(name, selected);
-            finish({ pathname: '/chat/[id]', params: { id } });
-          })
-        }
-      />
-      {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
     </Page>
   );
 }

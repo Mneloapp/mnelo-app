@@ -156,6 +156,7 @@ async function run() {
       await a.calls.start(b.identity.key, media);
       await until(() => b.calls.snapshot()?.status === 'incoming', media + ' ringing');
       check(b.calls.snapshot()?.local === null, media + ' no capture before accept');
+      const answeredAt = performance.now();
       await b.calls.accept();
       await until(
         () => a.calls.snapshot()?.status === 'active' && b.calls.snapshot()?.status === 'active',
@@ -163,6 +164,8 @@ async function run() {
       );
       await relayMedia(media === 'video');
       check(true, media + ' bidirectional RTP received');
+      output.textContent +=
+        'TIMING ' + media + ' answer-to-RTP ' + Math.round(performance.now() - answeredAt) + 'ms\n';
       a.calls.mute();
       check(
         a.calls

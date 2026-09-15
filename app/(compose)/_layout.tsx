@@ -6,6 +6,7 @@ import { useAppFont } from '@/theme/fonts';
 import { theme } from '@/theme/tokens';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { ComposerContext, composerNavigation } from '@/messenger/screens/composer-navigation';
+import { GroupDraftProvider } from '@/messenger/screens/group-draft';
 
 export default function ComposeLayout() {
   const segments = useSegments();
@@ -24,32 +25,35 @@ export default function ComposeLayout() {
   const reduced = useReducedMotion();
   return (
     <ComposerContext value={navigation}>
-      <Stack
-        screenOptions={{
-          headerShown: true,
-          headerTitleAlign: 'center',
-          headerStyle: { backgroundColor: theme.colors.background },
-          headerTintColor: theme.colors.textPrimary,
-          headerTitleStyle: { ...theme.typography.headline, ...font },
-          headerShadowVisible: false,
-          headerBackButtonDisplayMode: 'minimal',
-          headerRight: () => (
-            <IconButton icon="x" label={t('compose.close')} onPress={navigation.close} />
-          ),
-          contentStyle: { backgroundColor: theme.colors.background },
-          animation: reduced ? 'none' : 'default',
-        }}
-      >
-        <Stack.Screen name="new-message" options={{ title: t('compose.newChat') }} />
-        <Stack.Screen name="new-call" options={{ title: t('messenger.newCall') }} />
-        <Stack.Screen name="new-contact" options={{ title: t('compose.newContact') }} />
-        <Stack.Screen name="contact-code" options={{ title: t('messenger.contactCode') }} />
-        <Stack.Screen name="my-code" options={{ title: t('messenger.myCode') }} />
-        <Stack.Screen name="scan-contact" options={{ headerShown: false }} />
-        <Stack.Screen name="find-phone" options={{ title: t('phone.search') }} />
-        <Stack.Screen name="dial-number" options={{ title: t('compose.keypad') }} />
-        <Stack.Screen name="new-group" options={{ title: t('messenger.newGroup') }} />
-      </Stack>
+      <GroupDraftProvider>
+        <Stack
+          screenOptions={{
+            headerShown: true,
+            headerTitleAlign: 'center',
+            headerStyle: { backgroundColor: theme.colors.background },
+            headerTintColor: theme.colors.textPrimary,
+            headerTitleStyle: { ...theme.typography.headline, ...font },
+            headerShadowVisible: false,
+            headerBackButtonDisplayMode: 'minimal',
+            headerRight: () => (
+              <IconButton icon="x" label={t('compose.close')} onPress={navigation.close} />
+            ),
+            contentStyle: { backgroundColor: theme.colors.background },
+            animation: reduced ? 'none' : 'default',
+          }}
+        >
+          <Stack.Screen name="new-message" options={{ title: t('compose.newChat') }} />
+          <Stack.Screen name="new-call" options={{ title: t('messenger.newCall') }} />
+          <Stack.Screen name="new-contact" options={{ title: t('compose.newContact') }} />
+          <Stack.Screen name="contact-code" options={{ title: t('messenger.contactCode') }} />
+          <Stack.Screen name="my-code" options={{ title: t('messenger.myCode') }} />
+          <Stack.Screen name="scan-contact" options={{ headerShown: false }} />
+          <Stack.Screen name="find-phone" options={{ title: t('phone.search') }} />
+          <Stack.Screen name="dial-number" options={{ title: t('compose.keypad') }} />
+          <Stack.Screen name="new-group" options={{ title: t('messenger.newGroup') }} />
+          <Stack.Screen name="new-group-details" options={{ title: t('messenger.newGroup') }} />
+        </Stack>
+      </GroupDraftProvider>
     </ComposerContext>
   );
 }

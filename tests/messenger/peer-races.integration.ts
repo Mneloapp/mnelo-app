@@ -249,10 +249,9 @@ test('call offer/answer connects using the first relay paths while slower candid
       this.added.push(value);
       this.remoteDescription!.sdp += 'a=' + value.candidate + '\r\n';
     }
-    complete() {
+    fallback() {
       this.localDescription!.sdp += fallback + '\r\n';
-      this.iceGatheringState = 'complete';
-      this.dispatchEvent(new Event('icegatheringstatechange'));
+      this.dispatchEvent(new Event('icecandidate'));
     }
     close() {
       this.connectionState = 'closed';
@@ -301,9 +300,11 @@ test('call offer/answer connects using the first relay paths while slower candid
     assert.equal(bp.iceGatheringState, 'gathering');
     assert.equal(ap.remoteDescription?.type, 'answer');
     assert.equal(bp.remoteDescription?.type, 'offer');
-    ap.complete();
-    bp.complete();
-    await new Promise((resolve) => setImmediate(resolve));
+    ap.fallback();
+    bp.fallback();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(ap.iceGatheringState, 'gathering', 'fallback sent before slow TURN timeout');
+    assert.equal(bp.iceGatheringState, 'gathering');
     assert.equal(ap.added.length, 1);
     assert.equal(bp.added.length, 1);
     assert.equal(ap.remoteSets, 1);

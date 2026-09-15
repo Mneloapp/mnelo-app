@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import jpeg from 'jpeg-js';
 import { DeviceWake } from '../../src/messenger/wake-client';
 import type { PhoneClient } from '../../src/messenger/phone-client';
 import assert from 'node:assert/strict';
@@ -15,6 +16,7 @@ import {
 } from '../../src/messenger/crypto';
 import type { LocalDatabase, Packet } from '../../src/messenger/model';
 import { emptyProfile } from '../../src/messenger/local-profile';
+import { emptyGroupProfile, readGroupProfile } from '../../src/messenger/group-profile';
 
 function database(): LocalDatabase {
   const db = new DatabaseSync(':memory:');
@@ -44,6 +46,95 @@ async function pair() {
   await b.trustContact({ key: alice.key, name: alice.name });
   return { a, b, alice, bob, chat };
 }
+
+test('group details survive restart, synchronize separately from membership, and reject non-owner or stale updates', async () => {
+  const { a, b, alice, bob } = await pair();
+  const sent: Packet[] = [];
+  a.attachTransport({
+    send: () => false,
+    sendDurable: async (_peer, packet) => {
+      sent.push(packet);
+      return true;
+    },
+    stop() {},
+  });
+  try {
+    const profile = {
+      ...emptyGroupProfile(),
+      avatar: Buffer.from(
+        jpeg.encode({ width: 4, height: 4, data: Buffer.alloc(64, 255) }, 60).data,
+      ).toString('base64'),
+      headline: 'Weekend plans',
+      about: 'Synthetic group description',
+      website: 'example.com',
+      email: 'group@example.com',
+    };
+    const id = await a.createGroup('მეგობრები', [bob.key], profile);
+    const membership = sent.find((packet) => packet.type === 'group')!;
+    const details = sent.find((packet) => packet.type === 'group_profile')!;
+    assert.equal(
+      await b.receive(alice.key, details),
+      false,
+      'early metadata is retained for retry until membership arrives',
+    );
+    assert.equal(await b.receive(alice.key, membership), true);
+    assert.equal(await b.receive(alice.key, details), true);
+    assert.deepEqual(readGroupProfile(await b.chat(id)), profile);
+    assert.deepEqual(readGroupProfile(await a.chat(id)), profile);
+    await b.initialize();
+    assert.deepEqual(
+      readGroupProfile(await b.chat(id)),
+      profile,
+      'additive migration/reopen retains details',
+    );
+    const restored = new DeviceMessenger(database(), randomBytes, randomUUID);
+    await restored.initialize();
+    try {
+      await restored.restoreSnapshot(await b.snapshot());
+      assert.deepEqual(
+        readGroupProfile(await restored.chat(id)),
+        profile,
+        'photo and details survive a full backup restore',
+      );
+    } finally {
+      await restored.close();
+    }
+    const stranger = createKeys(randomBytes);
+    await b.trustContact({ key: stranger.key, name: 'Other member' });
+    assert.equal(await b.receive(stranger.key, { ...details, revision: 2 }), false);
+    sent.length = 0;
+    await a.updateGroup(id, 'ახალი სახელი', [bob.key], {
+      ...profile,
+      about: 'Updated',
+      website: '',
+    });
+    const newer = sent.find((packet) => packet.type === 'group_profile')!;
+    assert.equal(
+      await b.receive(
+        alice.key,
+        sent.find((packet) => packet.type === 'group')!,
+      ),
+      true,
+    );
+    assert.equal(await b.receive(alice.key, newer), true);
+    assert.equal(await b.receive(alice.key, details), true, 'replay is harmless');
+    assert.equal(readGroupProfile(await b.chat(id)).about, 'Updated');
+    assert.equal(readGroupProfile(await b.chat(id)).website, '');
+    assert.equal((await b.chat(id))?.title, 'ახალი სახელი');
+    await assert.rejects(b.updateGroup(id, 'Forged', [alice.key], profile), /GROUP_FORBIDDEN/);
+    await assert.rejects(
+      a.updateGroup(id, 'Invalid', [bob.key], { ...profile, website: 'javascript:alert(1)' }),
+    );
+    assert.equal(
+      readGroupProfile(await a.chat(id)).about,
+      'Updated',
+      'failed validation leaves data intact',
+    );
+  } finally {
+    await a.close();
+    await b.close();
+  }
+});
 test('a new message bypasses more than fifty unacknowledged older deliveries', async () => {
   const { a, b, chat } = await pair();
   const transmitted: Packet[] = [];

@@ -681,6 +681,11 @@ export class PeerMesh implements PeerTransport {
     });
     return peer;
   }
+  // Fetch the short-lived TURN credentials while ringing, without opening a
+  // microphone, camera or media peer on the recipient before they accept.
+  async prepareCall() {
+    await this.configuration();
+  }
   private async publishMedia(
     remote: string,
     id: string,
@@ -693,24 +698,46 @@ export class PeerMesh implements PeerTransport {
     await this.sendMediaDescription(remote, id, peer, type);
     const link = this.mediaLinks.get(remote);
     if (!link || link.peer !== peer || link.id !== id) return;
-    const complete = () => {
-      if (peer.iceGatheringState !== 'complete') return;
-      link.stopGathering?.();
-      if (peer.localDescription?.sdp !== initial)
-        void this.sendMediaDescription(remote, id, peer, type).catch(() => undefined);
+    let sent = initial;
+    let sending = false;
+    let cancelled = false;
+    let batch: ReturnType<typeof setTimeout> | undefined;
+    const flush = async () => {
+      if (cancelled || sending) return;
+      sending = true;
+      try {
+        while (!cancelled && peer.localDescription?.sdp !== sent) {
+          const next = peer.localDescription?.sdp;
+          await this.sendMediaDescription(remote, id, peer, type);
+          sent = next;
+        }
+      } finally {
+        sending = false;
+      }
+    };
+    const update = () => {
+      clearTimeout(batch);
+      // A first relay candidate may not work on the current network. Publish
+      // each newly gathered fallback promptly, even if another TURN transport
+      // is still timing out. Waiting for 'complete' adds up to ten seconds.
+      batch = setTimeout(() => void flush().catch(() => undefined), 150);
     };
     const timeout = setTimeout(() => {
-      link.stopGathering?.();
-      if (peer.localDescription?.sdp !== initial)
-        void this.sendMediaDescription(remote, id, peer, type).catch(() => undefined);
+      void flush()
+        .catch(() => undefined)
+        .finally(() => link.stopGathering?.());
     }, 10000);
     link.stopGathering = () => {
+      cancelled = true;
       clearTimeout(timeout);
-      peer.removeEventListener('icegatheringstatechange', complete);
+      clearTimeout(batch);
+      peer.removeEventListener('icecandidate', update);
+      peer.removeEventListener('icegatheringstatechange', update);
       delete link.stopGathering;
     };
-    peer.addEventListener('icegatheringstatechange', complete);
-    complete();
+    peer.addEventListener('icecandidate', update);
+    peer.addEventListener('icegatheringstatechange', update);
+    update();
     this.calls?.stage(type === 'offer' ? 'MEDIA_WAITING_ANSWER' : 'MEDIA_CONNECTING');
   }
   private async sendMediaDescription(

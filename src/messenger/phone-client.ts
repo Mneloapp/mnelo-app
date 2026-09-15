@@ -51,9 +51,9 @@ export class PhoneClient {
       clearTimeout(timeout);
     }
   }
-  async execute(input: PhoneCommand) {
+  async execute(input: PhoneCommand, urgent = false) {
     const command = phoneCommand.parse(input);
-    return this.schedule(() => this.executeCommand(command));
+    return this.schedule(() => this.executeCommand(command), urgent || command.action === 'ice');
   }
   private async executeCommand(command: PhoneCommand) {
     const { nonce } = z

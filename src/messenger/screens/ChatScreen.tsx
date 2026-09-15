@@ -18,7 +18,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { ActionSheet } from '@/components/ActionSheet';
-import { Button, IconButton, Page, StateView, ui } from '@/components/ui';
+import { Avatar, Button, IconButton, Page, StateView, ui } from '@/components/ui';
 import { theme } from '@/theme/tokens';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { MessageField } from '@/features/chats/MessageField';
@@ -45,6 +45,8 @@ import { CallBackSheet, CallMessage } from '../components/CallMessage';
 import { MessageTimeReveal } from '../components/MessageMetadata';
 import { MessageBubble } from '../components/MessageBubble';
 import { PeerAvatar } from '../components/ContactCard';
+import { readGroupProfile } from '../group-profile';
+import { avatarUri } from '../profile-avatar';
 import { ChatPhoto } from '../components/ChatPhoto';
 import { ChatVideo } from '../components/ChatVideo';
 import { mediaPreviewSize, visualMediaKind, type MediaDimensions } from '../media-preview';
@@ -448,6 +450,12 @@ export function ChatScreen() {
           avatar={
             chat.data?.kind === 'direct' && remote ? (
               <PeerAvatar peer={remote.key} name={chat.data.title} size="small" />
+            ) : chat.data?.kind === 'group' ? (
+              <Avatar
+                name={chat.data.title}
+                uri={avatarUri(readGroupProfile(chat.data).avatar)}
+                size="small"
+              />
             ) : undefined
           }
           titleActionLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}

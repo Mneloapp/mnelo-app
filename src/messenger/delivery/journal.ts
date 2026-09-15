@@ -26,6 +26,7 @@ type Outgoing = {
   body: string;
   wire: string | null;
   uploaded: number;
+  priority: number;
   notify: string | null;
 };
 type Incoming = {

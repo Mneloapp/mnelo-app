@@ -504,6 +504,7 @@ export class DeviceCalls {
     });
     this.expire();
     try {
+      void this.mesh.prepareCall?.().catch(() => undefined);
       this.stage('CAPTURE_OUTGOING');
       const stream = await captureCall(media === 'video');
       if (this.value?.id !== id || !this.active()) {
@@ -567,6 +568,7 @@ export class DeviceCalls {
         camera: control.media === 'video',
       });
       this.expire(ringWindow);
+      void this.mesh.prepareCall?.().catch(() => undefined);
       return;
     }
     const call = this.value;

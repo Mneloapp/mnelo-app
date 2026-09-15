@@ -5,6 +5,14 @@ export const messengerEn = {
   callQuickReplies: 'Quick call replies',
   callQuickRepliesHint:
     'Choose a reply to decline the call and send a message. You can edit these replies.',
+  callQuickRepliesEditHint:
+    'Make these replies your own. They are ready whenever you cannot take a call.',
+  privacyMessages: 'Private conversations',
+  settingsStorage: 'Data on this device',
+  notificationDelivery: 'Message alerts',
+  notificationPreviews: 'Names and previews',
+  notificationOn: 'Notifications are on',
+  notificationOff: 'Notifications are off',
   callQuickReplyLabel: 'Reply {{number}}',
   callReplyMeeting: "I'm in a meeting. I'll call you back.",
   callReplyLater: "I can't talk now. I'll call you later.",
@@ -121,7 +129,7 @@ export const messengerEn = {
   notifications: 'Notifications',
   notificationNewMessage: 'New message',
   notificationHint:
-    'While Mnelo is open, alerts use names saved on this device. Lock-screen alerts hide names and message content. Open Mnelo to read your messages.',
+    'Choose whether names and message previews appear on the lock screen in your device settings.',
   notificationEnable: 'Enable device alerts',
   notificationSettings: 'Open notification settings',
   notificationEnabled: 'Notifications are on. You can turn them off in your device settings.',
@@ -294,6 +302,14 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   callQuickReplies: 'ზარის სწრაფი პასუხები',
   callQuickRepliesHint:
     'აირჩიე პასუხი ზარის უარსაყოფად და შეტყობინების გასაგზავნად. ამ პასუხების შეცვლა შეგიძლია.',
+  callQuickRepliesEditHint:
+    'მოირგე პასუხები შენს სტილზე. ისინი მზად იქნება, როცა ზარზე პასუხს ვერ შეძლებ.',
+  privacyMessages: 'პირადი მიმოწერა',
+  settingsStorage: 'მონაცემები ამ მოწყობილობაზე',
+  notificationDelivery: 'ახალი შეტყობინებების სიგნალი',
+  notificationPreviews: 'სახელი და ტექსტის წინასწარი ნახვა',
+  notificationOn: 'შეტყობინებები ჩართულია',
+  notificationOff: 'შეტყობინებები გამორთულია',
   callQuickReplyLabel: 'პასუხი {{number}}',
   callReplyMeeting: 'შეხვედრაზე ვარ. მოგვიანებით გადმოგირეკავ.',
   callReplyLater: 'ახლა ვერ ვსაუბრობ. მოგვიანებით დაგირეკავ.',
@@ -410,7 +426,7 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   notifications: 'შეტყობინებები',
   notificationNewMessage: 'ახალი შეტყობინება',
   notificationHint:
-    'გახსნილ აპში ჩანს მოწყობილობაზე შენახული სახელი. ჩაკეტილ ეკრანზე სახელი და ტექსტი დამალულია. შეტყობინებების წასაკითხად გახსენი Mnelo.',
+    'მოწყობილობის პარამეტრებში აირჩიე, გამოჩნდეს თუ არა სახელი და შეტყობინების ტექსტი ჩაკეტილ ეკრანზე.',
   notificationEnable: 'მოწყობილობის შეტყობინებების ჩართვა',
   notificationSettings: 'შეტყობინებების პარამეტრების გახსნა',
   notificationEnabled:

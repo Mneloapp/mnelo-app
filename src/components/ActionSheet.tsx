@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     width: theme.controls.minTapTarget,
     height: theme.controls.minTapTarget,
     borderRadius: theme.radii.pill,
-    backgroundColor: theme.colors.surfaceSoft,
+    backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },

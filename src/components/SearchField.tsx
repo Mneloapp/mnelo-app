@@ -63,10 +63,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.md,
-    backgroundColor: theme.colors.surfaceSoft,
-    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.pill,
     borderWidth: theme.controls.borderWidth,
-    borderColor: theme.colors.surfaceSoft,
+    borderColor: theme.colors.surface,
   },
   input: { ...inputTextStyle, flex: 1, minWidth: 0 },
 });

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { router } from 'expo-router';
+import { View } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7,7 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { getRandomBytes, randomUUID } from 'expo-crypto';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Button, Choice, Field, Page, Section, SettingsRow, StateView } from '@/components/ui';
+import { Field, Page, StateView } from '@/components/ui';
 import { PhonePrivacySection } from './PhonePrivacySection';
 import { usePhoneService } from './phone-shared';
 import { AppText } from '@/components/AppText';
@@ -18,6 +19,13 @@ import { Check, useLocalAction } from './shared';
 import { discardCachedMedia } from '@/features/chats/media-files';
 import { deliveryV2 } from '../delivery-mode';
 import { CallQuickReplies } from '../components/CallQuickReplies';
+import {
+  SettingsAction,
+  SettingsCard,
+  SettingsChoice,
+  settingsStyles,
+} from '../components/SettingsUI';
+import { ProfileGroup, ProfileRow } from '../components/OwnProfile';
 export { EditProfileScreen } from './LocalProfileScreen';
 
 export { MeScreen } from './MeScreen';
@@ -25,12 +33,22 @@ export { MeScreen } from './MeScreen';
 export function PrivacyScreen() {
   const { t } = useTranslation();
   return (
-    <Page title={t('messenger.privacy')} back>
+    <Page contentStyle={settingsStyles.page} title={t('messenger.privacy')} back>
       <PhonePrivacySection />
-      <AppText>{t('messenger.privacyHint')}</AppText>
-      <AppText tone="secondary">{t('messenger.offlineHint')}</AppText>
-      <AppText tone="secondary">{t('messenger.backupResponsibility')}</AppText>
-      <Button
+      <SettingsCard title={t('messenger.privacyMessages')} icon="lock">
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.privacyHint')}
+        </AppText>
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.offlineHint')}
+        </AppText>
+      </SettingsCard>
+      <SettingsCard title={t('messenger.settingsStorage')} icon="smartphone">
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.backupResponsibility')}
+        </AppText>
+      </SettingsCard>
+      <SettingsAction
         variant="secondary"
         label={t('messenger.backups')}
         onPress={() => router.push('/backups')}
@@ -49,22 +67,30 @@ export function BlockedScreen() {
   });
   const blocked = q.data?.filter((contact) => contact.blocked);
   return (
-    <Page title={t('messenger.blocked')} back>
+    <Page contentStyle={settingsStyles.page} title={t('messenger.blocked')} back>
       {blocked?.map((contact) => (
-        <Section key={contact.key} title={contact.name}>
-          <Button
+        <SettingsCard key={contact.key} title={contact.name} icon="user">
+          <SettingsAction
             variant="secondary"
             label={t('messenger.unblock')}
             busy={action.busy}
             onPress={() => void action.run(() => engine.block(contact.key, false))}
           />
-        </Section>
+        </SettingsCard>
       ))}
-      {blocked?.length === 0 && <StateView message={t('messenger.noBlocked')} />}
-      <StateView
-        loading={q.isPending}
-        error={q.isError ? t('messenger.genericError') : undefined}
-      />
+      {blocked?.length === 0 && (
+        <SettingsCard title={t('messenger.blocked')} icon="slash">
+          <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+            {t('messenger.noBlocked')}
+          </AppText>
+        </SettingsCard>
+      )}
+      {(q.isPending || q.isError) && (
+        <StateView
+          loading={q.isPending}
+          error={q.isError ? t('messenger.genericError') : undefined}
+        />
+      )}
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
     </Page>
   );
@@ -79,37 +105,45 @@ export function AccountScreen() {
   const [replySettings, setReplySettings] = useState(false);
   const locale = usePreferences((state) => state.locale);
   return (
-    <Page title={t('messenger.settings')} back>
+    <Page contentStyle={settingsStyles.page} title={t('messenger.settings')} back>
       {replySettings && <CallQuickReplies editOnly onClose={() => setReplySettings(false)} />}
-      <SettingsRow
-        title={t('messenger.callQuickReplies')}
-        icon="message-circle"
-        onPress={() => setReplySettings(true)}
-      />
-      <Section title={t('account.language')}>
-        <Choice
-          value={locale}
-          onChange={(value) => void action.run(() => usePreferences.getState().setLocale(value))}
-          options={[
-            { value: 'en', label: t('account.english') },
-            { value: 'ka', label: t('account.georgian') },
-          ]}
+      <ProfileGroup>
+        <ProfileRow
+          label={t('messenger.callQuickReplies')}
+          icon="message-circle"
+          onPress={() => setReplySettings(true)}
         />
-      </Section>
-      <SettingsRow
-        title={t('messenger.openSource')}
-        icon="code"
-        onPress={() => router.push('/open-source')}
-      />
-      <Section title={t('messenger.eraseDevice')}>
-        <AppText>{t('messenger.eraseHint')}</AppText>
+        <ProfileRow
+          label={t('messenger.openSource')}
+          icon="code"
+          onPress={() => router.push('/open-source')}
+          last
+        />
+      </ProfileGroup>
+      <SettingsCard title={t('account.language')} icon="globe">
+        <View accessibilityRole="radiogroup" accessibilityLabel={t('account.language')}>
+          {(['en', 'ka'] as const).map((value) => (
+            <SettingsChoice
+              key={value}
+              label={t(value === 'en' ? 'account.english' : 'account.georgian')}
+              selected={locale === value}
+              disabled={action.busy}
+              onPress={() => void action.run(() => usePreferences.getState().setLocale(value))}
+            />
+          ))}
+        </View>
+      </SettingsCard>
+      <SettingsCard title={t('messenger.eraseDevice')} icon="trash-2">
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.eraseHint')}
+        </AppText>
         <Check
           value={unlinkNumber}
           label={t('messenger.eraseNumberToo')}
           onChange={setUnlinkNumber}
         />
         <Check value={confirmed} label={t('messenger.eraseConfirmed')} onChange={setConfirmed} />
-        <Button
+        <SettingsAction
           variant="danger"
           label={t('messenger.eraseDevice')}
           disabled={!confirmed}
@@ -131,7 +165,7 @@ export function AccountScreen() {
             })
           }
         />
-      </Section>
+      </SettingsCard>
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
     </Page>
   );
@@ -151,13 +185,21 @@ export function BackupsScreen() {
     [uri],
   );
   return (
-    <Page title={t('messenger.backups')} back>
-      <Section title={t('messenger.backupOff')}>
-        <AppText>{t('messenger.backupHint')}</AppText>
-        <AppText tone="secondary">{t('messenger.backupResponsibility')}</AppText>
-        {deliveryV2 && <AppText>{t('messenger.backupRecoveryPending')}</AppText>}
-      </Section>
-      <Button
+    <Page contentStyle={settingsStyles.page} title={t('messenger.backups')} back>
+      <SettingsCard title={t('messenger.backupOff')} icon="download">
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.backupHint')}
+        </AppText>
+        <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+          {t('messenger.backupResponsibility')}
+        </AppText>
+        {deliveryV2 && (
+          <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+            {t('messenger.backupRecoveryPending')}
+          </AppText>
+        )}
+      </SettingsCard>
+      <SettingsAction
         label={t('messenger.exportBackup')}
         busy={action.busy}
         onPress={() =>
@@ -175,10 +217,14 @@ export function BackupsScreen() {
         }
       />
       {key && uri && (
-        <Section title={t('messenger.recoveryKey')}>
-          <AppText selectable>{key}</AppText>
-          <AppText>{t('messenger.recoveryHint')}</AppText>
-          <Button
+        <SettingsCard title={t('messenger.recoveryKey')} icon="key">
+          <AppText selectable variant="caption" style={settingsStyles.note}>
+            {key}
+          </AppText>
+          <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+            {t('messenger.recoveryHint')}
+          </AppText>
+          <SettingsAction
             variant="secondary"
             label={t('messenger.copy')}
             onPress={() =>
@@ -188,7 +234,7 @@ export function BackupsScreen() {
             }
           />
           <Check value={saved} label={t('messenger.keySaved')} onChange={setSaved} />
-          <Button
+          <SettingsAction
             label={t('messenger.saveBackup')}
             disabled={!saved}
             busy={action.busy}
@@ -202,7 +248,7 @@ export function BackupsScreen() {
               })
             }
           />
-        </Section>
+        </SettingsCard>
       )}
       {shared && <AppText accessibilityLiveRegion="polite">{t('messenger.backupShared')}</AppText>}
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
@@ -223,14 +269,25 @@ export function RestoreScreen() {
   );
   if (deliveryV2)
     return (
-      <Page title={t('messenger.restore')} back>
-        <AppText accessibilityRole="alert">{t('messenger.backupRecoveryPending')}</AppText>
+      <Page contentStyle={settingsStyles.page} title={t('messenger.restore')} back>
+        <SettingsCard title={t('messenger.restore')} icon="download">
+          <AppText
+            accessibilityRole="alert"
+            variant="caption"
+            tone="secondary"
+            style={settingsStyles.note}
+          >
+            {t('messenger.backupRecoveryPending')}
+          </AppText>
+        </SettingsCard>
       </Page>
     );
   return (
-    <Page title={t('messenger.restore')} back>
-      <AppText>{t('messenger.restoreHint')}</AppText>
-      <Button
+    <Page contentStyle={settingsStyles.page} title={t('messenger.restore')} back>
+      <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+        {t('messenger.restoreHint')}
+      </AppText>
+      <SettingsAction
         variant="secondary"
         label={t('messenger.chooseBackup')}
         busy={action.busy}
@@ -247,6 +304,7 @@ export function RestoreScreen() {
       />
       {uri && <AppText>{new File(uri).name}</AppText>}
       <Field
+        style={settingsStyles.field}
         label={t('messenger.recoveryKey')}
         value={key}
         onChangeText={setKey}
@@ -255,7 +313,7 @@ export function RestoreScreen() {
         secureTextEntry
         maxLength={64}
       />
-      <Button
+      <SettingsAction
         label={t('messenger.restoreNow')}
         disabled={!uri || !/^[a-f0-9]{64}$/.test(key)}
         busy={action.busy}

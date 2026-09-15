@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
-import { Button, Section, StateView } from '@/components/ui';
+import { StateView } from '@/components/ui';
+import { SettingsAction, SettingsCard, settingsStyles } from '../components/SettingsUI';
 import { useDevice } from '../DeviceProvider';
 import { usePhoneAction, usePhoneService } from './phone-shared';
 import { Check } from './shared';
@@ -13,10 +14,12 @@ export function PhonePrivacySection() {
   const action = usePhoneAction();
   const [confirmed, setConfirmed] = useState(false);
   return (
-    <Section title={t('phone.title')}>
+    <SettingsCard title={t('phone.title')} icon="phone">
       {client && status.data?.registered && (
         <>
-          <AppText tone="secondary">{t('phone.discoveryDefault')}</AppText>
+          <AppText variant="caption" tone="secondary" style={settingsStyles.note}>
+            {t('phone.discoveryDefault')}
+          </AppText>
           <Check
             value={Boolean(status.data.discoverable)}
             label={t('phone.discoverable')}
@@ -28,7 +31,7 @@ export function PhonePrivacySection() {
             }
           />
           <Check value={confirmed} label={t('phone.unlinkConfirm')} onChange={setConfirmed} />
-          <Button
+          <SettingsAction
             variant="danger"
             label={t('phone.unlink')}
             disabled={!confirmed}
@@ -43,12 +46,14 @@ export function PhonePrivacySection() {
           />
         </>
       )}
-      <StateView
-        loading={Boolean(client) && status.isPending}
-        error={status.isError ? t('phone.failed') : undefined}
-        onRetry={() => void status.refetch()}
-      />
+      {client && (status.isPending || status.isError) && (
+        <StateView
+          loading={status.isPending}
+          error={status.isError ? t('phone.failed') : undefined}
+          {...(status.isError ? { onRetry: () => void status.refetch() } : {})}
+        />
+      )}
       {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
-    </Section>
+    </SettingsCard>
   );
 }

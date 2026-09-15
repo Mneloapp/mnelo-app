@@ -6,7 +6,9 @@ import {
   type MediaStream as NativeStream,
 } from '@livekit/react-native-webrtc';
 import { AudioSession } from '@livekit/react-native';
+import { prepareNativeWebRTC } from './native-webrtc';
 export async function captureCall(video: boolean, group = false): Promise<MediaStream> {
+  prepareNativeWebRTC();
   const prepared = await prepareSystemCallAudio(video || group);
   const stream = await mediaDevices.getUserMedia({
     audio: true,

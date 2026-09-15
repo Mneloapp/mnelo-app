@@ -58,11 +58,13 @@ export class PhoneClient {
     return this.schedule(
       async () => {
         const started = Date.now();
-        connectionTiming('HTTP_QUEUE', started - queued);
+        // Parsed protocol action names only; never log command arguments or identities.
+        const stage = command.action.replaceAll('-', '_').toUpperCase();
+        connectionTiming(`HTTP_QUEUE_${stage}`, started - queued);
         try {
           return await this.executeCommand(command);
         } finally {
-          connectionTiming('HTTP_COMMAND', Date.now() - started);
+          connectionTiming(`HTTP_DONE_${stage}`, Date.now() - started);
         }
       },
       urgent || command.action === 'ice',

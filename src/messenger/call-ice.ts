@@ -19,7 +19,7 @@ export function gatherCallCandidates(peer: RTCPeerConnection): Promise<void> {
         !settle &&
         /^a=candidate:.* typ relay(?: |\r?$)/m.test(peer.localDescription?.sdp ?? '')
       )
-        settle = setTimeout(() => finish(), 200);
+        settle = setTimeout(() => finish(), 40);
     };
     const deadline = setTimeout(() => finish(new Error('ICE_TIMEOUT')), 10000);
     peer.addEventListener('icecandidate', update);

@@ -568,6 +568,10 @@ export class DeviceCalls {
           .catch(() => undefined);
       if (this.value?.id !== id || !this.active()) return;
       await this.send(peer, { type: 'call', id, action: 'invite', media });
+      // Prepare only the caller's already-authorized local media. Publish the
+      // offer after acceptance; the recipient opens no media before answering.
+      if (this.signaling)
+        void this.mesh.prepareOutgoingMedia?.(peer, id, stream).catch(() => undefined);
       this.expire();
     } catch (error) {
       if (this.value?.id === id) await this.end(true);

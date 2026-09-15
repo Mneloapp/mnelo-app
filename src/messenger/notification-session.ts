@@ -5,6 +5,7 @@ import { scheduledPhoneClient } from './phone-client';
 import type { ShareHost } from './share-extension';
 import {
   notificationText,
+  notificationBadgeCount,
   readNotificationPreview,
   type NotificationPreview,
 } from './notification-preview';
@@ -141,6 +142,10 @@ export class NotificationSession {
       chat: preview.chat,
       title: chat?.kind === 'group' ? `${name} · ${chat.title}` : name,
       body: notificationText(preview, language),
+      badge: await notificationBadgeCount(
+        this.engine.deliveryAtomic,
+        this.engine.currentIdentity()!.key,
+      ),
     };
   }
   async close() {

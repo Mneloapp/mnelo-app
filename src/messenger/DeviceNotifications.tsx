@@ -13,7 +13,6 @@ import { useAttentionCounts } from './attention';
 import { type IncomingMessage } from './engine';
 import {
   dismissDeviceAlert,
-  observeAlertTaps,
   presentedAlertIds,
   setDeviceBadge,
   showDeviceAlert,
@@ -22,11 +21,13 @@ import { shouldAlert } from './notification-policy';
 import { useNotificationEnrollment } from './useNotificationEnrollment';
 import { systemCallAudio } from './system-calls';
 import { localNotificationPreview } from './notification-presentation';
+import { useNotificationNavigation } from './useNotificationNavigation';
 
 export function DeviceNotifications() {
   const { engine, calls, identity, authenticated } = useDevice();
   const { data: counts, dataUpdatedAt } = useAttentionCounts(authenticated);
   const path = usePathname();
+  useNotificationNavigation();
   useNotificationEnrollment(authenticated && Boolean(identity), path);
   const currentPath = useRef(path);
   const { t, i18n } = useTranslation();
@@ -49,27 +50,34 @@ export function DeviceNotifications() {
   useEffect(() => {
     if (!identity || !authenticated) return;
     let current = true;
+    let latest = 0;
     const unsubscribe = engine.subscribeIncoming((message) => {
       const foreground = AppState.currentState === 'active';
       if (!shouldAlert(foreground, currentPath.current, message.chat, message.type)) return;
       if (foreground) {
-        setBanner({ ...message, path: currentPath.current });
+        const sequence = ++latest;
+        const arrivalPath = currentPath.current;
         void (async () => {
           const preview =
             message.type === 'message'
               ? await localNotificationPreview(engine, message.id, i18n.language).catch(() => null)
               : null;
           const chat = await engine.chat(message.chat);
-          if (!current || AppState.currentState !== 'active') return;
-          setBanner((value) =>
-            value?.id === message.id
-              ? {
-                  ...value,
-                  name: preview?.title ?? chat?.title ?? t('brand'),
-                  ...(preview ? { body: preview.body } : {}),
-                }
-              : value,
-          );
+          if (
+            !current ||
+            sequence !== latest ||
+            AppState.currentState !== 'active' ||
+            currentPath.current !== arrivalPath
+          )
+            return;
+          // Resolve the local preview before presenting once. A slow contact
+          // lookup must not flash a generic banner or overwrite a newer message.
+          setBanner({
+            ...message,
+            path: arrivalPath,
+            name: preview?.title ?? chat?.title ?? t('brand'),
+            ...(preview ? { body: preview.body } : {}),
+          });
         })().catch(() => undefined);
       } else
         void (async () => {
@@ -118,28 +126,6 @@ export function DeviceNotifications() {
       }
     });
   }, [calls, t]);
-  useEffect(() => {
-    if (!identity || !authenticated) return;
-    let current = true;
-    const stop = observeAlertTaps((kind, messageId) => {
-      const call = calls?.snapshot();
-      if (kind === 'incoming-call' && call?.status === 'incoming')
-        router.push({ pathname: '/call/[id]', params: { id: call.chat } });
-      else if (kind === 'message' && messageId) {
-        void localNotificationPreview(engine, messageId, i18n.language)
-          .catch(() => null)
-          .then((preview) => {
-            if (!current) return;
-            if (preview) router.push({ pathname: '/chat/[id]', params: { id: preview.chat } });
-            else router.navigate('/(tabs)/chats');
-          });
-      } else router.navigate(kind === 'message' ? '/(tabs)/chats' : '/(tabs)/calls');
-    });
-    return () => {
-      current = false;
-      stop();
-    };
-  }, [calls, engine, identity, authenticated, i18n.language]);
   useEffect(() => {
     if (!authenticated || !counts) return;
     let cancelled = false;

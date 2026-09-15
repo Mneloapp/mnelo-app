@@ -35,8 +35,8 @@ jest.mock('expo-modules-core', () => {
 });
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: true })),
-  getDevicePushTokenAsync: async () => ({ type: 'ios', data: 'b'.repeat(64) }),
-  addPushTokenListener: () => ({ remove: jest.fn() }),
+  getDevicePushTokenAsync: jest.fn(async () => ({ type: 'ios', data: 'b'.repeat(64) })),
+  addPushTokenListener: jest.fn(() => ({ remove: jest.fn() })),
   IosAuthorizationStatus: { PROVISIONAL: 3 },
 }));
 const native = jest.requireMock('expo-modules-core').__native;
@@ -100,6 +100,41 @@ beforeEach(() => {
   jest.clearAllMocks();
   native.drain.mockReset().mockResolvedValue([]);
   notifications.getPermissionsAsync.mockReset().mockResolvedValue({ granted: true });
+  notifications.getDevicePushTokenAsync
+    .mockReset()
+    .mockResolvedValue({ type: 'ios', data: 'b'.repeat(64) });
+});
+
+test('APNs echoes on token reads stop after registration, while a rotated token registers once', async () => {
+  let token = { type: 'ios', data: 'b'.repeat(64) };
+  notifications.getDevicePushTokenAsync.mockImplementation(async () => {
+    notifications.addPushTokenListener.mock.calls[0][0](token);
+    return token;
+  });
+  const f = fixture();
+  try {
+    await tick();
+    await tick();
+    expect(f.execute).toHaveBeenCalledTimes(2);
+    expect(notifications.getDevicePushTokenAsync).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 100; i++) notifications.addPushTokenListener.mock.calls[0][0](token);
+    await tick();
+    expect(f.execute).toHaveBeenCalledTimes(2);
+    expect(notifications.getDevicePushTokenAsync).toHaveBeenCalledTimes(2);
+    token = { type: 'ios', data: 'c'.repeat(64) };
+    notifications.addPushTokenListener.mock.calls[0][0](token);
+    await tick();
+    expect(f.execute).toHaveBeenCalledTimes(3);
+    expect(f.execute).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registration: expect.objectContaining({ channel: 'alert', token: token.data }),
+      }),
+    );
+    await retryBackground();
+    expect(f.execute).toHaveBeenCalledTimes(3);
+  } finally {
+    f.stop();
+  }
 });
 
 test('first alert approval during VoIP registration is registered without reopening the app', async () => {

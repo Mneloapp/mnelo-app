@@ -17,6 +17,9 @@ open class MneloNotificationService: UNNotificationServiceExtension {
     content = copy
     guard let event = copy.userInfo["mnelo"] as? [String: Any], event["v"] as? Int == 1,
       event["kind"] as? String == "message", let id = event["id"] as? String, UUID(uuidString: id) != nil else { finish(); return }
+    // Keep a new-message indicator even if the encrypted vault is unavailable.
+    // A successful local preview replaces it with the verified unread count.
+    copy.badge = NSNumber(value: max(1, copy.badge?.intValue ?? 0))
     let deadline = DispatchWorkItem { [weak self] in self?.finish() }
     self.deadline = deadline
     DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: deadline)
@@ -29,6 +32,9 @@ open class MneloNotificationService: UNNotificationServiceExtension {
         !title.isEmpty, !body.isEmpty, title.utf8.count <= 1000, body.utf8.count <= 2000 {
         self.content?.title = title
         self.content?.body = body
+        if let badge = preview["badge"] as? Int, badge >= 0, badge <= 99999 {
+          self.content?.badge = NSNumber(value: badge)
+        }
       }
       self.finish()
     }

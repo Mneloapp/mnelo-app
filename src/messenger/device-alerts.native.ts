@@ -17,7 +17,7 @@ Notifications.setNotificationHandler({
       };
     return {
       shouldPlaySound: true,
-      shouldSetBadge: false,
+      shouldSetBadge: true,
       shouldShowBanner: true,
       shouldShowList: true,
     };
@@ -96,18 +96,23 @@ export async function setDeviceBadge(count: number) {
   await Notifications.setBadgeCountAsync(count);
 }
 export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string) => void) {
+  const seen = new Set<string>();
   const consume = (response: Notifications.NotificationResponse | null) => {
     if (!response) return;
+    const responseKey = `${response.notification.request.identifier}:${response.notification.date}:${response.actionIdentifier}`;
+    if (seen.has(responseKey)) return;
+    seen.add(responseKey);
+    if (seen.size > 64) seen.delete(seen.values().next().value!);
     const remote = response.notification.request.content.data?.mnelo;
     if (remote && typeof remote === 'object' && 'kind' in remote && remote.kind === 'message') {
       listener('message', 'id' in remote && typeof remote.id === 'string' ? remote.id : undefined);
-      void Notifications.clearLastNotificationResponseAsync();
+      void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
       return;
     }
     if (!response.notification.request.identifier.startsWith(prefix)) return;
     const kind = alertKind(response.notification.request.content.data);
     if (kind) listener(kind, response.notification.request.identifier.slice(prefix.length));
-    void Notifications.clearLastNotificationResponseAsync();
+    void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
   };
   const subscription = Notifications.addNotificationResponseReceivedListener(consume);
   consume(Notifications.getLastNotificationResponse());

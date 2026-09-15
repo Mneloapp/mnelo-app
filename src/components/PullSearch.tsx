@@ -49,7 +49,11 @@ export function usePullSearch<Item>(value: string) {
       style: ui.flex,
       contentOffset: initialOffset,
       contentContainerStyle: { minHeight: viewport + headerHeight },
-      stickyHeaderIndices: locked ? [0] : [],
+      // Keep the native sticky wrapper mounted while focusing the input.
+      // Inserting it on focus remounts TextInput and reuses the initial scroll
+      // offset, dropping the keyboard and moving the header down on iOS.
+      stickyHeaderIndices: [0],
+      stickyHeaderHiddenOnScroll: !locked,
       scrollEventThrottle: 16,
       bounces: true,
       alwaysBounceVertical: true,

@@ -55,6 +55,8 @@ import { LocationMessage } from '../components/LocationMessage';
 import { ReplyQuote } from '../components/ReplyQuote';
 import { createMenuGesture, menuTouchPoint, type MenuTouch, type MenuPoint } from '../menu-gesture';
 import { MessageActions, type MessageAnchor } from '../components/MessageActions';
+import { PhotoAlbum } from '../components/PhotoAlbum';
+import { photoAlbums, timelineContains } from '../photo-albums';
 
 function MessageMedia({
   message,
@@ -335,11 +337,12 @@ export function ChatScreen() {
     networkMode: 'always',
   });
   const rows = messages.data?.pages.flat() ?? [];
+  const timeline = photoAlbums(rows);
   const { listRef, sent: didSend } = useSentMessageScroll(id, rows);
   const quoteScroll = useQuotedMessageScroll(
     id,
     listRef,
-    rows,
+    timeline,
     async (message) => Boolean(await engine.replyPreview(id, message)),
     () => messages.fetchNextPage({ cancelRefetch: false }),
     reduceMotion,
@@ -539,7 +542,7 @@ export function ChatScreen() {
             onScrollBeginDrag={quoteScroll.cancel}
             onScrollToIndexFailed={quoteScroll.onScrollToIndexFailed}
             onViewableItemsChanged={quoteScroll.onViewableItemsChanged}
-            data={rows}
+            data={timeline}
             scrollEnabled={!selected}
             inverted
             keyExtractor={(row) => row.id}
@@ -561,6 +564,26 @@ export function ChatScreen() {
                   onPress={() => {
                     Keyboard.dismiss();
                     setCallBack(item);
+                  }}
+                />
+              ) : item.photos ? (
+                <PhotoAlbum
+                  photos={item.photos}
+                  highlighted={timelineContains(item, quoteScroll.highlighted)}
+                  menuOpen={Boolean(selected)}
+                  onSelect={(message, anchor) => {
+                    Keyboard.dismiss();
+                    setSelectedAnchor(anchor);
+                    menuMoved.current = false;
+                    menuHeld.current = touchHeld.current;
+                    setSelected(message);
+                  }}
+                  onReply={(message) => {
+                    if (editing) {
+                      setText(editing.draft);
+                      setEditing(null);
+                    }
+                    setReply(message.id);
                   }}
                 />
               ) : (

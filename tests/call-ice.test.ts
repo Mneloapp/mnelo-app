@@ -49,7 +49,7 @@ test('first relay candidate starts setup before an unreachable fallback finishes
   expect(ready).toBe(false);
   f.peer.localDescription.sdp = sdp([relay]);
   f.emit('icecandidate');
-  await jest.advanceTimersByTimeAsync(200);
+  await jest.advanceTimersByTimeAsync(40);
   await operation;
   expect(ready).toBe(true);
   expect(f.peer.iceGatheringState).toBe('gathering');

@@ -110,6 +110,40 @@ test('a cancelled call cannot allocate media after delayed TURN credentials arri
   mesh.stop();
 });
 
+test('preparing an outgoing ring cannot allocate media after cancellation', async () => {
+  const own = { ...createKeys(randomBytes), name: 'Fixture' };
+  const remote = createKeys(randomBytes).key,
+    id = randomUUID();
+  let resolve!: (v: RTCConfiguration) => void,
+    creations = 0;
+  let call = { id, peer: remote, status: 'ringing' } as DeviceCall;
+  const mesh = new PeerMesh(
+    own,
+    { acceptsPeer: async () => true } as unknown as DeviceMessenger,
+    'ws://127.0.0.1:8084',
+    () => {
+      creations++;
+      throw new Error('Unexpected peer');
+    },
+    randomUUID,
+    () => {},
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  mesh.calls = { snapshot: () => call, stop: () => {}, stage: () => {} } as unknown as DeviceCalls;
+  const pending = mesh.prepareOutgoingMedia(remote, id, {
+    getTracks: () => [],
+  } as unknown as MediaStream);
+  call = { ...call, status: 'ended' };
+  mesh.endMedia(remote, id);
+  resolve({ iceServers: [] });
+  await assert.rejects(pending, /CALL_CANCELLED/);
+  assert.equal(creations, 0);
+  mesh.stop();
+});
+
 test('unknown offers require a verified directory match; blocked/spoofed introductions never become peers', async () => {
   const { signSignal } = await import('../../src/messenger/signaling');
   const original = globalThis.WebSocket;
@@ -290,11 +324,25 @@ test('call offer/answer connects using the first relay paths while slower candid
     stop: () => {},
     failed: async () => assert.fail('call failed'),
   } as unknown as DeviceCalls;
-  a.calls = controller;
+  let callerStatus = 'ringing';
+  a.calls = {
+    ...controller,
+    snapshot: () => ({ id, peer: bob.key, incoming: false, local: stream, status: callerStatus }),
+    mediaAllowed: () => callerStatus === 'connecting',
+  } as unknown as DeviceCalls;
   b.calls = controller;
   a.callSignaling = async (_peer, envelope) => b.receiveCallSignal(alice.key, envelope);
   b.callSignaling = async (_peer, envelope) => a.receiveCallSignal(bob.key, envelope);
   try {
+    await a.prepareOutgoingMedia(bob.key, id, stream);
+    assert.equal(ap.localDescription?.type, 'offer', 'caller gathers while ringing');
+    assert.equal(
+      Boolean(bp.remoteDescription),
+      false,
+      'no offer reaches recipient before acceptance',
+    );
+    assert.equal(Boolean(ap.remoteDescription), false, 'no media connection before acceptance');
+    callerStatus = 'connecting';
     await a.startMedia(bob.key, id, stream);
     assert.equal(
       Boolean(ap.remoteDescription),

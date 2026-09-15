@@ -65,6 +65,7 @@ export class PeerMesh implements PeerTransport {
   calls: DeviceCalls | null = null;
   wake: DeviceWake | null = null;
   private videoReplacement = Promise.resolve();
+  private preparedMedia = new Map<string, { id: string; ready: Promise<RTCPeerConnection> }>();
   private mediaLinks = new Map<
     string,
     {
@@ -642,7 +643,7 @@ export class PeerMesh implements PeerTransport {
     link.peer.close();
     this.changed();
   }
-  private async createMedia(remote: string, id: string, stream: MediaStream) {
+  private async createMedia(remote: string, id: string, stream: MediaStream, preparing = false) {
     if (this.mediaLinks.has(remote) || this.pendingMedia.has(remote) || this.stopped)
       throw new Error('CALL_BUSY');
     this.pendingMedia.set(remote, id);
@@ -657,16 +658,27 @@ export class PeerMesh implements PeerTransport {
         !accepted ||
         this.pendingMedia.get(remote) !== id ||
         call?.id !== id ||
-        !this.calls?.mediaAllowed(remote, id)
+        !(
+          this.calls?.mediaAllowed(remote, id) ||
+          (preparing &&
+            !call.group &&
+            !call.incoming &&
+            call.peer === remote &&
+            call.status === 'ringing' &&
+            call.local === stream)
+        )
       )
         throw new Error('CALL_CANCELLED');
       peer = this.factory(configuration);
     } finally {
       if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);
     }
-    const deadline = setTimeout(() => {
-      void this.calls?.failed(remote, id);
-    }, 30_000);
+    const deadline = setTimeout(
+      () => {
+        void this.calls?.failed(remote, id);
+      },
+      preparing ? 65_000 : 30_000,
+    );
     this.mediaLinks.set(remote, { peer, id, deadline });
     this.calls?.stage('MEDIA_TRACKS');
     const output = this.calls?.outputStream() ?? stream;
@@ -686,7 +698,7 @@ export class PeerMesh implements PeerTransport {
         connectionTiming('MEDIA_TRANSPORT_CONNECTED');
         const link = this.mediaLinks.get(remote)!;
         link.stopStats ??= observeMediaTiming(peer, Boolean(stream.getVideoTracks().length));
-        clearTimeout(deadline);
+        clearTimeout(link.deadline);
         this.calls?.connected(remote, id);
       } else if (peer.connectionState === 'failed') void this.calls?.failed(remote, id);
     });
@@ -772,7 +784,35 @@ export class PeerMesh implements PeerTransport {
     else this.sendSignal({ type: 'signal', to: remote, envelope });
   }
   async startMedia(remote: string, id: string, stream: MediaStream) {
-    const peer = await this.createMedia(remote, id, stream);
+    const prepared = this.preparedMedia.get(remote);
+    const peer =
+      prepared?.id === id ? await prepared.ready : await this.createOffer(remote, id, stream);
+    if (this.mediaLinks.get(remote)?.peer !== peer || !this.calls?.mediaAllowed(remote, id)) return;
+    this.preparedMedia.delete(remote);
+    const link = this.mediaLinks.get(remote)!;
+    clearTimeout(link.deadline);
+    link.deadline = setTimeout(() => void this.calls?.failed(remote, id), 30_000);
+    this.publishMediaInBackground(remote, id, peer, 'offer');
+  }
+  async prepareOutgoingMedia(remote: string, id: string, stream: MediaStream) {
+    if (
+      this.preparedMedia.has(remote) ||
+      this.mediaLinks.has(remote) ||
+      this.pendingMedia.has(remote)
+    )
+      return;
+    const prepared = { id, ready: this.createOffer(remote, id, stream, true) };
+    this.preparedMedia.set(remote, prepared);
+    try {
+      await prepared.ready;
+    } catch (error) {
+      if (this.preparedMedia.get(remote) === prepared) this.preparedMedia.delete(remote);
+      this.endMedia(remote, id);
+      throw error;
+    }
+  }
+  private async createOffer(remote: string, id: string, stream: MediaStream, preparing = false) {
+    const peer = await this.createMedia(remote, id, stream, preparing);
     this.attachMediaState(
       remote,
       id,
@@ -780,7 +820,7 @@ export class PeerMesh implements PeerTransport {
     );
     this.calls?.stage('MEDIA_CREATE_OFFER');
     await peer.setLocalDescription(await peer.createOffer());
-    this.publishMediaInBackground(remote, id, peer, 'offer');
+    return peer;
   }
   async receiveCallSignal(sender: string, envelope: unknown) {
     const signal = readSignal(envelope, this.own.key);
@@ -911,6 +951,7 @@ export class PeerMesh implements PeerTransport {
     return next;
   }
   endMedia(remote: string, id: string) {
+    if (this.preparedMedia.get(remote)?.id === id) this.preparedMedia.delete(remote);
     if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);
     const link = this.mediaLinks.get(remote);
     if (!link || link.id !== id) return;
@@ -924,6 +965,7 @@ export class PeerMesh implements PeerTransport {
     this.stopped = true;
     this.pendingLinks.clear();
     this.pendingMedia.clear();
+    this.preparedMedia.clear();
     this.ready = false;
     if (this.retry) clearTimeout(this.retry);
     if (this.poll) clearInterval(this.poll);

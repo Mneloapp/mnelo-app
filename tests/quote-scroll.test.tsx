@@ -55,3 +55,26 @@ test('missing or cross-chat quote never scrolls or loads unrelated history', asy
   expect(hook.result.current.unavailable).toBe(true);
   expect(more).not.toHaveBeenCalled();
 });
+
+test('a quote to a photo inside an album scrolls to and highlights that album without loading extra pages', async () => {
+  jest.useFakeTimers();
+  const scrollToIndex = jest.fn(),
+    more = jest.fn();
+  const list = { current: { scrollToIndex } as unknown as FlatList<LocalMessage> };
+  const album = { ...row('first', 10), photos: [row('first', 10), row('second', 11)] };
+  const hook = await renderHook(() =>
+    useQuotedMessageScroll('chat', list, [album], async () => true, more, false),
+  );
+  await act(() => hook.result.current.jump('second'));
+  await act(() => jest.runOnlyPendingTimers());
+  expect(scrollToIndex).toHaveBeenCalledWith({ index: 0, viewPosition: 0.5, animated: true });
+  expect(more).not.toHaveBeenCalled();
+  await act(() =>
+    hook.result.current.onViewableItemsChanged({
+      viewableItems: [{ key: 'first', item: album, index: 0, isViewable: true }],
+    }),
+  );
+  expect(hook.result.current.highlighted).toBe('second');
+  await hook.unmount();
+  jest.useRealTimers();
+});

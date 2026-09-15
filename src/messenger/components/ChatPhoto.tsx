@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -31,6 +32,8 @@ export function ChatPhoto({
   source,
   size,
   onDimensions,
+  overlay,
+  accessibilityLabel,
 }: {
   uri: string;
   name: string;
@@ -42,6 +45,8 @@ export function ChatPhoto({
   source?: PhotoSource;
   size?: { width: number; height: number };
   onDimensions?: (size: { width: number; height: number }) => void;
+  overlay?: ReactNode;
+  accessibilityLabel?: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const [ratio, setRatio] = useState(1);
@@ -68,7 +73,7 @@ export function ChatPhoto({
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={t('messenger.openPhoto')}
+        accessibilityLabel={accessibilityLabel ?? t('messenger.openPhoto')}
         onPress={() => setOpen(true)}
         onLongPress={onLongPress}
         delayLongPress={450}
@@ -92,6 +97,7 @@ export function ChatPhoto({
               : [styles.thumbnail, { aspectRatio: square ? 1 : ratio }, square && styles.square]
           }
         />
+        {overlay}
       </Pressable>
       {open && source && (
         <PhotoGallery source={source} name={name} onClose={() => setOpen(false)} />

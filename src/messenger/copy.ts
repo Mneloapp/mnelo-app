@@ -128,6 +128,7 @@ export const messengerEn = {
   'background_permission-required': 'Allow notifications to receive new-message alerts.',
   notifications: 'Notifications',
   notificationNewMessage: 'New message',
+  morePhotos: '{{count}} more photos',
   notificationHint:
     'Choose whether names and message previews appear on the lock screen in your device settings.',
   notificationEnable: 'Enable device alerts',
@@ -425,6 +426,7 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
     'ახალი შეტყობინებების სიგნალისთვის ჩართეთ შეტყობინებების ნებართვა.',
   notifications: 'შეტყობინებები',
   notificationNewMessage: 'ახალი შეტყობინება',
+  morePhotos: 'კიდევ {{count}} ფოტო',
   notificationHint:
     'მოწყობილობის პარამეტრებში აირჩიე, გამოჩნდეს თუ არა სახელი და შეტყობინების ტექსტი ჩაკეტილ ეკრანზე.',
   notificationEnable: 'მოწყობილობის შეტყობინებების ჩართვა',

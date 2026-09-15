@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { directChatId } from './crypto';
 import type { DeliveryAtomic } from './delivery/journal';
 import { deliveryContent } from './delivery/application';
+import type { LocalDatabase } from './model';
 
 export type NotificationPreview = {
   id: string;
@@ -41,6 +42,15 @@ export async function readNotificationPreview(
   id: string,
   incoming?: { sender: string; body: string },
 ): Promise<NotificationPreview | null> {
+  return atomic((db) => readPreview(db, own, id, incoming));
+}
+
+async function readPreview(
+  db: LocalDatabase,
+  own: string,
+  id: string,
+  incoming?: { sender: string; body: string },
+): Promise<NotificationPreview | null> {
   if (!z.string().uuid().safeParse(id).success) return null;
   let parsed: ReturnType<typeof deliveryContent.safeParse> | null = null;
   try {
@@ -48,78 +58,76 @@ export async function readNotificationPreview(
   } catch {
     return null;
   }
-  return atomic(async (db) => {
-    if ((await db.all('SELECT id FROM forgotten_messages WHERE id=?', id)).length) return null;
-    const stored = (
-      await db.all<{
-        sender: string;
-        chat_id: string;
-        kind: string;
-        body: string;
-        mime: string | null;
-      }>(
-        'SELECT m.sender,m.chat_id,m.kind,m.body,f.mime FROM messages m LEFT JOIN media f ON f.id=m.media_id WHERE m.id=?',
-        id,
+  if ((await db.all('SELECT id FROM forgotten_messages WHERE id=?', id)).length) return null;
+  const stored = (
+    await db.all<{
+      sender: string;
+      chat_id: string;
+      kind: string;
+      body: string;
+      mime: string | null;
+    }>(
+      'SELECT m.sender,m.chat_id,m.kind,m.body,f.mime FROM messages m LEFT JOIN media f ON f.id=m.media_id WHERE m.id=?',
+      id,
+    )
+  )[0];
+  if (stored?.kind === 'deleted' || stored?.sender === own) return null;
+  const value = parsed?.success ? parsed.data : null;
+  const packet = value?.packet.type === 'message' && value.packet.id === id ? value.packet : null;
+  if (!stored && (!packet || !incoming)) return null;
+  const sender = stored?.sender ?? incoming!.sender;
+  if (sender === own || (stored && incoming && stored.sender !== incoming.sender)) return null;
+  const contact = (
+    await db.all<{ name: string; blocked: number; phone: string | null }>(
+      'SELECT c.name,c.blocked,n.phone FROM contacts c LEFT JOIN contact_numbers n ON n.public_key=c.public_key WHERE c.public_key=?',
+      sender,
+    )
+  )[0];
+  if (
+    !contact ||
+    contact.blocked ||
+    (!stored && (!contact.phone || contact.phone !== value?.phone))
+  )
+    return null;
+  const chat = stored?.chat_id ?? packet!.chat;
+  if (chat !== directChatId(own, sender)) {
+    const group = (
+      await db.all<{ left_group: number }>(
+        "SELECT left_group FROM chats WHERE id=? AND kind='group'",
+        chat,
       )
     )[0];
-    if (stored?.kind === 'deleted' || stored?.sender === own) return null;
-    const value = parsed?.success ? parsed.data : null;
-    const packet = value?.packet.type === 'message' && value.packet.id === id ? value.packet : null;
-    if (!stored && (!packet || !incoming)) return null;
-    const sender = stored?.sender ?? incoming!.sender;
-    if (sender === own || (stored && incoming && stored.sender !== incoming.sender)) return null;
-    const contact = (
-      await db.all<{ name: string; blocked: number; phone: string | null }>(
-        'SELECT c.name,c.blocked,n.phone FROM contacts c LEFT JOIN contact_numbers n ON n.public_key=c.public_key WHERE c.public_key=?',
-        sender,
-      )
-    )[0];
+    const members = await db.all<{ public_key: string }>(
+      'SELECT public_key FROM members WHERE chat_id=?',
+      chat,
+    );
     if (
-      !contact ||
-      contact.blocked ||
-      (!stored && (!contact.phone || contact.phone !== value?.phone))
+      !group ||
+      group.left_group ||
+      !members.some((row) => row.public_key === own) ||
+      !members.some((row) => row.public_key === sender)
     )
       return null;
-    const chat = stored?.chat_id ?? packet!.chat;
-    if (chat !== directChatId(own, sender)) {
-      const group = (
-        await db.all<{ left_group: number }>(
-          "SELECT left_group FROM chats WHERE id=? AND kind='group'",
-          chat,
-        )
-      )[0];
-      const members = await db.all<{ public_key: string }>(
-        'SELECT public_key FROM members WHERE chat_id=?',
-        chat,
-      );
-      if (
-        !group ||
-        group.left_group ||
-        !members.some((row) => row.public_key === own) ||
-        !members.some((row) => row.public_key === sender)
-      )
-        return null;
-    }
-    const change = (
-      await db.all<{ action: string; body: string }>(
-        'SELECT action,body FROM message_changes WHERE message_id=? AND peer=? AND chat=?',
-        id,
-        sender,
-        chat,
-      )
-    )[0];
-    if (change?.action === 'delete') return null;
-    return {
+  }
+  const change = (
+    await db.all<{ action: string; body: string }>(
+      'SELECT action,body FROM message_changes WHERE message_id=? AND peer=? AND chat=?',
       id,
-      chat,
       sender,
-      phone: contact.phone ?? '',
-      name: contact.name,
-      kind: stored?.kind ?? packet!.kind,
-      body: change?.action === 'edit' ? change.body : (stored?.body ?? packet!.body),
-      mime: stored?.mime ?? value?.attachment?.mime ?? '',
-    };
-  });
+      chat,
+    )
+  )[0];
+  if (change?.action === 'delete') return null;
+  return {
+    id,
+    chat,
+    sender,
+    phone: contact.phone ?? '',
+    name: contact.name,
+    kind: stored?.kind ?? packet!.kind,
+    body: change?.action === 'edit' ? change.body : (stored?.body ?? packet!.body),
+    mime: stored?.mime ?? value?.attachment?.mime ?? '',
+  };
 }
 
 export async function availableNotificationPreview(
@@ -144,4 +152,36 @@ export async function availableNotificationPreview(
     if (preview) return preview;
   }
   return null;
+}
+
+// Count both visible unread history and verified notification-only inbox items
+// in one vault transaction, so projection cannot count a message twice.
+export function notificationBadgeCount(atomic: DeliveryAtomic, own: string) {
+  return atomic(async (db) => {
+    const [stored] = await db.all<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM messages WHERE is_read=0 AND
+      ((kind!='call' AND sender!=?) OR (kind='call' AND body LIKE '%:incoming:missed'))`,
+      own,
+    );
+    const pending = new Set<string>();
+    for (let offset = 0; ; offset += 40) {
+      const rows = await db.all<{ sender: string; body: string }>(
+        'SELECT sender,body FROM signal_inbox WHERE applied=0 ORDER BY sender,id LIMIT 40 OFFSET ?',
+        offset,
+      );
+      for (const row of rows) {
+        let id: unknown;
+        try {
+          id = JSON.parse(row.body)?.packet?.id;
+        } catch {
+          continue;
+        }
+        if (typeof id !== 'string' || pending.has(id)) continue;
+        if ((await db.all('SELECT id FROM messages WHERE id=?', id)).length) continue;
+        if (await readPreview(db, own, id, row)) pending.add(id);
+      }
+      if (rows.length < 40) break;
+    }
+    return Math.min(99999, (stored?.count ?? 0) + pending.size);
+  });
 }

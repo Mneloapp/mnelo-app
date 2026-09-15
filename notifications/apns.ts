@@ -22,6 +22,7 @@ export function apnsPayload(event: WakeEvent, now = Date.now(), options?: PushDe
         aps: {
           alert: { title: 'Mnelo', body: options?.missedCall ? 'Missed call' : 'New message' },
           sound: 'default',
+          badge: 1,
           ...(!options?.missedCall ? { 'mutable-content': 1 } : {}),
         },
         mnelo: { v: 1, ...event },

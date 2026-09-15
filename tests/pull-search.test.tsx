@@ -24,12 +24,14 @@ test('even an empty list has native scroll travel for its search header; later l
   expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
   await act(() => result.current.focus(true));
   expect(result.current.scrollProps.stickyHeaderIndices).toEqual([0]);
+  expect(result.current.scrollProps.stickyHeaderHiddenOnScroll).toBe(false);
   await rerender({ value: 'Contact' });
   await act(() => result.current.focus(false));
   expect(result.current.locked).toBe(true);
   await rerender({ value: '' });
   await act(() => result.current.close());
-  expect(result.current.scrollProps.stickyHeaderIndices).toEqual([]);
+  expect(result.current.scrollProps.stickyHeaderIndices).toEqual([0]);
+  expect(result.current.scrollProps.stickyHeaderHiddenOnScroll).toBe(true);
   expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 92 }));
 });
 test('search is a persistent header with no animated height or border separating it from the list', async () => {

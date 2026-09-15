@@ -4,9 +4,13 @@ import {
   showDeviceAlert,
   requestAlerts,
   enableAlertsByDefault,
+  observeAlertTaps,
 } from '@/messenger/device-alerts.native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponseAsync: jest.fn(async () => {}),
   getPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
   requestPermissionsAsync: jest.fn(async () => undefined),
   scheduleNotificationAsync: jest.fn(async () => 'notification-id'),
@@ -123,4 +127,28 @@ test('approved local notification shows the resolved caller and text without reg
     trigger: null,
   });
   expect(Notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
+});
+
+test('a cached cold-launch response and its live replay open only one destination', () => {
+  const response = {
+    actionIdentifier: 'default',
+    notification: {
+      date: 123,
+      request: {
+        identifier: 'remote-id',
+        content: {
+          data: { mnelo: { v: 1, kind: 'message', id: 'd9ec43ef-49db-4510-9f84-2f0da9e7bceb' } },
+        },
+      },
+    },
+  } as unknown as Notifications.NotificationResponse;
+  jest.mocked(Notifications.getLastNotificationResponse).mockReturnValueOnce(response);
+  const open = jest.fn();
+  const stop = observeAlertTaps(open);
+  const receive = jest.mocked(Notifications.addNotificationResponseReceivedListener).mock
+    .calls[0]![0];
+  receive(response);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith('message', 'd9ec43ef-49db-4510-9f84-2f0da9e7bceb');
+  stop();
 });

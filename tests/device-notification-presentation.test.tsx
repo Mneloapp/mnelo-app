@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { AppState } from 'react-native';
 import { DeviceNotifications } from '@/messenger/DeviceNotifications';
 import type { IncomingMessage } from '@/messenger/engine';
+jest.mock('@/messenger/useNotificationNavigation', () => ({ useNotificationNavigation: () => {} }));
 const mockPreview = jest.fn(
   async (): Promise<{ title: string; body: string; chat: string } | null> => null,
 );
@@ -64,4 +65,26 @@ test('foreground message presents its locally resolved sender and body, and open
     pathname: '/chat/[id]',
     params: { id: 'other' },
   });
+});
+
+test('a delayed contact lookup shows no generic banner and cannot replace a newer message', async () => {
+  mockPath = '/chat/open';
+  Object.defineProperty(AppState, 'currentState', { value: 'active', configurable: true });
+  let resolveOld!: (value: { title: string; body: string; chat: string }) => void;
+  mockPreview.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  await render(<DeviceNotifications />);
+  await act(async () => mockReceive({ id: 'older', chat: 'other', type: 'message' }));
+  expect(screen.queryByText('New message')).toBeNull();
+  expect(screen.queryByText('Open')).toBeNull();
+  mockPreview.mockResolvedValueOnce({ title: 'New sender', body: 'New text', chat: 'new' });
+  await act(async () => mockReceive({ id: 'newer', chat: 'new', type: 'message' }));
+  await screen.findByText('New text');
+  await act(async () => resolveOld({ title: 'Old sender', body: 'Old text', chat: 'other' }));
+  expect(screen.queryByText('Old text')).toBeNull();
+  expect(screen.getByText('New text')).toBeOnTheScreen();
 });

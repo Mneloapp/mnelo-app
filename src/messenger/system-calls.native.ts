@@ -70,6 +70,7 @@ export function observeSystemCalls(
   let ringing: string | null = null;
   const identifying = new Set<string>();
   const registered = new Map<string, string>();
+  let observedAlertToken: string | null = null;
   let registering: Promise<void> | null = null;
   let registerAgain = false;
   async function registerOnce() {
@@ -83,8 +84,10 @@ export function observeSystemCalls(
       if (status.voipToken) entries.push({ channel: 'voip', token: status.voipToken });
       if (allowed) {
         const token = await Notifications.getDevicePushTokenAsync();
-        if ((token.type === 'ios' || token.type === 'android') && typeof token.data === 'string')
+        if ((token.type === 'ios' || token.type === 'android') && typeof token.data === 'string') {
+          observedAlertToken = token.type + ':' + token.data;
           entries.push({ channel: 'alert', token: token.data });
+        }
       }
       for (const entry of entries) {
         if (stopped) return;
@@ -296,8 +299,15 @@ export function observeSystemCalls(
       void drain().catch(() => undefined);
     }
   });
-  const tokens = Notifications.addPushTokenListener(() => {
-    registered.delete('alert');
+  const tokens = Notifications.addPushTokenListener((token) => {
+    if ((token.type !== 'ios' && token.type !== 'android') || typeof token.data !== 'string')
+      return;
+    const value = token.type + ':' + token.data;
+    // iOS emits this event when getDevicePushTokenAsync registers with APNs,
+    // even when the token is unchanged. Re-querying every echo creates a loop
+    // that continuously re-registers and starves message/call HTTP requests.
+    if (observedAlertToken === value) return;
+    observedAlertToken = value;
     void register().catch(() => undefined);
   });
   void register().catch(() => undefined);

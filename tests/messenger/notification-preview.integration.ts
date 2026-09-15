@@ -141,6 +141,7 @@ test('notification sends a durable delivery receipt while app is closed, without
       chat,
       title: 'ჩემი ალისა ❤️',
       body: 'გამარჯობა 👋 პირადი ტექსტი',
+      badge: 1,
     });
     assert.equal((await be.messages(chat)).length, 0, 'extension never projects or marks read');
     assert.ok(
@@ -179,7 +180,11 @@ test('notification sends a durable delivery receipt while app is closed, without
     const second = await ae.send(chat, 'Receipt will retry');
     for (let i = 0; i < 4; i++) await alice.pump.tick();
     dropReceipt = true;
-    assert.ok(await session.preview(second));
+    assert.equal(
+      (await session.preview(second))?.badge,
+      2,
+      'unprojected notifications contribute to the icon badge',
+    );
     const sealed = extension.sql.prepare('SELECT wire FROM signal_outbox WHERE uploaded=0').all();
     assert.ok(sealed.some((row) => row.wire));
     const failedState = extension.sql.prepare('SELECT state FROM signal_state').get()?.state;

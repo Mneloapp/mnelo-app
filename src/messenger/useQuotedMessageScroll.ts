@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import type { FlatList, ViewToken } from 'react-native';
 import type { LocalMessage } from './model';
+import { timelineContains } from './photo-albums';
 
 type Pages = { data?: { pages: LocalMessage[][] } | undefined; hasNextPage: boolean };
 export function useQuotedMessageScroll(
@@ -33,10 +34,10 @@ export function useQuotedMessageScroll(
     };
   }, [chat]);
   function scroll() {
-    const index = latest.current.rows.findIndex((row) => row.id === pending.current);
+    const index = latest.current.rows.findIndex((row) => timelineContains(row, pending.current));
     if (index >= 0) list.current?.scrollToIndex({ index, viewPosition: 0.5, animated: !reduced });
   }
-  const index = rows.findIndex((row) => row.id === target);
+  const index = rows.findIndex((row) => timelineContains(row, target));
   useEffect(() => {
     if (index < 0 || !target) return;
     pending.current = target;
@@ -47,7 +48,8 @@ export function useQuotedMessageScroll(
   }, [index, target, list, reduced]);
   const visible = useCallback(({ viewableItems }: { viewableItems: ViewToken<LocalMessage>[] }) => {
     const id = pending.current;
-    if (!id || !viewableItems.some((row) => row.isViewable && row.item.id === id)) return;
+    if (!id || !viewableItems.some((row) => row.isViewable && timelineContains(row.item, id)))
+      return;
     pending.current = null;
     setTarget(null);
     setHighlighted(id);
@@ -95,12 +97,12 @@ export function useQuotedMessageScroll(
           return;
         }
         let loaded = latest.current.rows;
-        while (!loaded.some((row) => row.id === id)) {
+        while (!loaded.some((row) => timelineContains(row, id))) {
           const before = loaded.at(-1)?.sequence;
           const page = await latest.current.more();
           if (ticket !== request.current.serial) return;
           loaded = page.data?.pages.flat() ?? [];
-          if (loaded.some((row) => row.id === id)) break;
+          if (loaded.some((row) => timelineContains(row, id))) break;
           if (!page.hasNextPage || loaded.at(-1)?.sequence === before) {
             setUnavailable(true);
             return;

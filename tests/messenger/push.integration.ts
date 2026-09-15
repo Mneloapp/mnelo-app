@@ -123,6 +123,11 @@ test('APNs uses a valid ES256 provider JWT, correct topics, zero retention and n
     mnelo: { v: 1, kind: 'call', id, video: true, expires: now + 60000 },
   });
   assert.ok(JSON.stringify(apnsPayload({ kind: 'message', id })).length < 512);
+  assert.equal(
+    (apnsPayload({ kind: 'message', id }).aps as { badge: number }).badge,
+    1,
+    'OS can show an unread indicator without running the app',
+  );
   assert.equal(JSON.parse(requests[1]!.body).aps['mutable-content'], 1);
   assert.equal(JSON.parse(requests[0]!.body).aps['mutable-content'], undefined);
   const expiresAt = now + 120000;

@@ -221,3 +221,85 @@ test('ring timeout distinguishes incoming missed calls from outgoing unanswered 
     jest.useRealTimers();
   }
 });
+
+test('a presented incoming call acknowledges once, while invite delivery alone does not', async () => {
+  const ringingReceipt = jest.fn(async () => {});
+  const f = runtime({ send: jest.fn(async () => {}), ringingReceipt });
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    expect(ringingReceipt).not.toHaveBeenCalled();
+    await f.calls.confirmIncoming('wrong-id');
+    expect(ringingReceipt).not.toHaveBeenCalled();
+    await Promise.all([
+      f.calls.confirmIncoming('incoming-id'),
+      f.calls.confirmIncoming('incoming-id'),
+    ]);
+    expect(ringingReceipt).toHaveBeenCalledTimes(1);
+    expect(ringingReceipt).toHaveBeenCalledWith('peer', 'incoming-id');
+    expect(f.calls.snapshot()?.status).toBe('incoming');
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('ringing receipts bind to the current outgoing peer and never undo answer, end, or a later call', async () => {
+  const f = runtime({ send: jest.fn(async () => {}) });
+  f.mesh.startMedia = jest.fn(async () => {});
+  try {
+    await f.calls.start('peer', 'voice');
+    expect(f.calls.snapshot()?.ringingConfirmed).toBeFalsy();
+    await f.calls.receiveRingingReceipt('other-peer', 'outgoing-id');
+    await f.calls.receiveRingingReceipt('peer', 'other-call');
+    expect(f.calls.snapshot()?.ringingConfirmed).toBeFalsy();
+    await f.calls.receiveRingingReceipt('peer', 'outgoing-id');
+    expect(f.calls.snapshot()?.ringingConfirmed).toBe(true);
+    expect(f.calls.snapshot()?.connectedAt).toBeUndefined();
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'outgoing-id',
+      action: 'accept',
+      media: 'voice',
+    });
+    await f.calls.receiveRingingReceipt('peer', 'outgoing-id');
+    expect(f.calls.snapshot()?.status).toBe('connecting');
+    await f.calls.end();
+    await f.calls.receiveRingingReceipt('peer', 'outgoing-id');
+    expect(f.calls.snapshot()?.status).toBe('ended');
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'new-call',
+      action: 'invite',
+      media: 'voice',
+    });
+    await f.calls.receiveRingingReceipt('peer', 'outgoing-id');
+    expect(f.calls.snapshot()?.ringingConfirmed).toBeFalsy();
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('failed receipt persistence can retry and a dismissed incoming call never acknowledges', async () => {
+  const ringingReceipt = jest.fn(async () => {}).mockRejectedValueOnce(new Error('STORAGE_BUSY'));
+  const f = runtime({ send: jest.fn(async () => {}), ringingReceipt });
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    await expect(f.calls.confirmIncoming('incoming-id')).rejects.toThrow('STORAGE_BUSY');
+    await f.calls.confirmIncoming('incoming-id');
+    expect(ringingReceipt).toHaveBeenCalledTimes(2);
+    await f.calls.end();
+    await f.calls.confirmIncoming('incoming-id');
+    expect(ringingReceipt).toHaveBeenCalledTimes(2);
+  } finally {
+    f.calls.stop();
+  }
+});

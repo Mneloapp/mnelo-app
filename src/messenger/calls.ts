@@ -16,8 +16,12 @@ import type { ScreenCapture } from './screen-capture';
 export type CallMediaState = { sharing: boolean; muted: boolean; camera: boolean };
 
 export type CallControl = Extract<Packet, { type: 'call' }>;
-export type CallSignaling = { send(peer: string, control: CallControl): Promise<void> };
+export type CallSignaling = {
+  send(peer: string, control: CallControl): Promise<void>;
+  ringingReceipt?(peer: string, id: string): Promise<void>;
+};
 export type CallParticipant = {
+  ringingConfirmed?: boolean;
   peer: string;
   status: 'ringing' | 'connecting' | 'active' | 'left' | 'declined' | 'failed';
   remote: MediaStream | null;
@@ -26,6 +30,7 @@ export type CallParticipant = {
   sharing: boolean;
 };
 export type DeviceCall = {
+  ringingConfirmed?: boolean;
   connectedAt?: number;
   endedAt?: number;
   screen?: MediaStream | null;
@@ -51,6 +56,43 @@ export class DeviceCalls {
   private replying = new Set<string>();
   private listeners = new Set<() => void>();
   private controls = new Set<(value: CallControl) => void>();
+  private incomingReceipt: { id: string; promise: Promise<void> } | null = null;
+  // Called only after the incoming UI was presented (CallKit/Telecom success
+  // event, or the focused foreground call screen without a native provider).
+  confirmIncoming(id: string): Promise<void> {
+    const call = this.value;
+    if (!call?.incoming || call.id !== id || call.status !== 'incoming') return Promise.resolve();
+    if (this.incomingReceipt?.id === id) return this.incomingReceipt.promise;
+    const promise = (async () => {
+      // Reuse the existing authenticated ACK packet with the call UUID. Older
+      // clients safely ignore an ACK with no message delivery; invites stay compatible.
+      if (this.signaling) await this.signaling.ringingReceipt?.(call.peer, id);
+      else if (!this.mesh.send(call.peer, { type: 'ack', id })) throw new Error('CALL_UNAVAILABLE');
+    })();
+    this.incomingReceipt = { id, promise };
+    void promise.catch(() => {
+      if (this.incomingReceipt?.promise === promise) this.incomingReceipt = null;
+    });
+    return promise;
+  }
+  async receiveRingingReceipt(peer: string, id: string) {
+    if (!(await this.engine.acceptsPeer(peer))) return;
+    const call = this.value;
+    if (!call || call.id !== id || call.incoming || call.status !== 'ringing') return;
+    if (call.group) {
+      if (!(await this.acceptsGroup(call.group)) || this.value !== call) return;
+      const person = call.participants?.find((value) => value.peer === peer);
+      if (!person || person.status !== 'ringing' || person.ringingConfirmed) return;
+      this.update({
+        ...call,
+        participants: call.participants!.map((value) =>
+          value.peer === peer ? { ...value, ringingConfirmed: true } : value,
+        ),
+      });
+    } else if (call.peer === peer && !call.ringingConfirmed) {
+      this.update({ ...call, ringingConfirmed: true });
+    }
+  }
   observeControl(listener: (value: CallControl) => void) {
     this.controls.add(listener);
     return () => {

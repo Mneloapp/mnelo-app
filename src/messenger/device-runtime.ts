@@ -156,6 +156,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
       randomUUID,
       delivery
         ? {
+            ringingReceipt: (peer, id) => delivery.sendRingingReceipt(peer, id),
             send: async (peer, control) => {
               if (!(await delivery.sendDurable(peer, control))) throw new Error('CALL_UNAVAILABLE');
             },
@@ -169,6 +170,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
         void control.track().catch(() => undefined);
       });
       delivery.calls = {
+        ringingReceipt: (peer, id) => calls.receiveRingingReceipt(peer, id),
         recover: () => control.recover(),
         control: (peer, packet, context) => control.receive(peer, packet, context),
         signal: (peer, envelope) => mesh.receiveCallSignal(peer, envelope),

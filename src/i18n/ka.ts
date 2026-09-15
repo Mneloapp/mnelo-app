@@ -414,6 +414,7 @@ export const ka = {
     remoteVideo: 'მოსაუბრის ვიდეო',
     localVideo: 'შენი კამერის გამოსახულება',
     event: '{{media}} · {{status}}',
+    calling: 'ზარი იგზავნება…',
     ringing: 'ირეკება…',
     incoming: 'შემომავალი ზარი',
     accept: 'მიღება',

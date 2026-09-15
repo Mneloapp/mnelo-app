@@ -65,6 +65,7 @@ function fixture(
       changed();
     }),
     mute: jest.fn(),
+    confirmIncoming: jest.fn(async () => {}),
   };
   const stop = observeSystemCalls(
     calls as unknown as DeviceCalls,
@@ -75,8 +76,9 @@ function fixture(
     status: DeviceCall['status'],
     media: DeviceCall['media'] = 'voice',
     incoming = true,
+    ringingConfirmed = false,
   ) => {
-    value = { id, incoming, media, status, local: {} } as DeviceCall;
+    value = { id, incoming, media, status, ringingConfirmed, local: {} } as DeviceCall;
     changed();
   };
   return {
@@ -314,14 +316,17 @@ test('a delayed name lookup never renames a call that already ended', async () =
   }
 });
 
-test('outgoing ringback starts once and stops on answer, never playing for incoming calls', async () => {
+test('outgoing ringback waits for recipient confirmation and stops on answer, never playing for incoming calls', async () => {
   const f = fixture();
   try {
     await tick();
     f.update('ringing', 'voice', false);
     await tick();
+    expect(native.ringback).not.toHaveBeenCalled();
+    f.update('ringing', 'voice', false, true);
+    await tick();
     expect(native.ringback).toHaveBeenLastCalledWith(id, true);
-    f.update('ringing', 'voice', false);
+    f.update('ringing', 'voice', false, true);
     await tick();
     expect(native.ringback).toHaveBeenCalledTimes(1);
     f.update('connecting', 'voice', false);
@@ -344,5 +349,62 @@ test('outgoing ringback starts once and stops on answer, never playing for incom
     expect(native.ringback).not.toHaveBeenCalled();
   } finally {
     incoming.stop();
+  }
+});
+
+test.each(['report-first', 'invite-first'])(
+  'ringing confirmation requires both native presentation and the authenticated invite: %s',
+  async (order) => {
+    const previous = AppState.currentState;
+    AppState.currentState = 'background';
+    const f = fixture();
+    try {
+      await tick();
+      if (order === 'invite-first') f.update('incoming');
+      else {
+        native.drain.mockResolvedValueOnce([{ type: 'incoming', id, video: false }]);
+        native.changed();
+      }
+      await tick();
+      expect(f.calls.confirmIncoming).not.toHaveBeenCalled();
+      if (order === 'report-first') f.update('incoming');
+      else {
+        native.drain.mockResolvedValueOnce([{ type: 'incoming', id, video: false }]);
+        native.changed();
+      }
+      await tick();
+      expect(f.calls.confirmIncoming).toHaveBeenCalledWith(id);
+      expect(f.calls.accept).not.toHaveBeenCalled();
+    } finally {
+      f.stop();
+      AppState.currentState = previous;
+    }
+  },
+);
+
+test('native failure or an already answered cold call cannot send a false ringing confirmation', async () => {
+  for (const value of [
+    [{ type: 'end', id, code: 'NATIVE_INCOMING_FAILED' }],
+    [
+      { type: 'incoming', id },
+      { type: 'answer', id },
+    ],
+    [
+      { type: 'incoming', id },
+      { type: 'end', id },
+    ],
+  ]) {
+    const f = fixture();
+    try {
+      await tick();
+      native.drain.mockResolvedValueOnce(value);
+      native.changed();
+      await tick();
+      f.update('incoming');
+      await tick();
+      expect(f.calls.confirmIncoming).not.toHaveBeenCalled();
+    } finally {
+      f.stop();
+    }
   }
 });

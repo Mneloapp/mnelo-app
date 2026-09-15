@@ -2,6 +2,7 @@ import { Platform, AppState } from 'react-native';
 import { requireOptionalNativeModule, type NativeModule } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
 import type { DeviceCalls, DeviceCall } from './calls';
+import { isRemoteRinging } from './call-ringing';
 import type { PhoneClient } from './phone-client';
 import { pushRegistration } from './wake-protocol';
 import { z } from 'zod';
@@ -167,7 +168,12 @@ export function observeSystemCalls(
         })
         .catch(() => identifying.delete(call.id));
     }
-    const shouldRing = !call.incoming && call.status === 'ringing' && Boolean(call.local);
+    if (call.status === 'incoming' && nativePending.has(call.id) && !answers.has(call.id)) {
+      // A successful native report and an authenticated invite must both exist.
+      // Do not wait for the receipt's storage/network work before processing an answer.
+      void calls.confirmIncoming(call.id).catch(() => undefined);
+    }
+    const shouldRing = isRemoteRinging(call) && Boolean(call.local);
     if (ringing && (!shouldRing || ringing !== call.id)) {
       await bridge.ringback?.(ringing, false);
       ringing = null;

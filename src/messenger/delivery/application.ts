@@ -29,6 +29,7 @@ const applicationPacket = z.union([
 ]);
 type ApplicationPacket = z.infer<typeof applicationPacket>;
 export type DeliveryCallReceiver = {
+  ringingReceipt?: (peer: string, id: string) => Promise<void>;
   recover?: () => Promise<void>;
   control: (
     peer: string,
@@ -175,11 +176,16 @@ export class ApplicationDelivery {
     if (!(await this.sendApplication(peer, { type: 'call-signal', envelope })))
       throw new Error('CALL_UNAVAILABLE');
   }
+  async sendRingingReceipt(peer: string, id: string) {
+    if (!(await this.sendApplication(peer, { type: 'ack', id }, undefined, true, true)))
+      throw new Error('CALL_UNAVAILABLE');
+  }
   private async sendApplication(
     peer: string,
     input: ApplicationPacket,
     event?: { id: string; createdAt: number },
     wake = true,
+    urgent = false,
   ) {
     await this.initialize();
     if (this.stopped || !(await this.engine.acceptsPeer(peer))) return false;
@@ -218,7 +224,13 @@ export class ApplicationDelivery {
         : packet.type === 'call' && packet.action === 'invite'
           ? { kind: 'call', id: packet.id, video: packet.media === 'video' }
           : undefined,
-      packet.type === 'message' ? 0 : ['call', 'call-signal'].includes(packet.type) ? 2 : 1,
+      urgent
+        ? 2
+        : packet.type === 'message'
+          ? 0
+          : ['call', 'call-signal'].includes(packet.type)
+            ? 2
+            : 1,
     );
     if (wake) this.pump.wake();
     return true;
@@ -278,6 +290,7 @@ export class ApplicationDelivery {
       await this.calls.signal(sender, packet.envelope);
       return {};
     }
+    if (packet.type === 'ack') await this.calls?.ringingReceipt?.(sender, packet.id);
     if (!(await this.engine.receive(sender, packet, { sendReceipts: false }))) return false;
     if (value.attachment) await this.media.consumed(sender, value.attachment.descriptor.blob.id);
     const receipt: Packet | null =

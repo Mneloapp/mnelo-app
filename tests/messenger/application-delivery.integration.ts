@@ -201,6 +201,65 @@ test('real app histories receive first-contact text and media with sender offlin
     );
     assert.equal((await be.contacts()).length, 1);
     appB.pump.stop();
+    // Call presentation uses a call-UUID ACK, not the server's queue acceptance.
+    // The unchanged packet schema is also safe for clients without the new callback.
+    const callId = randomUUID();
+    const confirmations: string[] = [];
+    const invites: string[] = [];
+    appA.calls = {
+      control: async () => {},
+      signal: async () => {},
+      ringingReceipt: async (peer, id) => {
+        if (peer === br.key) confirmations.push(id);
+      },
+    };
+    appB.calls = {
+      control: async (_peer, packet) => {
+        invites.push(packet.id);
+      },
+      signal: async () => {},
+    };
+    await appA.sendDurable(br.key, { type: 'call', id: callId, action: 'invite', media: 'voice' });
+    await appA.pump.tick();
+    assert.deepEqual(confirmations, [], 'an offline recipient cannot confirm ringing');
+    appB.pump.start();
+    await appB.pump.tick();
+    await appA.pump.tick();
+    assert.deepEqual(invites, [callId]);
+    assert.deepEqual(confirmations, [], 'an authenticated invite alone is not UI presentation');
+    appB.pump.stop();
+    await appB.sendRingingReceipt(ar.key, callId);
+    const ringing = (await appB.journal.pending()).find(
+      (row) => JSON.parse(row.body).packet.id === callId,
+    );
+    assert.equal(ringing?.priority, 2, 'ringing confirmation bypasses ordinary uploads');
+    appB.pump.start();
+    await appB.pump.tick();
+    await appA.pump.tick();
+    assert.deepEqual(
+      confirmations,
+      [callId],
+      'presentation confirmation crosses the actual Signal/HTTP path',
+    );
+    assert.equal(
+      (await ae.messages(chat)).some((row) => row.id === callId),
+      false,
+    );
+    appA.calls = null;
+    const olderCallerId = randomUUID();
+    await appB.sendRingingReceipt(ar.key, olderCallerId);
+    await appB.pump.tick();
+    await appA.pump.tick();
+    assert.equal(
+      (await ae.messages(chat)).some((row) => row.id === olderCallerId),
+      false,
+    );
+    assert.equal(
+      delivery.store.fetch(ar.key).length,
+      0,
+      'legacy ACK handling consumes the receipt without new messages',
+    );
+    appB.pump.stop();
     await be.block(ar.key, true);
     const blockedLater = await ae.send(chat, 'FICTIONAL_BLOCKED_PENDING');
     await appA.pump.tick();

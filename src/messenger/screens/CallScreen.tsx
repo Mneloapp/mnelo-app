@@ -9,6 +9,7 @@ import { CallSurface } from '../components/CallSurface';
 import { useDevice } from '../DeviceProvider';
 import { useLocalAction } from './shared';
 import { useAppActive } from '@/hooks/useAppActive';
+import { systemCallAudio } from '../system-calls';
 import { CallQuickReplies } from '../components/CallQuickReplies';
 const noSubscribe = () => () => {};
 const noCall = () => null;
@@ -40,8 +41,13 @@ export function CallScreen() {
   const [replying, setReplying] = useState(false);
   const dismissed = useRef(false);
   const focused = useIsFocused();
+  const foreground = useAppActive();
   const call = useSyncExternalStore(calls?.subscribe ?? noSubscribe, calls?.snapshot ?? noCall);
   const active = call?.chat === id ? call : null;
+  useEffect(() => {
+    if (focused && foreground && active?.status === 'incoming' && !systemCallAudio())
+      void calls?.confirmIncoming(active.id).catch(() => undefined);
+  }, [calls, focused, foreground, active]);
   // A new outgoing call can initially see the previous call's retained terminal snapshot.
   const restarting = useRef(
     media && active && ['ended', 'failed'].includes(active.status) ? active.id : null,

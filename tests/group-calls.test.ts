@@ -1,3 +1,4 @@
+import { isRemoteRinging } from '@/messenger/call-ringing';
 import { DeviceCalls, type CallControl } from '@/messenger/calls';
 import type { DeviceMessenger } from '@/messenger/engine';
 import type { PeerMesh } from '@/messenger/peer-mesh';
@@ -185,4 +186,28 @@ test('quick reply commits a private message before declining, never captures med
   expect(receiver.engine.flush).toHaveBeenCalledWith(undefined, 'reply-id');
   await expect(receiver.calls.replyAndDecline(id, 'Again')).rejects.toThrow('CALL_UNAVAILABLE');
   expect(receiver.engine.send).toHaveBeenCalledTimes(1);
+});
+
+test('group ringing requires confirmation from an invited participant still ringing', async () => {
+  const f = setup();
+  const a = f.nodes[0]!,
+    b = f.nodes[1]!,
+    c = f.nodes[2]!;
+  try {
+    await a.calls.startGroup(id, [b.key, c.key], 'voice');
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(false);
+    await a.calls.receiveRingingReceipt(keys[3]!, id);
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(false);
+    await a.calls.receiveRingingReceipt(b.key, id);
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(true);
+    const group = a.calls.snapshot()!.group!;
+    await a.calls.receive(b.key, { type: 'call', id, media: 'voice', action: 'decline', group });
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(false);
+    await a.calls.receiveRingingReceipt(b.key, id);
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(false);
+    await a.calls.receiveRingingReceipt(c.key, id);
+    expect(isRemoteRinging(a.calls.snapshot())).toBe(true);
+  } finally {
+    f.nodes.forEach((node) => node.calls.stop());
+  }
 });

@@ -9,6 +9,7 @@ import { FocusPressable } from '@/components/FocusPressable';
 import { ScreenAppearance } from '@/theme/appearance';
 import { theme } from '@/theme/tokens';
 import type { DeviceCall } from '../calls';
+import { isRemoteRinging } from '../call-ringing';
 import { VideoView } from '../VideoView';
 import { GroupCallStage } from './GroupCallStage';
 import { useCallDuration } from '../useCallDuration';
@@ -81,7 +82,9 @@ export function CallSurface({
             : call?.status === 'connecting'
               ? 'calls.connecting'
               : available
-                ? 'calls.ringing'
+                ? isRemoteRinging(call)
+                  ? 'calls.ringing'
+                  : 'calls.calling'
                 : 'messenger.callUnavailable',
   );
   return (

@@ -86,7 +86,11 @@ export function GroupCallStage({
               </View>
               {person.status !== 'active' && (
                 <AppText centered variant="caption" tone="secondary">
-                  {t(`groupCall.${person.status}` as const)}
+                  {t(
+                    person.status === 'ringing' && !person.ringingConfirmed
+                      ? 'calls.calling'
+                      : (`groupCall.${person.status}` as const),
+                  )}
                 </AppText>
               )}
             </View>

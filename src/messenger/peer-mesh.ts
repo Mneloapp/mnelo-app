@@ -561,7 +561,11 @@ export class PeerMesh implements PeerTransport {
     const packet = packetSchema.safeParse(input);
     if (!packet.success) throw new Error('PACKET_INVALID');
     if (packet.data.type === 'call') await this.calls?.receive(remote, packet.data);
-    else await this.engine.receive(remote, packet.data);
+    else {
+      if (packet.data.type === 'ack')
+        await this.calls?.receiveRingingReceipt(remote, packet.data.id);
+      await this.engine.receive(remote, packet.data);
+    }
   }
   send(remote: string, packet: Packet): boolean {
     if (packet.type === 'message' || packet.type === 'group')

@@ -34,6 +34,7 @@ const mockCalls = {
   },
   snapshot: () => mockCall,
   start: jest.fn(async () => {}),
+  confirmIncoming: jest.fn(async () => {}),
   accept: jest.fn(async () => {
     update({ status: 'connecting' });
   }),
@@ -263,4 +264,16 @@ test('starting a new call ignores the retained ended snapshot, then closes when 
   expect(router.back).not.toHaveBeenCalled();
   await act(() => update({ status: 'ended' }));
   expect(router.back).toHaveBeenCalledTimes(1);
+});
+
+test('outgoing status changes from Calling to Ringing only with a recipient receipt, then Connecting', async () => {
+  mockCall = { ...mockCall!, incoming: false, status: 'ringing' };
+  await show();
+  expect(screen.getByText('Calling…')).toBeTruthy();
+  expect(screen.queryByText('Ringing…')).toBeNull();
+  await act(async () => update({ ringingConfirmed: true }));
+  expect(screen.getByText('Ringing…')).toBeTruthy();
+  await act(async () => update({ status: 'connecting' }));
+  expect(screen.getByText('Connecting…')).toBeTruthy();
+  expect(screen.queryByText('Ringing…')).toBeNull();
 });

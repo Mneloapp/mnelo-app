@@ -14,3 +14,6 @@ export function systemCallAudio() {
 export async function systemCallSpeaker(_enabled: boolean) {
   return false;
 }
+export async function prepareSystemCallAudio(_speaker: boolean) {
+  return false;
+}

@@ -153,12 +153,15 @@ export class DeliveryPump {
       await this.command({ action: 'delivery-status' });
       const keys = await this.journal.initialize();
       if (this.stopped) return;
-      await this.publish(keys);
+      const available = await this.publish(keys);
       this.initialized = true;
+      // Leased keys may have depleted the directory while the app was asleep.
+      // Only skip the redundant startup status when publication confirms stock.
+      this.keysCheckedAt = available >= 20 ? this.now() : 0;
     }
     const tokens = await this.hooks.outgoingTokens?.();
-    // Invite/answer/SDP must not wait for a backlog of media downloads or
-    // housekeeping acknowledgements. Keep the same durable, paced transport.
+    // Call signals and delivery/read receipts precede media and housekeeping.
+    // All journal mutation and encryption remain serial.
     await this.sendOutgoing(tokens, 2);
     await this.hooks.beforeCycle?.();
     if (!this.hooks.outgoingOnly) await this.receiveCycle();

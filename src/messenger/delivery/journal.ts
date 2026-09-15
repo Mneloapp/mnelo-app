@@ -462,7 +462,7 @@ export class SignalJournal {
       this.now(),
       undefined,
       undefined,
-      1,
+      2,
     );
     await db.run(
       'UPDATE signal_inbox SET receipt_id=? WHERE sender=? AND id=?',

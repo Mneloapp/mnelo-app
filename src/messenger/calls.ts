@@ -1,3 +1,4 @@
+import { connectionTiming } from './connection-timing';
 import type { Packet } from './model';
 import { groupCallSchema, sameGroupCall, acceptsGroupCall, type GroupCall } from './group-call';
 import type { DeviceMessenger } from './engine';
@@ -137,6 +138,7 @@ export class DeviceCalls {
   stage(code: string) {
     // Only caller-supplied constant codes, never peer IDs, SDP, messages or native error text.
     if (!/^[A-Z_]{1,48}$/.test(code) || !this.value) return;
+    connectionTiming(code);
     this.update({ ...this.value, diagnostic: code });
   }
   private active() {
@@ -837,6 +839,10 @@ export class DeviceCalls {
     if (!call) return;
     await speakerOutput(!call.speaker);
     if (this.value?.id === call.id) this.update({ ...this.value, speaker: !call.speaker });
+  }
+  audioRoute(id: string, speaker: boolean) {
+    if (this.value?.id === id && this.active() && this.value.speaker !== speaker)
+      this.update({ ...this.value, speaker });
   }
   async switchCamera() {
     const stream = this.value?.local;

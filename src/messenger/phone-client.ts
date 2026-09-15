@@ -1,3 +1,4 @@
+import { connectionTiming } from './connection-timing';
 import { z } from 'zod';
 import { sign } from './crypto';
 import {
@@ -53,7 +54,19 @@ export class PhoneClient {
   }
   async execute(input: PhoneCommand, urgent = false) {
     const command = phoneCommand.parse(input);
-    return this.schedule(() => this.executeCommand(command), urgent || command.action === 'ice');
+    const queued = Date.now();
+    return this.schedule(
+      async () => {
+        const started = Date.now();
+        connectionTiming('HTTP_QUEUE', started - queued);
+        try {
+          return await this.executeCommand(command);
+        } finally {
+          connectionTiming('HTTP_COMMAND', Date.now() - started);
+        }
+      },
+      urgent || command.action === 'ice',
+    );
   }
   private async executeCommand(command: PhoneCommand) {
     const { nonce } = z

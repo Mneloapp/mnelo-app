@@ -23,6 +23,12 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var ringbackID: UUID?
   private var ringbackPlayer: AVAudioPlayer?
   private var audioActive = false
+  private var defaultSpeaker = false
+  private var explicitSpeaker: Bool?
+  private var routeObserver: NSObjectProtocol?
+  private var timingEvents: [[String: Any]] = []
+  private var timingFlush: Timer?
+  private let timingQueue = DispatchQueue(label: "com.mnelo.connection-timing", qos: .utility)
   private var reporting: [UUID: [() -> Void]] = [:]
   private var deadlines: [UUID: Timer] = [:]
   private var ended: [UUID: Date] = [:]
@@ -39,6 +45,29 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     provider.setDelegate(self, queue: .main)
     RTCAudioSession.sharedInstance().useManualAudio = true
     RTCAudioSession.sharedInstance().isAudioEnabled = false
+    routeObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in self?.reportAudioRoute() }
+    }
+    timing("APP_STARTED")
+  }
+  // Bounded local USB diagnostics. No conversation identifiers, content,
+  // addresses, credentials or server upload. Caches are excluded from backup.
+  func timing(_ code: String, duration: Double = 0) {
+    guard code.range(of: "^[A-Z_]{1,48}$", options: .regularExpression) != nil, duration.isFinite else { return }
+    let now = Date().timeIntervalSince1970 * 1000
+    timingEvents = timingEvents.filter { ($0["at"] as? Double ?? 0) > now - 900000 }
+    timingEvents.append(["stage":code, "at":now, "duration":max(0, min(60000, duration))])
+    if timingEvents.count > 200 { timingEvents.removeFirst(timingEvents.count - 200) }
+    guard timingFlush == nil else { return }
+    timingFlush = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
+      Task { @MainActor in
+        self.timingFlush = nil
+        guard let data = try? JSONSerialization.data(withJSONObject: self.timingEvents),
+              let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let url = directory.appendingPathComponent("MneloConnectionTimings.json")
+        self.timingQueue.async { try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
+      }
+    }
   }
   func contains(_ id: UUID) -> Bool { live.contains(id) }
   func start() {
@@ -108,7 +137,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     if live.contains(id) { completion(); return }
     let allowed = usable && ended[id] == nil && live.isEmpty
     reporting[id] = [completion]
-    if allowed { live.insert(id) }
+    if allowed { live.insert(id); defaultSpeaker = video; explicitSpeaker = nil }
     let update = CXCallUpdate()
     update.remoteHandle = CXHandle(type: .generic, value: "Mnelo")
     update.localizedCallerName = "Mnelo"
@@ -133,6 +162,8 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   func outgoing(_ id: UUID, video: Bool) {
     guard !live.contains(id), live.isEmpty else { return }
     live.insert(id)
+    defaultSpeaker = video
+    explicitSpeaker = nil
     outgoingCalls.insert(id)
     let action = CXStartCallAction(call: id, handle: CXHandle(type: .generic, value: "Mnelo"))
     action.isVideo = video
@@ -172,10 +203,38 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     outgoingCalls.remove(id)
     answeredCalls.remove(id)
     guard live.remove(id) != nil else { return }
+    if live.isEmpty { explicitSpeaker = nil; defaultSpeaker = false }
     provider.reportCall(with: id, endedAt: Date(), reason: reason)
   }
   private func prepareAudio() throws {
-    try AVAudioSession.sharedInstance().setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetoothHFP])
+    // CallKit and WebRTC must use the same configuration. Otherwise an answer
+    // replaces the video speaker preference with voiceChat's receiver route.
+    let config = RTCAudioSessionConfiguration.webRTC()
+    config.category = AVAudioSession.Category.playAndRecord.rawValue
+    config.mode = AVAudioSession.Mode.voiceChat.rawValue
+    config.categoryOptions = defaultSpeaker ? [.allowBluetoothHFP, .defaultToSpeaker] : [.allowBluetoothHFP]
+    RTCAudioSessionConfiguration.setWebRTC(config)
+    let rtc = RTCAudioSession.sharedInstance()
+    rtc.lockForConfiguration()
+    defer { rtc.unlockForConfiguration() }
+    try rtc.setConfiguration(config)
+  }
+  func prepareCallAudio(_ speaker: Bool) throws {
+    defaultSpeaker = explicitSpeaker ?? speaker
+    try prepareAudio()
+  }
+  func speaker(_ enabled: Bool) throws {
+    defaultSpeaker = enabled
+    explicitSpeaker = enabled
+    try prepareAudio()
+    if audioActive { try AVAudioSession.sharedInstance().overrideOutputAudioPort(enabled ? .speaker : .none) }
+    reportAudioRoute()
+  }
+  private func reportAudioRoute() {
+    guard audioActive, let id = live.first else { return }
+    let speaker = AVAudioSession.sharedInstance().currentRoute.outputs.contains { $0.portType == .builtInSpeaker }
+    timing(speaker ? "AUDIO_SPEAKER" : "AUDIO_OTHER_ROUTE")
+    event(["type":"route", "id":id.uuidString.lowercased(), "speaker":speaker])
   }
   func ringback(_ id: UUID, enabled: Bool) {
     if enabled {
@@ -227,6 +286,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     connectedCalls.removeAll()
     ringbackID = nil
     audioActive = false
+    explicitSpeaker = nil
     updateRingback()
     deadlines.values.forEach { $0.invalidate() }; deadlines.removeAll()
     RTCAudioSession.sharedInstance().isAudioEnabled = false
@@ -252,9 +312,18 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     action.fail()
   }
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
+    timing("AUDIO_ACTIVATED")
+    do {
+      try prepareAudio()
+      if let explicitSpeaker { try audioSession.overrideOutputAudioPort(explicitSpeaker ? .speaker : .none) }
+    } catch {
+      if let id = live.first { event(["type":"end", "id":id.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]); finish(id, reason: .failed) }
+      return
+    }
     RTCAudioSession.sharedInstance().audioSessionDidActivate(audioSession)
     RTCAudioSession.sharedInstance().isAudioEnabled = true
     audioActive = true
+    reportAudioRoute()
     updateRingback()
   }
   func provider(_ provider: CXProvider, didDeactivate audioSession: AVAudioSession) {
@@ -290,6 +359,9 @@ public class MneloCallsModule: Module {
     AsyncFunction("screenShareActive") { (token: String) async -> Bool in await MainActor.run { MneloScreenShare.shared.active(token) } }
     AsyncFunction("stopScreenShare") { (token: String) async in await MainActor.run { MneloScreenShare.shared.stop(token: token) } }
     AsyncFunction("state") { () async -> [String: Any] in await MainActor.run { MneloCallManager.shared.start(); return MneloCallManager.shared.state() } }
+    AsyncFunction("prepareCallAudio") { (speaker: Bool) async throws in try await MainActor.run { try MneloCallManager.shared.prepareCallAudio(speaker) } }
+    AsyncFunction("speaker") { (enabled: Bool) async throws in try await MainActor.run { try MneloCallManager.shared.speaker(enabled) } }
+    AsyncFunction("timing") { (code: String, duration: Double) async in await MainActor.run { MneloCallManager.shared.timing(code, duration: duration) } }
     AsyncFunction("drain") { () async -> [[String: Any]] in await MainActor.run { MneloCallManager.shared.drain() } }
     AsyncFunction("incoming") { (value: String, video: Bool) async in
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

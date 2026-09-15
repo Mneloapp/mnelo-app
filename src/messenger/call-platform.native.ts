@@ -1,4 +1,4 @@
-import { systemCallAudio, systemCallSpeaker } from './system-calls';
+import { systemCallAudio, systemCallSpeaker, prepareSystemCallAudio } from './system-calls';
 import { Platform } from 'react-native';
 import {
   mediaDevices,
@@ -7,6 +7,7 @@ import {
 } from '@livekit/react-native-webrtc';
 import { AudioSession } from '@livekit/react-native';
 export async function captureCall(video: boolean, group = false): Promise<MediaStream> {
+  const prepared = await prepareSystemCallAudio(video || group);
   const stream = await mediaDevices.getUserMedia({
     audio: true,
     video: video
@@ -23,7 +24,7 @@ export async function captureCall(video: boolean, group = false): Promise<MediaS
     throw new Error('CALL_PERMISSION_REQUIRED');
   }
   try {
-    if (!systemCallAudio() || Platform.OS === 'ios')
+    if (!systemCallAudio() || (Platform.OS === 'ios' && !prepared))
       await AudioSession.configureAudio({
         ios: { defaultOutput: video || group ? 'speaker' : 'earpiece' },
         android: {

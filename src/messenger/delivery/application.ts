@@ -1,3 +1,4 @@
+import { connectionTiming } from '../connection-timing';
 import { z } from 'zod';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, type RandomBytes } from '../crypto';
@@ -228,7 +229,7 @@ export class ApplicationDelivery {
         ? 2
         : packet.type === 'message'
           ? 0
-          : ['call', 'call-signal'].includes(packet.type)
+          : ['call', 'call-signal', 'ack', 'group_ack', 'read', 'read_ids'].includes(packet.type)
             ? 2
             : 1,
     );
@@ -292,6 +293,9 @@ export class ApplicationDelivery {
     }
     if (packet.type === 'ack') await this.calls?.ringingReceipt?.(sender, packet.id);
     if (!(await this.engine.receive(sender, packet, { sendReceipts: false }))) return false;
+    if (packet.type === 'message') connectionTiming('MESSAGE_PROJECTED');
+    if (packet.type === 'ack') connectionTiming('DELIVERY_CONFIRMED');
+    if (packet.type === 'read_ids' || packet.type === 'read') connectionTiming('READ_CONFIRMED');
     if (value.attachment) await this.media.consumed(sender, value.attachment.descriptor.blob.id);
     const receipt: Packet | null =
       packet.type === 'message'

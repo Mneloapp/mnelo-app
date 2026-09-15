@@ -1,5 +1,9 @@
 import { AppState } from 'react-native';
-import { observeSystemCalls } from '@/messenger/system-calls.native';
+import {
+  observeSystemCalls,
+  systemCallSpeaker,
+  prepareSystemCallAudio,
+} from '@/messenger/system-calls.native';
 import type { DeviceCalls, DeviceCall, CallControl } from '@/messenger/calls';
 import type { PhoneClient } from '@/messenger/phone-client';
 import { retryBackground, backgroundSnapshot } from '@/messenger/background-status';
@@ -16,6 +20,8 @@ jest.mock('expo-modules-core', () => {
     ringback: jest.fn(async () => {}),
     identify: jest.fn(async () => {}),
     end: jest.fn(async () => {}),
+    speaker: jest.fn(async () => {}),
+    prepareCallAudio: jest.fn(async () => {}),
     addListener: jest.fn((_name: string, fn: () => void) => {
       native.changed = fn;
       return { remove: jest.fn() };
@@ -65,6 +71,7 @@ function fixture(
       changed();
     }),
     mute: jest.fn(),
+    audioRoute: jest.fn(),
     confirmIncoming: jest.fn(async () => {}),
   };
   const stop = observeSystemCalls(
@@ -407,4 +414,12 @@ test('native failure or an already answered cold call cannot send a false ringin
       f.stop();
     }
   }
+});
+
+test('iOS speaker selection and initial capture configuration use the CallKit owner', async () => {
+  await expect(prepareSystemCallAudio(true)).resolves.toBe(true);
+  await expect(systemCallSpeaker(true)).resolves.toBe(true);
+  await expect(systemCallSpeaker(false)).resolves.toBe(true);
+  expect(native.prepareCallAudio).toHaveBeenCalledWith(true);
+  expect(native.speaker.mock.calls).toEqual([[true], [false]]);
 });

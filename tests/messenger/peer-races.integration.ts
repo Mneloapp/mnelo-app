@@ -296,6 +296,16 @@ test('call offer/answer connects using the first relay paths while slower candid
   b.callSignaling = async (_peer, envelope) => a.receiveCallSignal(bob.key, envelope);
   try {
     await a.startMedia(bob.key, id, stream);
+    assert.equal(
+      Boolean(ap.remoteDescription),
+      false,
+      'the inbox returns while TURN gathering is still pending',
+    );
+    const until = Date.now() + 3000;
+    while (!ap.remoteDescription) {
+      assert.ok(Date.now() < until, 'the asynchronous handshake still completes');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     assert.equal(ap.iceGatheringState, 'gathering');
     assert.equal(bp.iceGatheringState, 'gathering');
     assert.equal(ap.remoteDescription?.type, 'answer');

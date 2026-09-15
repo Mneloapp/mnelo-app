@@ -19,6 +19,7 @@ type NativeCalls = NativeModule<{ changed: () => void }> & {
   ringback?(id: string, enabled: boolean): Promise<void>;
   end(id: string): Promise<void>;
   speaker(enabled: boolean): Promise<void>;
+  prepareCallAudio?(speaker: boolean): Promise<void>;
 };
 const native = requireOptionalNativeModule<NativeCalls>('MneloCalls');
 export function systemCallAudio() {
@@ -26,9 +27,10 @@ export function systemCallAudio() {
 }
 const event = z
   .object({
-    type: z.enum(['incoming', 'answer', 'end', 'mute', 'token', 'token-invalid']),
+    type: z.enum(['incoming', 'answer', 'end', 'mute', 'route', 'token', 'token-invalid']),
     id: z.string().uuid().optional(),
     muted: z.boolean().optional(),
+    speaker: z.boolean().optional(),
     video: z.boolean().optional(),
     code: z
       .enum([
@@ -237,6 +239,8 @@ export function observeSystemCalls(
             continue;
           }
           if (!value.id) continue;
+          if (value.type === 'route' && typeof value.speaker === 'boolean')
+            calls.audioRoute(value.id, value.speaker);
           if (value.type === 'incoming') nativePending.add(value.id);
           // A PushKit report may precede the authenticated peer invite; do not end it while JS has no call yet.
           if (value.type === 'answer') {
@@ -313,7 +317,12 @@ export function observeSystemCalls(
 }
 
 export async function systemCallSpeaker(enabled: boolean) {
-  if (Platform.OS !== 'android' || !native) return false;
+  if (!native) return false;
   await native.speaker(enabled);
+  return true;
+}
+export async function prepareSystemCallAudio(speaker: boolean) {
+  if (Platform.OS !== 'ios' || !native?.prepareCallAudio) return false;
+  await native.prepareCallAudio(speaker);
   return true;
 }

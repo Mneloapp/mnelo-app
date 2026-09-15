@@ -1,3 +1,5 @@
+import { observeMediaTiming } from './media-timing';
+import { connectionTiming } from './connection-timing';
 import { z } from 'zod';
 import { authenticationPayload, readSignal, signSignal, type Signal } from './signaling';
 import { sign } from './crypto';
@@ -71,6 +73,7 @@ export class PeerMesh implements PeerTransport {
       deadline: ReturnType<typeof setTimeout>;
       state?: RTCDataChannel;
       stopGathering?: () => void;
+      stopStats?: () => void;
     }
   >();
   private socket: WebSocket | null = null;
@@ -673,12 +676,16 @@ export class PeerMesh implements PeerTransport {
     );
     peer.addEventListener('track', (event) => {
       if (this.mediaLinks.get(remote)?.peer !== peer) return;
+      connectionTiming(event.track.kind === 'video' ? 'REMOTE_VIDEO_TRACK' : 'REMOTE_AUDIO_TRACK');
       const stream = event.streams[0];
       if (stream) this.calls?.remote(remote, id, stream);
     });
     peer.addEventListener('connectionstatechange', () => {
       if (this.mediaLinks.get(remote)?.peer !== peer) return;
       if (peer.connectionState === 'connected') {
+        connectionTiming('MEDIA_TRANSPORT_CONNECTED');
+        const link = this.mediaLinks.get(remote)!;
+        link.stopStats ??= observeMediaTiming(peer, Boolean(stream.getVideoTracks().length));
         clearTimeout(deadline);
         this.calls?.connected(remote, id);
       } else if (peer.connectionState === 'failed') void this.calls?.failed(remote, id);
@@ -773,7 +780,7 @@ export class PeerMesh implements PeerTransport {
     );
     this.calls?.stage('MEDIA_CREATE_OFFER');
     await peer.setLocalDescription(await peer.createOffer());
-    await this.publishMedia(remote, id, peer, 'offer');
+    this.publishMediaInBackground(remote, id, peer, 'offer');
   }
   async receiveCallSignal(sender: string, envelope: unknown) {
     const signal = readSignal(envelope, this.own.key);
@@ -785,6 +792,19 @@ export class PeerMesh implements PeerTransport {
     )
       throw new Error('CALL_SIGNAL_INVALID');
     await this.mediaSignal(signal);
+  }
+  private publishMediaInBackground(
+    remote: string,
+    id: string,
+    peer: RTCPeerConnection,
+    type: Signal['type'],
+  ) {
+    // TURN gathering may wait for an unreachable transport. It must not hold
+    // the serial Signal inbox open and block receipts, hangup or fallback SDP.
+    void this.publishMedia(remote, id, peer, type).catch(() => {
+      if (this.mediaLinks.get(remote)?.peer === peer)
+        void this.calls?.failed(remote, id).catch(() => undefined);
+    });
   }
   private async mediaSignal(signal: Signal) {
     const existing = this.mediaLinks.get(signal.from);
@@ -801,7 +821,7 @@ export class PeerMesh implements PeerTransport {
         await peer.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
         this.calls?.stage('MEDIA_CREATE_ANSWER');
         await peer.setLocalDescription(await peer.createAnswer());
-        await this.publishMedia(signal.from, signal.session, peer, 'answer');
+        this.publishMediaInBackground(signal.from, signal.session, peer, 'answer');
       } catch {
         await this.calls?.failed(signal.from, signal.session);
       }
@@ -897,6 +917,7 @@ export class PeerMesh implements PeerTransport {
     this.mediaLinks.delete(remote);
     clearTimeout(link.deadline);
     link.stopGathering?.();
+    link.stopStats?.();
     link.peer.close();
   }
   stop() {

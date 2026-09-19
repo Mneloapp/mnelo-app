@@ -135,6 +135,18 @@ func intent(_ person: INPerson, content: String = "I will call you back.") -> IN
     precondition(Set(selected.keys) == Set(["callId", "accountHint", "callerHint", "handle", "receivedAt"]))
     selector.end(call, declined: true); selector.finish(call)
     precondition(selector.read(handle: recipient.handle) != nil)
+    let directResolve = IntentProbeRuntime(); directResolve.outcome = .success(recipient.fields)
+    let directSend = IntentProbeRuntime(); directSend.outcome = .success(["committed": true, "uploaded": true])
+    var directRuntimes = [directResolve, directSend]
+    let quickReply = MneloMessageIntentHandler(makeRuntime: { directRuntimes.removeFirst() }, selector: selector)
+    var quickCode: INSendMessageIntentResponseCode?
+    quickReply.handle(intent: intent(applePerson)) { quickCode = $0.code }
+    settle { quickCode != nil }
+    precondition(quickCode == .success && directResolve.stopCompleted && directSend.stopCompleted)
+    precondition(directResolve.operations[0].0 == "intentResolve" && directSend.operations[0].0 == "intentSend")
+    precondition((directSend.operations[0].1["selector"] as? [String: Any])?["callId"] as? String == recipient.callId)
+    precondition(directSend.operations[0].1["content"] as? String == "I will call you back.")
+    print("PASS direct CallKit preset: missing custom recipient token is resolved against the exact authenticated declined call before sending")
     now += 121
     precondition(selector.read(handle: recipient.handle) == nil)
     selector.begin(call, account: recipient.account, callerHint: recipient.peer, handle: recipient.handle)

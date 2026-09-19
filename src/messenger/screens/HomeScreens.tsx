@@ -12,6 +12,7 @@ import { Avatar, IconButton, Page, StateView, ui } from '@/components/ui';
 import { useDayBoundary } from '@/hooks/useDayBoundary';
 import { useDevice } from '../DeviceProvider';
 import { PullSearch, usePullSearch } from '@/components/PullSearch';
+import { ChatSwipeActions } from '../components/ChatSwipeActions';
 import { ChatHistoryRow } from '../components/ChatHistoryRow';
 import { ChatFilters } from './ChatFilters';
 import type { ChatCursor, ChatFilter } from '../engine';
@@ -91,30 +92,36 @@ export function ChatsScreen() {
         initialNumToRender={12}
         windowSize={7}
         renderItem={({ item }) => (
-          <ChatHistoryRow
-            chat={item}
-            now={today}
-            subtitle={
-              item.previewKind === 'deleted'
-                ? t('messenger.deletedMessage')
-                : item.previewKind === 'call'
-                  ? t(callOutcomeCopy[readCallRecord(item.preview).status])
-                  : item.preview || (item.previewKind === 'contact' ? t('messenger.contact') : '')
-            }
-            avatar={
-              item.kind === 'direct' && item.peer ? (
-                <PeerAvatar peer={item.peer} name={item.title} colorfulFallback />
-              ) : (
-                <Avatar
-                  name={item.title}
-                  group
-                  uri={avatarUri(readGroupProfile(item).avatar)}
-                  fallbackRingColor={fallbackAvatarColor('group:' + item.id)}
-                />
-              )
-            }
-            onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
-          />
+          <ChatSwipeActions id={item.id} title={item.title}>
+            {(actions) => (
+              <ChatHistoryRow
+                {...actions}
+                chat={item}
+                now={today}
+                subtitle={
+                  item.previewKind === 'deleted'
+                    ? t('messenger.deletedMessage')
+                    : item.previewKind === 'call'
+                      ? t(callOutcomeCopy[readCallRecord(item.preview).status])
+                      : item.preview ||
+                        (item.previewKind === 'contact' ? t('messenger.contact') : '')
+                }
+                avatar={
+                  item.kind === 'direct' && item.peer ? (
+                    <PeerAvatar peer={item.peer} name={item.title} colorfulFallback />
+                  ) : (
+                    <Avatar
+                      name={item.title}
+                      group
+                      uri={avatarUri(readGroupProfile(item).avatar)}
+                      fallbackRingColor={fallbackAvatarColor('group:' + item.id)}
+                    />
+                  )
+                }
+                onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}
+              />
+            )}
+          </ChatSwipeActions>
         )}
         ListEmptyComponent={
           q.isPending ? (

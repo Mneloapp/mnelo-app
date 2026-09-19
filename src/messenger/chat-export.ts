@@ -1,7 +1,7 @@
 import type { DeviceMessenger } from './engine';
 import type { ContactView } from './contact-view';
 import type { Contact, Media } from './model';
-import type { ExportCursor, ExportMessage } from './chat-export-source';
+import { exportRowBytes, type ExportCursor, type ExportMessage } from './chat-export-source';
 import { ExportZip } from './export-zip';
 import { messageLinks } from './shared-content';
 import { readCallRecord } from './call-record';
@@ -165,10 +165,7 @@ export async function createChatExport(
         // SQLite's native dictionaries can enumerate identical columns in a
         // different order on each pass. Canonicalize keys, keeping every value
         // in the integrity check so real edits/deletions still abort.
-        const canonical = Object.keys(row)
-          .sort()
-          .map((key) => [key, row[key as keyof ExportMessage]]);
-        digest.update(textBytes(JSON.stringify(canonical) + '\n'));
+        digest.update(exportRowBytes(row));
         yield row;
       }
       const last = page.at(-1)!;
@@ -259,5 +256,11 @@ export async function createChatExport(
   }
   await zip.add('Links/index.html', linksIndex());
   await zip.finish();
-  return { messages, attachments, missingAttachments, bytes: zip.bytes };
+  return {
+    messages,
+    attachments,
+    missingAttachments,
+    bytes: zip.bytes,
+    proof: { owner: account.key, through: snapshot.through, digest: expectedDigest },
+  };
 }

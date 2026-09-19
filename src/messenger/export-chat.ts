@@ -2,6 +2,7 @@ import type { DeviceMessenger } from './engine';
 import type { ContactView } from './contact-view';
 
 export type ExportChatOptions = {
+  deleteAfterSaving?: boolean;
   isCurrent?: () => boolean;
   onProgress?: (count: number) => void;
 };

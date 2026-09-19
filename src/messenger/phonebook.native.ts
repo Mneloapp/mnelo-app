@@ -117,6 +117,38 @@ async function savePhoneContact(number: string, name: string, ownNumber?: string
   return true;
 }
 
+export async function savedPhoneContact(number: string, ownNumber?: string) {
+  return (await matchedPhoneContacts([number], ownNumber)).get(number) ?? null;
+}
+let contactForm: Promise<boolean> | undefined;
+export async function presentPhoneContact(
+  number: string,
+  name: string,
+  ownNumber?: string,
+): Promise<boolean> {
+  internationalPhone.parse(number);
+  if (contactForm) return false;
+  contactForm = (async () => {
+    await ensurePhonebookAccess();
+    if (!(await phonebookPermission())) throw new Error('PHONE_CONTACTS_PERMISSION');
+    const existing = await savedPhoneContact(number, ownNumber);
+    let saved: boolean;
+    if (existing?.id) saved = await new Contact(existing.id).editWithForm();
+    else if (existing)
+      return true; // Never duplicate a matched entry with an unavailable identifier.
+    else
+      saved = await Contact.presentCreateForm({
+        givenName: name.trim() === number ? '' : name.trim(),
+        phones: [{ label: 'mobile', number }],
+      });
+    phonebookChanged();
+    return saved;
+  })().finally(() => {
+    contactForm = undefined;
+  });
+  return contactForm;
+}
+
 async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: string) {
   const matches = new Map<string, PhonebookMatch>();
   if (!numbers.length || !(await phonebookPermission())) return matches;
@@ -132,7 +164,8 @@ async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: stri
     for (const row of rows) {
       for (const phone of row.phones ?? []) {
         const number = phone.number && phonebookNumber(phone.number, country);
-        if (number && wanted.has(number)) rememberPhonebookName(matches, number, row.fullName);
+        if (number && wanted.has(number))
+          rememberPhonebookName(matches, number, row.fullName, row.id);
       }
     }
     // Recheck even the last page: revocation must discard any earlier matches.

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { ChatsScreen } from '@/messenger/screens/HomeScreens';
 import { CallsScreen } from '@/messenger/screens/CallsScreen';
 import type { Chat, LocalCall } from '@/messenger/model';
+jest.mock('@/messenger/export-chat', () => ({ exportChat: jest.fn(async () => {}) }));
 
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
@@ -11,8 +12,9 @@ jest.mock('@react-native-community/netinfo', () =>
 jest.mock('@/messenger/phone-client', () => ({ devicePhoneClient: () => null }));
 jest.mock('@/messenger/screens/FindPhoneScreen', () => ({ FindPhoneScreen: () => null }));
 jest.mock('expo-router', () => ({
-  router: { push: jest.fn() },
+  useFocusEffect: jest.requireActual('react').useEffect,
   useIsFocused: () => true,
+  router: { push: jest.fn() },
 }));
 const mockEngine = {
   contactRequests: jest.fn(async () => []),

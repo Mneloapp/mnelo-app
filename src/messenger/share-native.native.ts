@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import type { NativeConversationSuggestions } from './share-native';
 type ShareBridge = NativeConversationSuggestions & {
+  saveChatExport(uri: string): Promise<boolean>;
   resolveIncomingFile(uri: string): string | null;
   sharedConversation(values: string[]): string | null;
   claimIncomingFiles(values: string[]): Promise<Record<string, string>>;
@@ -19,3 +20,7 @@ export function sharedConversation(values: string[]): string | null {
     return null;
   }
 }
+
+export const saveChatExportFile: ((uri: string) => Promise<boolean>) | null = native?.saveChatExport
+  ? (uri) => native.saveChatExport(uri)
+  : null;

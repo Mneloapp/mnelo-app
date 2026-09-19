@@ -14,7 +14,7 @@ Build 48 connects successfully while held at the ear and chat export works. The 
 
 ## Validation / release
 
-Host QA passed: 670 Jest tests in 115 suites, 3 server tests and 222 device integration tests (895 total), TypeScript, lint, formatting, environment, localization, source-security and brand checks. The compiled Swift answer-completion probe passed. Final native archive and TestFlight availability evidence will be recorded after completion. Existing archives and IPAs remain retained. No public App Store submission is authorized by this beta release.
+Host QA passed: 670 Jest tests in 115 suites, 3 server tests and 222 device integration tests (895 total), TypeScript, lint, formatting, environment, localization, source-security and brand checks. The compiled Swift answer-completion probe passed. The signed native archive and distribution export passed signature, entitlement, version, endpoint, source-offer and localized Siri checks. All five app/extension executables match their archive code and retained dSYMs; 95 non-signing resource files match. Source and decoded Hermes secret scans had zero findings; two minified JavaScript scanner matches were independently traced to runtime identity properties, not embedded credentials. Four existing vendor dSYM warnings remain for React, ReactNativeDependencies, WebRTC and hermesvm. Public CI run 35473237256 passed all checks. Existing archives and IPAs remain retained. No public App Store submission is authorized by this beta release.
 
 ## Physical acceptance on both phones
 
@@ -23,3 +23,11 @@ Host QA passed: 670 Jest tests in 115 suites, 3 server tests and 222 device inte
 3. Use the contact card's Message, Call and Save actions. Export repeated photos and videos, unzip, open Chat.html and inspect the Media folder's numbered filenames.
 
 Apple defines the connection time as when both parties can communicate: [incoming answer completion](<https://developer.apple.com/documentation/callkit/cxanswercallaction/fulfill(withdateconnected:)>), [outgoing connection reporting](<https://developer.apple.com/documentation/callkit/cxprovider/reportoutgoingcall(with:connectedat:)>). Host checks cannot measure physical audibility or certify public-release security.
+
+## Release artifacts
+
+Compiled source `0ed68b0079e5c4a5a88816192bdd8074436781e3`, tree `569cca6983b14cc5e16fc4b4223398c7c64ad2d7`. Public tag [ios-0.1.0-49](https://github.com/Mneloapp/mnelo-app/tree/ios-0.1.0-49), commit `84781f70a0d30a96ec766e041c484014ac415746`.
+
+Retained archive: `artifacts/Mnelo-0.1.0-49.xcarchive`; IPA: `artifacts/Mnelo-0.1.0-49-export/Mnelo.ipa`, 152,143,390 bytes, SHA-256 `81d4d762cf980ca41319e651818fa89f1bc2c2f183a2ebc8a15676d823ae5007`. Main Hermes SHA-256: `6ce946852fdc0c683ab5b65aaedcd1653b0df5db6709436183ab697a435204bf`. Apple build ID: `b4d35e1c-c328-443e-87fd-21da6d251ba6`. Uploaded September 20, 2026 around 02:36 Asia/Tbilisi.
+
+App Store Connect confirms **Testing** for both existing groups: Mnelo Preview (external, 2 testers) and Mnelo Development (internal, 1 tester), each expiring in 90 days. Automatic tester notification is enabled. The owner’s prior encryption answers were retained. No public App Store submission was made. New two-device acceptance remains pending.

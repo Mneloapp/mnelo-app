@@ -41,3 +41,17 @@ export async function searchPhonebook(
 ): Promise<{ phone: string; name: string }[]> {
   return [];
 }
+
+export async function savedPhoneContact(
+  _number: string,
+  _ownNumber?: string,
+): Promise<import('./phonebook-match').PhonebookMatch | null> {
+  return null;
+}
+export async function presentPhoneContact(
+  _number: string,
+  _name: string,
+  _ownNumber?: string,
+): Promise<boolean> {
+  throw new Error('PHONE_CONTACTS_UNAVAILABLE');
+}

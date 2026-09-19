@@ -34,7 +34,13 @@ import type { DeliveryAtomic } from './delivery/journal';
 import { groupProfile, readGroupProfile, type GroupProfile } from './group-profile';
 import { readPhotoPage, readSharedContent, type ContentTab } from './shared-content';
 import { phonebookBindings, readCachedAliases, type PhonebookCacheScope } from './phonebook-cache';
-import { readExportPage, readExportSnapshot, type ExportCursor } from './chat-export-source';
+import {
+  readExportPage,
+  readExportSnapshot,
+  exportRowBytes,
+  type ExportProof,
+  type ExportCursor,
+} from './chat-export-source';
 import {
   readMessageInfo,
   observeMessageDelivery,
@@ -179,6 +185,7 @@ export class DeviceMessenger {
     await this.db.exec(localSchema);
     for (const [table, column, definition] of [
       ['messages', 'edited_at', 'INTEGER NOT NULL DEFAULT 0'],
+      ['chats', 'hidden', 'INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0,1))'],
       ['chats', 'left_group', 'INTEGER NOT NULL DEFAULT 0 CHECK(left_group IN (0,1))'],
       ['chats', 'group_profile', "TEXT NOT NULL DEFAULT '{}'"],
       ['chats', 'group_profile_revision', 'INTEGER NOT NULL DEFAULT 0'],
@@ -196,6 +203,9 @@ export class DeviceMessenger {
       if (!columns.some((row) => row.name === column))
         await this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     }
+    await this.db.exec(
+      `CREATE TRIGGER IF NOT EXISTS reveal_chat_on_message AFTER INSERT ON messages BEGIN UPDATE chats SET hidden=0 WHERE id=NEW.chat_id; END`,
+    );
     if (version < 3) await this.db.run('UPDATE identity SET first_name=name');
     await this.db.exec(`PRAGMA user_version=${version >= 6 ? 6 : 5}`);
     const rows = await this.db.all<{ public_key: string; secret: string; name: string }>(
@@ -888,7 +898,7 @@ export class DeviceMessenger {
           COALESCE((SELECT kind FROM messages m WHERE m.chat_id=c.id ORDER BY sequence DESC LIMIT 1),'') AS previewKind,
           COALESCE((SELECT received_at FROM messages m WHERE m.chat_id=c.id ORDER BY sequence DESC LIMIT 1),0) AS updated,
           COALESCE((SELECT MAX(sequence) FROM messages m WHERE m.chat_id=c.id),0) AS activity
-          FROM chats c)
+          FROM chats c WHERE c.hidden=0)
         SELECT * FROM summaries WHERE (?='all' OR (?='unread' AND unread>0) OR kind=?)
         AND (activity<? OR (activity=? AND id>?)) ORDER BY activity DESC,id LIMIT 100`,
         own,
@@ -1264,6 +1274,56 @@ export class DeviceMessenger {
           unique,
           profile ?? readGroupProfile(chat),
         );
+    });
+    this.changed();
+    await this.flush().catch(() => undefined);
+  }
+  async editGroupProfile(id: string, title: string, details: GroupProfile) {
+    const name = z.string().trim().min(1).max(80).parse(title);
+    const profile = groupProfile.parse(details);
+    await this.mutateGroup(id, (_chat, peers) => ({ title: name, peers, profile }));
+  }
+  async changeGroupMembers(id: string, change: { add?: string[]; remove?: string }) {
+    const add = (change.add ?? []).map((key) => peerKey.parse(key));
+    const remove = change.remove ? peerKey.parse(change.remove) : undefined;
+    if (remove === this.own().key || add.includes(this.own().key)) throw new Error('GROUP_INVALID');
+    await this.mutateGroup(id, (chat, peers) => ({
+      title: chat.title,
+      peers: [...new Set([...peers.filter((key) => key !== remove), ...add])],
+      profile: readGroupProfile(chat),
+    }));
+  }
+  private async mutateGroup(
+    id: string,
+    update: (
+      chat: Chat,
+      peers: string[],
+    ) => { title: string; peers: string[]; profile: GroupProfile },
+  ) {
+    await this.transaction(async () => {
+      const own = this.own().key;
+      const chat = (await this.db.all<Chat>('SELECT * FROM chats WHERE id=?', id))[0];
+      if (chat?.kind !== 'group' || chat.owner !== own || chat.left_group)
+        throw new Error('GROUP_FORBIDDEN');
+      const previous = (
+        await this.db.all<{ public_key: string }>(
+          'SELECT public_key FROM members WHERE chat_id=? AND public_key!=?',
+          id,
+          own,
+        )
+      ).map((row) => row.public_key);
+      const next = update(chat, previous);
+      if (next.peers.length > 15) throw new Error('GROUP_INVALID');
+      for (const peer of next.peers) {
+        if (
+          !previous.includes(peer) &&
+          !(await this.db.all('SELECT 1 FROM contacts WHERE public_key=? AND blocked=0', peer))
+            .length
+        )
+          throw new Error('CONTACT_UNTRUSTED');
+      }
+      await this.replaceMembers(id, next.title, [own, ...next.peers]);
+      await this.stageGroupProfile(id, chat.revision + 1, next.peers, next.profile);
     });
     this.changed();
     await this.flush().catch(() => undefined);
@@ -2035,28 +2095,55 @@ export class DeviceMessenger {
     // Deliberately no transport operation: the other participant owns their copy.
     this.changed();
   }
+  private async clearHistoryRows(chat: string) {
+    for (const row of await this.db.all<{ id: string }>(
+      'SELECT id FROM messages WHERE chat_id=?',
+      chat,
+    ))
+      await this.purgeDeliveryMessage(row.id);
+    await this.db.run(
+      'INSERT OR IGNORE INTO forgotten_messages SELECT id,sender FROM messages WHERE chat_id=?',
+      chat,
+    );
+    const media = await this.db.all<{ media_id: string }>(
+      'SELECT media_id FROM messages WHERE chat_id=? AND media_id IS NOT NULL',
+      chat,
+    );
+    await this.db.run('DELETE FROM messages WHERE chat_id=?', chat);
+    await this.db.run('DELETE FROM message_changes WHERE chat=?', chat);
+    await this.db.run(
+      "DELETE FROM control_outbox WHERE json_extract(packet,'$.type')!='message_change' AND (json_extract(packet,'$.chat')=? OR json_extract(packet,'$.id') IN (SELECT id FROM forgotten_messages))",
+      chat,
+    );
+    for (const row of media) await this.db.run('DELETE FROM media WHERE id=?', row.media_id);
+  }
   async clearLocalHistory(chat: string) {
+    await this.transaction(() => this.clearHistoryRows(chat));
+    this.conversationActivity({ type: 'forget', chat });
+    this.changed();
+  }
+  async deleteLocalChat(chat: string, proof?: ExportProof) {
     await this.transaction(async () => {
-      for (const row of await this.db.all<{ id: string }>(
-        'SELECT id FROM messages WHERE chat_id=?',
-        chat,
-      ))
-        await this.purgeDeliveryMessage(row.id);
-      await this.db.run(
-        'INSERT OR IGNORE INTO forgotten_messages SELECT id,sender FROM messages WHERE chat_id=?',
-        chat,
-      );
-      const media = await this.db.all<{ media_id: string }>(
-        'SELECT media_id FROM messages WHERE chat_id=? AND media_id IS NOT NULL',
-        chat,
-      );
-      await this.db.run('DELETE FROM messages WHERE chat_id=?', chat);
-      await this.db.run('DELETE FROM message_changes WHERE chat=?', chat);
-      await this.db.run(
-        "DELETE FROM control_outbox WHERE json_extract(packet,'$.type')!='message_change' AND (json_extract(packet,'$.chat')=? OR json_extract(packet,'$.id') IN (SELECT id FROM forgotten_messages))",
-        chat,
-      );
-      for (const row of media) await this.db.run('DELETE FROM media WHERE id=?', row.media_id);
+      this.own();
+      if (proof) {
+        if (this.own().key !== proof.owner) throw new Error('IDENTITY_CHANGED');
+        const snapshot = await readExportSnapshot(this.db, chat);
+        if (snapshot.through !== proof.through) throw new Error('EXPORT_CHANGED');
+        const digest = sha256.create();
+        let cursor: ExportCursor | undefined;
+        for (;;) {
+          const page = await readExportPage(this.db, chat, proof.through, cursor);
+          for (const row of page) digest.update(exportRowBytes(row));
+          if (page.length < 120) break;
+          const last = page.at(-1)!;
+          cursor = { sentAt: last.sentAt, sequence: last.sequence };
+        }
+        if (bytesToHex(digest.digest()) !== proof.digest) throw new Error('EXPORT_CHANGED');
+      }
+      await this.clearHistoryRows(chat);
+      // Retain identity/membership so new messages can restore the conversation.
+      // This never sends a group leave or a remote deletion.
+      await this.db.run('UPDATE chats SET hidden=1 WHERE id=?', chat);
     });
     this.conversationActivity({ type: 'forget', chat });
     this.changed();
@@ -2203,6 +2290,7 @@ export class DeviceMessenger {
           ) {
             for (const key of ['headline', 'about', 'email', 'website', 'avatar']) row[key] = '';
           }
+          if (table === 'chats' && !('hidden' in row)) row.hidden = 0;
           if (table === 'messages' && !('edited_at' in row)) row.edited_at = 0;
           if (
             Object.keys(row).length !== columns.length ||

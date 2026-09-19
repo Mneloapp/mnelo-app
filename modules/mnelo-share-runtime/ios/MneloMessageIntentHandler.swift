@@ -165,12 +165,37 @@ open class MneloMessageIntentHandler: INExtension, INSendMessageIntentHandling {
   }
   private func process(_ intent: INSendMessageIntent, operation: String,
                        completion: @escaping (INSendMessageIntentResponse) -> Void) {
-    guard let bound = binding(intent), let content = intent.content,
-      !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, content.utf8.count <= 8000 else {
+    guard let person = person(intent), let handle = person.personHandle?.value,
+      let content = intent.content, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      content.utf8.count <= 8000 else {
       completion(INSendMessageIntentResponse(code: .failure, userActivity: nil)); return
     }
+    let selected = selector.read(handle: handle)
+    if let bound = binding(intent) {
+      perform(intent, bound: bound, selected: selected, content: content, operation: operation, completion: completion)
+      return
+    }
+    // CallKit's preset reply may enter confirm/handle without Siri's recipient
+    // resolution pass (or without preserving our customIdentifier). Resolve it
+    // here against the exact recent call, never by display name or phone alone.
+    guard person.customIdentifier?.hasPrefix(MneloIntentRecipient.prefix) != true, let selected else {
+      completion(INSendMessageIntentResponse(code: .failure, userActivity: nil)); return
+    }
+    request("intentResolve", fields: ["handle": handle, "selector": selected]) { result in
+      guard case .success(let value) = result,
+        let data = try? JSONSerialization.data(withJSONObject: value),
+        let bound = try? JSONDecoder().decode(MneloIntentRecipient.self, from: data),
+        bound.valid, bound.handle == handle, bound.callId == selected["callId"] as? String else {
+        completion(INSendMessageIntentResponse(code: .failureMessageServiceNotAvailable, userActivity: nil)); return
+      }
+      self.perform(intent, bound: bound, selected: selected, content: content, operation: operation, completion: completion)
+    }
+  }
+  private func perform(_ intent: INSendMessageIntent, bound: MneloIntentRecipient, selected: [String: Any]?, content: String,
+                       operation: String, completion: @escaping (INSendMessageIntentResponse) -> Void) {
     var fields = bound.fields
     fields["content"] = content
+    if let selected { fields["selector"] = selected }
     if let identifier = intent.identifier, identifier.utf8.count <= 256 { fields["identifier"] = identifier }
     request(operation, fields: fields) { result in
       let code: INSendMessageIntentResponseCode

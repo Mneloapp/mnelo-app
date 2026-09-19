@@ -98,7 +98,8 @@ export function CallScreen() {
   if (
     chat.data?.kind === 'group' &&
     media &&
-    members.data &&
+    members.data?.some((member) => member.key === identity?.key) &&
+    !chat.data.left_group &&
     (!active || ['ended', 'failed'].includes(active.status)) &&
     !groupStarted
   ) {

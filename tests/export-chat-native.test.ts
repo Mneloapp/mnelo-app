@@ -34,9 +34,15 @@ jest.mock('expo-file-system', () => ({
 }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'fixture' }));
 jest.mock('expo-sharing', () => ({ isAvailableAsync: jest.fn(), shareAsync: jest.fn() }));
+const mockSaveFile = jest.fn();
+jest.mock('@/messenger/share-native', () => ({
+  saveChatExportFile: (uri: string) => mockSaveFile(uri),
+}));
 jest.mock('@/messenger/chat-export', () => ({ createChatExport: jest.fn() }));
 const currentIdentity = jest.fn();
-const engine = { currentIdentity } as unknown as DeviceMessenger;
+const deleteLocalChat = jest.fn();
+const proof = { owner: 'owner', through: 1, digest: 'hash' };
+const engine = { currentIdentity, deleteLocalChat } as unknown as DeviceMessenger;
 const view = {} as ContactView;
 
 beforeEach(() => {
@@ -57,7 +63,7 @@ test('startup cleanup removes only abandoned export ZIPs and leaves active shari
   mockDelete.mockClear();
   jest
     .mocked(createChatExport)
-    .mockResolvedValue({ messages: 0, attachments: 0, missingAttachments: 0, bytes: 0 });
+    .mockResolvedValue({ messages: 0, attachments: 0, missingAttachments: 0, bytes: 0, proof });
   jest.mocked(Sharing.shareAsync).mockImplementation(async () => {
     mockList.mockReturnValue([orphan]);
     cleanupChatExports();
@@ -71,7 +77,7 @@ test('only a completed closed ZIP reaches the system save sheet and the temporar
   jest.mocked(createChatExport).mockImplementation(async (_engine, _view, _id, options) => {
     await options.write(new Uint8Array([1, 2, 3]));
     expect(Sharing.shareAsync).not.toHaveBeenCalled();
-    return { messages: 1, attachments: 0, missingAttachments: 0, bytes: 3 };
+    return { messages: 1, attachments: 0, missingAttachments: 0, bytes: 3, proof };
   });
   jest.mocked(Sharing.shareAsync).mockImplementation(async () => {
     expect(mockClose).toHaveBeenCalledTimes(1);
@@ -107,4 +113,45 @@ test('a stale screen never creates an export; a failed ZIP removes its partial f
   await expect(exportChat(engine, view, 'chat')).rejects.toThrow('EXPORT_TOO_LARGE');
   expect(mockDelete).toHaveBeenCalledTimes(1);
   expect(Sharing.shareAsync).not.toHaveBeenCalled();
+});
+
+for (const saved of [false, true])
+  test(`export-and-delete requires Files to confirm save: ${saved}`, async () => {
+    jest
+      .mocked(createChatExport)
+      .mockResolvedValue({ messages: 1, attachments: 0, missingAttachments: 0, bytes: 3, proof });
+    mockSaveFile.mockResolvedValue(saved);
+    await exportChat(engine, view, 'chat', { deleteAfterSaving: true });
+    expect(Sharing.shareAsync).not.toHaveBeenCalled();
+    if (saved) expect(deleteLocalChat).toHaveBeenCalledWith('chat', proof);
+    else expect(deleteLocalChat).not.toHaveBeenCalled();
+  });
+test('save failure, missing media and account/navigation changes all retain the original chat', async () => {
+  jest
+    .mocked(createChatExport)
+    .mockResolvedValue({ messages: 1, attachments: 0, missingAttachments: 1, bytes: 3, proof });
+  await expect(exportChat(engine, view, 'chat', { deleteAfterSaving: true })).rejects.toThrow(
+    'EXPORT_MEDIA_MISSING',
+  );
+  expect(mockSaveFile).not.toHaveBeenCalled();
+  jest
+    .mocked(createChatExport)
+    .mockResolvedValue({ messages: 1, attachments: 0, missingAttachments: 0, bytes: 3, proof });
+  mockSaveFile.mockRejectedValueOnce(new Error('DISK_FULL'));
+  await expect(exportChat(engine, view, 'chat', { deleteAfterSaving: true })).rejects.toThrow(
+    'DISK_FULL',
+  );
+  mockSaveFile.mockImplementationOnce(async () => {
+    currentIdentity.mockReturnValue({ key: 'changed' });
+    return true;
+  });
+  await exportChat(engine, view, 'chat', { deleteAfterSaving: true });
+  currentIdentity.mockReturnValue({ key: 'owner' });
+  let active = true;
+  mockSaveFile.mockImplementationOnce(async () => {
+    active = false;
+    return true;
+  });
+  await exportChat(engine, view, 'chat', { deleteAfterSaving: true, isCurrent: () => active });
+  expect(deleteLocalChat).not.toHaveBeenCalled();
 });

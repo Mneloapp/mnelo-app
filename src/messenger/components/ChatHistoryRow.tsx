@@ -21,12 +21,16 @@ export function ChatHistoryRow({
   avatar,
   onPress,
   now,
+  onDelete,
+  onExportDelete,
 }: {
   chat: Chat;
   subtitle: string;
   avatar: ReactNode;
   onPress: () => void;
   now?: number;
+  onDelete?: () => void;
+  onExportDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const [mountedAt] = useState(Date.now);
@@ -36,6 +40,18 @@ export function ChatHistoryRow({
   return (
     <FocusPressable
       onPress={onPress}
+      accessibilityActions={
+        onDelete
+          ? [
+              { name: 'delete', label: t('messenger.deleteChat') },
+              { name: 'exportDelete', label: t('messenger.exportDeleteChat') },
+            ]
+          : undefined
+      }
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'delete') onDelete?.();
+        if (event.nativeEvent.actionName === 'exportDelete') onExportDelete?.();
+      }}
       accessibilityRole="button"
       accessibilityLabel={[chat.title, subtitle, stamp, chat.unread ? unread : '']
         .filter(Boolean)

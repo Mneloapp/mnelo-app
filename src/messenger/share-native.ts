@@ -16,3 +16,5 @@ export const incomingFileBridge: {
 export function sharedConversation(_values: string[]): string | null {
   return null;
 }
+
+export const saveChatExportFile: ((uri: string) => Promise<boolean>) | null = null;

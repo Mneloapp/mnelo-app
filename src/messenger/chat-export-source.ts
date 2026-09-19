@@ -53,3 +53,14 @@ export async function readExportPage(
     ...(cursor ? [cursor.sentAt, cursor.sentAt, cursor.sequence] : []),
   );
 }
+
+// Canonical metadata shared by archive validation and atomic export-and-delete.
+export const exportRowBytes = (row: ExportMessage) =>
+  new TextEncoder().encode(
+    JSON.stringify(
+      Object.keys(row)
+        .sort()
+        .map((key) => [key, row[key as keyof ExportMessage]]),
+    ) + '\n',
+  );
+export type ExportProof = { owner: string; through: number; digest: string };

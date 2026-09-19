@@ -5,6 +5,7 @@ import * as Sharing from 'expo-sharing';
 import type { DeviceMessenger } from './engine';
 import type { ContactView } from './contact-view';
 import type { ExportChatOptions } from './export-chat';
+import { saveChatExportFile } from './share-native';
 import { createChatExport } from './chat-export';
 
 import { beginChatExport, finishChatExport } from './chat-export-cache.native';
@@ -39,7 +40,8 @@ export async function exportChat(
   };
   try {
     checkCancelled();
-    if (!(await Sharing.isAvailableAsync())) throw new Error('EXPORT_UNAVAILABLE');
+    if (options.deleteAfterSaving ? !saveChatExportFile : !(await Sharing.isAvailableAsync()))
+      throw new Error('EXPORT_UNAVAILABLE');
     checkCancelled();
     // Remove abandoned partial exports from an interrupted prior launch. Only
     // this dedicated prefix belongs to this feature; unrelated caches stay put.
@@ -47,7 +49,7 @@ export async function exportChat(
     file.create();
     handle = file.open(FileMode.WriteOnly);
     let sinceYield = 0;
-    await createChatExport(engine, view, chatId, {
+    const result = await createChatExport(engine, view, chatId, {
       checkCancelled,
       ...(options.onProgress ? { onProgress: options.onProgress } : {}),
       write: async (bytes) => {
@@ -67,7 +69,18 @@ export async function exportChat(
     // The completed archive no longer needs database access. The system share
     // sheet may now make the app inactive while the user chooses Save to Files.
     preparing = false;
-    await Sharing.shareAsync(file.uri, { mimeType: 'application/zip', UTI: 'public.zip-archive' });
+    if (options.deleteAfterSaving) {
+      if (result.missingAttachments) throw new Error('EXPORT_MEDIA_MISSING');
+      const saved = await saveChatExportFile!(file.uri);
+      // A cancelled save, navigation or account replacement never deletes history.
+      if (saved && engine.currentIdentity()?.key === owner && options.isCurrent?.() !== false)
+        await engine.deleteLocalChat(chatId, result.proof);
+    } else {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/zip',
+        UTI: 'public.zip-archive',
+      });
+    }
   } catch (error) {
     if (!(error instanceof Error && error.message === 'CHAT_EXPORT_CANCELLED')) throw error;
   } finally {

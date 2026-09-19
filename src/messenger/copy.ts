@@ -173,8 +173,30 @@ export const messengerEn = {
   forward: 'Forward',
   read: 'Read on their device',
   groupDetails: 'Group details',
-  saveGroup: 'Save membership',
+  saveGroup: 'Save group',
   leaveGroup: 'Leave group on this device',
+  groupInfo: 'Group info',
+  editGroup: 'Edit group',
+  groupMembers: 'Members',
+  groupMembersCount: 'Group · {{count}} members',
+  groupAddDescription: 'Add group description',
+  groupYou: 'You',
+  groupAdmin: 'Admin',
+  groupRemove: 'Remove',
+  groupRemovePerson: 'Remove {{name}}',
+  groupRemoveHint:
+    'This person will no longer receive new group messages. Their existing history remains on their device.',
+  groupLeaveHint:
+    'New group messages will no longer arrive on this device. Your existing history stays here.',
+  groupNoNewMembers: 'No more contacts to add.',
+  deleteChat: 'Delete',
+  exportDeleteChat: 'Export & delete',
+  deleteChatHint:
+    'Remove this chat and its history from this device? Other participants keep their copies. You remain a group member; new messages will bring the chat back.',
+  exportDeleteHint:
+    'Save a ZIP in Files, then delete this chat from this device. Cancelling the save keeps the chat. If new messages arrive, the chat is kept so nothing unsaved is lost.',
+  exportMediaMissing:
+    'Some attachments are unavailable. The chat was kept. You can export the available history from chat info.',
   groupAdminHint:
     'Only the group creator manages membership. Changes reach other devices when connected. Existing copies of history remain with each participant.',
   groupLeft: 'You are no longer sending or receiving in this group.',
@@ -503,8 +525,29 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   forward: 'გადაგზავნა',
   read: 'წაკითხულია მის მოწყობილობაზე',
   groupDetails: 'ჯგუფის დეტალები',
-  saveGroup: 'მონაწილეების შენახვა',
+  saveGroup: 'ჯგუფის შენახვა',
   leaveGroup: 'ჯგუფიდან გასვლა ამ მოწყობილობაზე',
+  groupInfo: 'ჯგუფის ინფორმაცია',
+  editGroup: 'ჯგუფის რედაქტირება',
+  groupMembers: 'წევრები',
+  groupMembersCount: 'ჯგუფი · {{count}} წევრი',
+  groupAddDescription: 'ჯგუფის აღწერის დამატება',
+  groupYou: 'შენ',
+  groupAdmin: 'ადმინი',
+  groupRemove: 'წაშლა',
+  groupRemovePerson: '{{name}} — ჯგუფიდან წაშლა',
+  groupRemoveHint:
+    'ეს წევრი ჯგუფის ახალ შეტყობინებებს ვეღარ მიიღებს. ძველი ისტორია მის მოწყობილობაზე დარჩება.',
+  groupLeaveHint: 'ამ მოწყობილობაზე ჯგუფის ახალი შეტყობინებები აღარ მოვა. ძველი ისტორია დარჩება.',
+  groupNoNewMembers: 'დასამატებელი კონტაქტები არ არის.',
+  deleteChat: 'წაშლა',
+  exportDeleteChat: 'ექსპორტი და წაშლა',
+  deleteChatHint:
+    'წაიშალოს ჩატი და მისი ისტორია ამ მოწყობილობიდან? სხვა მონაწილეების ასლები დარჩება. ჯგუფის წევრად რჩები; ახალი შეტყობინებისას ჩატი კვლავ გამოჩნდება.',
+  exportDeleteHint:
+    'შეინახე ZIP ფაილებში, შემდეგ ჩატი ამ მოწყობილობიდან წაიშლება. შენახვის გაუქმებისას ჩატი დარჩება. თუ ახალი შეტყობინება მოვა, ჩატი შენარჩუნდება, რათა შეუნახავი მიმოწერა არ დაიკარგოს.',
+  exportMediaMissing:
+    'ზოგი დანართი მიუწვდომელია. ჩატი შენარჩუნებულია. ხელმისაწვდომი ისტორიის ექსპორტი ჩატის ინფორმაციიდან შეგიძლია.',
   groupAdminHint:
     'მონაწილეებს მხოლოდ ჯგუფის შემქმნელი მართავს. ცვლილებები სხვა მოწყობილობებზე კავშირისას მიდის. ისტორიის არსებული ასლები მონაწილეებთან რჩება.',
   groupLeft: 'ამ ჯგუფში აღარ აგზავნი და იღებ შეტყობინებებს.',

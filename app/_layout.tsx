@@ -36,6 +36,8 @@ function Navigator() {
           <Stack.Screen name="chat/[id]" />
           <Stack.Screen name="message-info/[id]" />
           <Stack.Screen name="group/[id]" />
+          <Stack.Screen name="edit-group/[id]" />
+          <Stack.Screen name="group-members/[id]" />
           <Stack.Screen name="call/[id]" />
           <Stack.Screen name="edit-profile" />
           <Stack.Screen name="edit-profile-field" />

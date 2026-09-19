@@ -13,6 +13,7 @@ export function MessageBubble({
   highlighted = false,
   interactiveChildren = false,
   containerStyle,
+  stacked = false,
   bubbleRef,
   onLongPress,
   accessibilityLabel,
@@ -27,6 +28,7 @@ export function MessageBubble({
   own: boolean;
   highlighted?: boolean;
   interactiveChildren?: boolean;
+  stacked?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   bubbleRef?: Ref<View>;
   onLongPress?: () => void;
@@ -50,6 +52,7 @@ export function MessageBubble({
         collapsable={false}
         style={[
           styles.bubble,
+          stacked && { flexDirection: 'column', alignItems: 'stretch' },
           own && styles.outgoing,
           media && styles.mediaBubble,
           visual && styles.visualBubble,
@@ -73,6 +76,7 @@ export function MessageBubble({
             pointerEvents="none"
             style={[
               styles.metadata,
+              stacked && { alignSelf: 'flex-end' },
               visual && styles.visualMetadata,
               overlayMetadata && styles.overlayMetadata,
             ]}

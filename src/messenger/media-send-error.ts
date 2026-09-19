@@ -23,6 +23,7 @@ export function mediaErrorMessage(cause: unknown) {
     CONTACT_PHONE_UNAVAILABLE: 'contactPhoneUnavailable',
     EXPORT_TOO_LARGE: 'exportTooLarge',
     EXPORT_UNAVAILABLE: 'exportUnavailable',
+    EXPORT_MEDIA_MISSING: 'exportMediaMissing',
     EXPORT_CHANGED: 'exportChanged',
   } as const;
   return { key: keys[code as keyof typeof keys] ?? ('genericError' as const), values: {} };

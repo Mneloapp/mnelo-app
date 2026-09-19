@@ -19,7 +19,7 @@ export function phonebookName(raw?: string | null) {
   );
 }
 
-export type PhonebookMatch = { name: string | null; aliases: string[] };
+export type PhonebookMatch = { id?: string; name: string | null; aliases: string[] };
 
 // Callers enumerate in the phone's contact order. Keep that first nonempty name
 // for presentation, while retaining other names for the same full phone locally.
@@ -27,10 +27,12 @@ export function rememberPhonebookName(
   matches: Map<string, PhonebookMatch>,
   number: string,
   raw?: string | null,
+  id?: string,
 ) {
   const name = phonebookName(raw);
   const match = matches.get(number) ?? { name: null, aliases: [] };
   if (name && !match.aliases.includes(name)) match.aliases.push(name);
+  if (id && (!match.id || (!match.name && name))) match.id = id;
   match.name ??= name;
   matches.set(number, match);
 }

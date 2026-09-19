@@ -6,10 +6,15 @@ import { callOutcome, readCallRecord } from '@/messenger/call-record';
 import { alertKind, shouldAlert } from '@/messenger/notification-policy';
 import { Field } from '@/components/ui';
 import { StyleSheet } from 'react-native';
+jest.mock('@/messenger/export-chat', () => ({ exportChat: jest.fn(async () => {}) }));
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock'),
 );
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  useFocusEffect: jest.requireActual('react').useEffect,
+  useIsFocused: () => true,
+  router: { push: jest.fn() },
+}));
 const mockEngine = {
   contactRequests: jest.fn(async () => []),
   chatPage: jest.fn(async () => ({ rows: [], next: undefined })),

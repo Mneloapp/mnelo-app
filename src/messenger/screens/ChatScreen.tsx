@@ -154,6 +154,12 @@ function ChatConversationScreen() {
   }
   const newest = rows[0]?.sequence;
   useVisibleRead(engine, id, newest);
+  const groupUnavailable =
+    chat.data?.kind === 'group' &&
+    Boolean(
+      chat.data.left_group ||
+      (members.data && !members.data.some((member) => member.key === identity?.key)),
+    );
   const remote = members.data?.find((member) => member.key !== identity?.key);
   useEffect(() => {
     if (remote?.key) void mesh?.focus(remote.key).catch(() => undefined);
@@ -278,7 +284,7 @@ function ChatConversationScreen() {
           contentStyle={[ui.flex, styles.chatContent]}
           right={
             <View style={styles.headerButtons}>
-              {chat.data && !chat.data.left_group && remote && (
+              {chat.data && !chat.data.left_group && !groupUnavailable && remote && (
                 <>
                   <IconButton
                     icon="phone"
@@ -439,6 +445,7 @@ function ChatConversationScreen() {
               available={Boolean(
                 chat.data &&
                 !chat.data.left_group &&
+                !groupUnavailable &&
                 remote &&
                 calls &&
                 (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
@@ -485,7 +492,9 @@ function ChatConversationScreen() {
             </View>
           )}
           {action.error && <AppText accessibilityRole="alert">{action.error}</AppText>}
-          {recording ? (
+          {groupUnavailable ? (
+            <AppText tone="secondary">{t('messenger.groupLeft')}</AppText>
+          ) : recording ? (
             <View style={ui.stack}>
               <VoiceRecorder
                 autoStart

@@ -1,4 +1,6 @@
 import {
+  presentPhoneContact,
+  savedPhoneContact,
   managePhonebookAccess,
   savedPhoneName,
   savedPhoneNames,
@@ -10,11 +12,22 @@ import { Contact, getPermissionsAsync, requestPermissionsAsync } from 'expo-cont
 import { Linking } from 'react-native';
 import { observePhonebook } from '@/messenger/phonebook-events';
 import { rememberPhonebookName, type PhonebookMatch } from '@/messenger/phonebook-match';
+const mockEditForm = jest.fn();
 jest.mock('expo-contacts', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: true })),
   requestPermissionsAsync: jest.fn(),
   ContactField: { FULL_NAME: 'fullName', PHONES: 'phones' },
-  Contact: { getAllDetails: jest.fn(), presentAccessPicker: jest.fn(), create: jest.fn() },
+  Contact: Object.assign(
+    function (id: string) {
+      return { editWithForm: () => mockEditForm(id) };
+    },
+    {
+      getAllDetails: jest.fn(),
+      presentAccessPicker: jest.fn(),
+      create: jest.fn(),
+      presentCreateForm: jest.fn(),
+    },
+  ),
 }));
 test('no contact read without permission, and local formatting matches the complete phone only', async () => {
   jest
@@ -303,4 +316,30 @@ test('call search stops on permission revocation or cancellation and caps matche
   jest.mocked(Contact.getAllDetails).mockClear();
   expect(await searchPhonebook('Friend', undefined, controller.signal)).toEqual([]);
   expect(Contact.getAllDetails).not.toHaveBeenCalled();
+});
+
+test('shared contact Save opens an editable native form and reports cancellation without inserting', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  jest.mocked(Contact.presentCreateForm).mockResolvedValue(false);
+  expect(await presentPhoneContact('+12025550101', 'Editable name')).toBe(false);
+  expect(Contact.presentCreateForm).toHaveBeenCalledWith({
+    givenName: 'Editable name',
+    phones: [{ label: 'mobile', number: '+12025550101' }],
+  });
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+test('shared existing contact uses the phonebook alias and opens that exact record, never a duplicate', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValue([
+      { id: 'saved-id', fullName: 'My nickname 💚', phones: [{ number: '+12025550101' }] },
+    ] as never);
+  expect((await savedPhoneContact('+12025550101'))?.name).toBe('My nickname 💚');
+  mockEditForm.mockResolvedValue(true);
+  expect(await presentPhoneContact('+12025550101', 'Sender name')).toBe(true);
+  expect(mockEditForm).toHaveBeenCalledWith('saved-id');
+  expect(Contact.presentCreateForm).not.toHaveBeenCalled();
+  expect(Contact.create).not.toHaveBeenCalled();
 });

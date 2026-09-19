@@ -196,7 +196,10 @@ export function ChatMessageBubble({
         media={Boolean(message.attachment)}
         visual={visual}
         overlayMetadata={visual && !message.body && !message.editedAt}
-        containerStyle={visual ? { width: size.width } : undefined}
+        stacked={message.kind === 'contact'}
+        containerStyle={
+          visual ? { width: size.width } : message.kind === 'contact' ? { width: '86%' } : undefined
+        }
         reactions={(reaction.data ?? []).filter(
           (reaction) =>
             card?.type !== 'poll' ||

@@ -1,5 +1,7 @@
 export const phoneEn = {
   cardCall: 'Call',
+  cardContact: 'Contact',
+  viewSavedContact: 'Open saved contact',
   cardSaved: 'Saved',
   contactNames: 'Allow access to contacts',
   saveToPhone: 'Save to phone Contacts',
@@ -92,6 +94,8 @@ export const phoneEn = {
 } as const;
 export const phoneKa: Record<keyof typeof phoneEn, string> = {
   cardCall: 'დარეკვა',
+  cardContact: 'კონტაქტი',
+  viewSavedContact: 'შენახული კონტაქტის გახსნა',
   cardSaved: 'შენახულია',
   contactNames: 'კონტაქტებზე წვდომის დაშვება',
   saveToPhone: 'ტელეფონის კონტაქტებში შენახვა',

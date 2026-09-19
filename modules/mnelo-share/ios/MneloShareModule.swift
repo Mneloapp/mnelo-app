@@ -3,11 +3,33 @@ import Intents
 import CryptoKit
 
 public final class MneloShareModule: Module {
+  private var exportPicker: MneloExportPicker?
   private let group = "group.com.mnelo.messenger.sharing"
   private let files = DispatchQueue(label: "com.mnelo.share.files")
 
   public func definition() -> ModuleDefinition {
     Name("MneloShare")
+
+    AsyncFunction("saveChatExport") { (value: String, promise: Promise) in
+      guard self.exportPicker == nil,
+        let presenter = self.appContext?.utilities?.currentViewController(),
+        let url = URL(string: value), url.isFileURL,
+        let cache = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
+        url.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL == cache.resolvingSymlinksInPath().standardizedFileURL,
+        url.lastPathComponent.hasPrefix("mnelo-chat-export-"), url.pathExtension == "zip",
+        FileManager.default.fileExists(atPath: url.path) else {
+        promise.reject("EXPORT_UNAVAILABLE", "Cannot present the archive save picker."); return
+      }
+      let delegate = MneloExportPicker { [weak self] saved in
+        self?.exportPicker = nil
+        promise.resolve(saved)
+      }
+      self.exportPicker = delegate
+      let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+      picker.delegate = delegate
+      presenter.present(picker, animated: true)
+      picker.presentationController?.delegate = delegate
+    }.runOnQueue(.main)
 
     AsyncFunction("claimIncomingFiles") { (values: [String]) throws -> [String: String] in
       guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: self.group) else {

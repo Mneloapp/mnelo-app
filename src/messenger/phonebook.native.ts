@@ -64,10 +64,27 @@ export async function requestPhonebookPermission() {
 export async function savedPhoneName(number: string, ownNumber?: string): Promise<string | null> {
   return (await savedPhoneNames([number], ownNumber ?? number)).get(number) ?? null;
 }
+const pendingNameReads = new Map<string, Promise<Map<string, string>>>();
 export async function savedPhoneNames(
   numbers: readonly string[],
   ownNumber?: string,
 ): Promise<Map<string, string>> {
+  // Startup warms caller IDs and chat names together. Share only an in-flight
+  // scan of the same numbers; every later read rechecks permission and Contacts.
+  const wanted = [...new Set(numbers)].sort();
+  const country = parsePhoneNumberFromString(ownNumber ?? numbers[0] ?? '')?.country;
+  const key = JSON.stringify([country, wanted]);
+  let pending = pendingNameReads.get(key);
+  if (!pending) {
+    pending = readPhoneNames(wanted, ownNumber ?? numbers[0]).finally(() => {
+      pendingNameReads.delete(key);
+    });
+    pendingNameReads.set(key, pending);
+  }
+  // Readers cannot change another surface's presentation map.
+  return new Map(await pending);
+}
+async function readPhoneNames(numbers: readonly string[], ownNumber?: string) {
   const contacts = await matchedPhoneContacts(numbers, ownNumber);
   return new Map(
     [...contacts].flatMap(([phone, contact]) => (contact.name ? [[phone, contact.name]] : [])),

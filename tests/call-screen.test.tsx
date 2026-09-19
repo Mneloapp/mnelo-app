@@ -27,6 +27,13 @@ jest.mock('@/messenger/VideoView', () => ({
 const mockListeners = new Set<() => void>();
 let mockCall: DeviceCall | null;
 const mockProfile = jest.fn(async () => ({ avatar: '' }));
+const mockRawChat = jest.fn(async () => ({
+  title: 'Raw profile name',
+  kind: 'direct',
+  peer: 'peer',
+}));
+const mockDisplayChat = jest.fn(async () => ({ title: 'Phonebook name ❤️', kind: 'direct' }));
+const mockDisplayMembers = jest.fn(async () => [{ key: 'self' }, { key: 'peer' }]);
 const mockCalls = {
   subscribe: (listener: () => void) => {
     mockListeners.add(listener);
@@ -60,24 +67,21 @@ jest.mock('@/messenger/DeviceProvider', () => ({
   useDevice: () => ({
     identity: { key: 'self' },
     calls: mockCalls,
-    engine: { contactProfile: mockProfile },
-    view: {
-      chat: async () => ({ title: 'Phonebook name ❤️', kind: 'direct' }),
-      members: async () => [{ key: 'self' }, { key: 'peer' }],
-    },
+    engine: { contactProfile: mockProfile, chat: mockRawChat },
+    view: { chat: mockDisplayChat, members: mockDisplayMembers },
   }),
 }));
 function stream(id: string, video = false) {
   return { id, getVideoTracks: () => (video ? [{ enabled: true }] : []) } as unknown as MediaStream;
 }
-async function show() {
+async function show(waitForName = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   const result = await render(
     <QueryClientProvider client={client}>
       <CallScreen />
     </QueryClientProvider>,
   );
-  await screen.findByText('Phonebook name ❤️');
+  if (waitForName) await screen.findByText('Phonebook name ❤️');
   await fireEvent(screen.getByTestId('call-stage'), 'layout', {
     nativeEvent: { layout: { width: 361, height: 400 } },
   });
@@ -276,4 +280,38 @@ test('outgoing status changes from Calling to Ringing only with a recipient rece
   await act(async () => update({ status: 'connecting' }));
   expect(screen.getByText('Connecting…')).toBeTruthy();
   expect(screen.queryByText('Ringing…')).toBeNull();
+});
+
+test('a cold outgoing call starts while display aliases are pending and never flashes the raw profile name', async () => {
+  let resolveName!: (value: { title: string; kind: string }) => void;
+  mockDisplayChat.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveName = resolve;
+      }),
+  );
+  mockDisplayMembers.mockImplementationOnce(() => new Promise(() => {}));
+  mockRouteMedia = 'voice';
+  mockCall = null;
+  await show(false);
+  await waitFor(() => expect(mockCalls.start).toHaveBeenCalledWith('peer', 'voice'));
+  expect(screen.getByText('Loading…')).toBeOnTheScreen();
+  expect(screen.queryByText('Raw profile name')).toBeNull();
+  await act(() => resolveName({ title: 'Phonebook name ❤️', kind: 'direct' }));
+  await screen.findByText('Phonebook name ❤️');
+  expect(mockCalls.start).toHaveBeenCalledTimes(1);
+});
+
+test('incoming answer and media playback remain available while display aliases are pending', async () => {
+  mockDisplayChat.mockImplementationOnce(() => new Promise(() => {}));
+  mockDisplayMembers.mockImplementationOnce(() => new Promise(() => {}));
+  mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null };
+  await show(false);
+  expect(screen.getByText('Loading…')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Decline' })).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
+  expect(mockCalls.accept).toHaveBeenCalledTimes(1);
+  await act(() => update({ status: 'active', remote: stream('remote') }));
+  expect(screen.getByTestId('call-audio', { includeHiddenElements: true })).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'End call' })).toBeOnTheScreen();
 });

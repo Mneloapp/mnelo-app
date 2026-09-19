@@ -57,7 +57,14 @@ export function CallActions({
     queryFn: () => view.contacts(),
     networkMode: 'always',
   });
-  const trusted = contacts.data?.some((item) => item.key === target.key && !item.blocked);
+  const access = useQuery({
+    queryKey: ['device', 'call-contact-access'],
+    queryFn: () => engine.contacts(),
+    networkMode: 'always',
+  });
+  // Call permission comes from local trust state, independently of a pending
+  // address-book label. Display queries must not disable an otherwise ready call.
+  const trusted = access.data?.some((item) => item.key === target.key && !item.blocked);
   useEffect(() => {
     if (trusted) void mesh?.focus(target.key).catch(() => undefined);
   }, [mesh, target.key, trusted]);

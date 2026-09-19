@@ -23,6 +23,24 @@ test('phonebook names override existing aliases in search, headers, members and 
     await engine.trustContact({ key: other, name: 'Another fixture' });
     const group = await engine.createGroup('Development group', [peer, other]);
     await engine.recordCall(chat, randomUUID(), peer, 'voice', 'ended', 'outgoing');
+    let releaseNames!: (names: ReadonlyMap<string, string>) => void;
+    const initialNames = new Promise<ReadonlyMap<string, string>>((resolve) => {
+      releaseNames = resolve;
+    });
+    const coldView = new ContactView(engine, () => initialNames);
+    let firstQueryFinished = false;
+    const firstQuery = coldView.chatPage('direct', 'მეგობარი').then((page) => {
+      firstQueryFinished = true;
+      return page;
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(
+      firstQueryFinished,
+      false,
+      'cold-start names must resolve before projecting a chat page',
+    );
+    releaseNames(new Map([[peer, 'ჩემი მეგობარი']]));
+    assert.equal((await firstQuery).rows[0]?.title, 'ჩემი მეგობარი');
     const view = new ContactView(engine, new Map([[peer, 'ჩემი მეგობარი']]));
     assert.equal((await view.contacts()).find((c) => c.key === peer)?.name, 'ჩემი მეგობარი');
     assert.equal((await view.chat(chat))?.title, 'ჩემი მეგობარი');

@@ -31,7 +31,7 @@ export function IncomingCalls() {
 }
 export function CallScreen() {
   const { id, media } = useLocalSearchParams<{ id: string; media?: 'voice' | 'video' }>();
-  const { identity, calls, view } = useDevice();
+  const { identity, calls, view, engine } = useDevice();
   const { t } = useTranslation();
   const action = useLocalAction();
   const endAction = useLocalAction();
@@ -72,14 +72,23 @@ export function CallScreen() {
     queryFn: () => view.members(id),
     networkMode: 'always',
   });
+  // Starting media needs only the trusted chat identity. Address-book labels
+  // may still be resolving on a cold launch and must not delay call control.
+  const target = useQuery({
+    queryKey: ['device', 'call-target', id],
+    queryFn: () => engine.chat(id),
+    enabled: Boolean(media),
+    networkMode: 'always',
+  });
   const peer = members.data?.find((member) => member.key !== identity?.key);
+  const targetPeer = target.data?.kind === 'direct' ? target.data.peer : null;
   useEffect(() => {
-    if (started.current || !calls || !peer || !media || chat.data?.kind !== 'direct') return;
+    if (started.current || !calls || !targetPeer || !media) return;
     started.current = true;
     if (call && call.chat === id && !['ended', 'failed'].includes(call.status)) return;
-    void action.run(() => calls.start(peer.key, media));
-  }, [action, call, calls, chat.data?.kind, id, media, peer]);
-  const name = chat.data?.title ?? t('brand');
+    void action.run(() => calls.start(targetPeer, media));
+  }, [action, call, calls, id, media, targetPeer]);
+  const name = chat.data?.title ?? t(chat.isPending ? 'common.loading' : 'brand');
   const names = Object.fromEntries((members.data ?? []).map((member) => [member.key, member.name]));
   if (
     chat.data?.kind === 'group' &&

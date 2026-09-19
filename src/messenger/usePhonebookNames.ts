@@ -1,27 +1,96 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 import type { DeviceMessenger } from './engine';
 import { observeNativePhonebook, savedPhoneNames } from './phonebook';
 import { observePhonebook, phonebookChanged } from './phonebook-events';
 
 const empty: ReadonlyMap<string, string> = new Map();
+export const PHONEBOOK_INITIAL_WAIT_MS = 5000;
+
+function initialRead() {
+  let finish!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  return { promise, finish };
+}
+
+// This projection is memory-only and scoped to one engine/number/access session.
+// A pending name query cannot keep an old session's names after cleanup.
+function nameSource(scope: {
+  engine: DeviceMessenger | null;
+  enabled: boolean;
+  ownNumber: string | undefined;
+}) {
+  let names = empty;
+  let active = true;
+  let initial = initialRead();
+  if (!scope.engine || !scope.enabled) initial.finish();
+  return {
+    get names() {
+      return names;
+    },
+    async readNames() {
+      const requested = initial;
+      await requested.promise;
+      return active && requested === initial ? names : empty;
+    },
+    start() {
+      // React can replay an effect's setup after cleanup in development.
+      if (!active) initial = initialRead();
+      active = true;
+    },
+    publish(next: ReadonlyMap<string, string>) {
+      if (!active) return;
+      names = next;
+      initial.finish();
+    },
+    stop() {
+      active = false;
+      names = empty;
+      initial.finish();
+    },
+  };
+}
+
 export function usePhonebookNames(
   engine: DeviceMessenger | null,
   enabled: boolean,
   ownNumber?: string,
 ) {
-  const [resolvedNames, setResolvedNames] = useState<{
-    engine: DeviceMessenger | null;
-    number: string | undefined;
-    names: ReadonlyMap<string, string>;
-  }>({ engine: null, number: undefined, names: empty });
+  const source = useMemo(
+    () => nameSource({ engine, enabled, ownNumber }),
+    [engine, enabled, ownNumber],
+  );
+  const [, changedNames] = useState(0);
   useEffect(() => {
-    if (!engine || !enabled) return;
+    source.start();
+    if (!engine || !enabled) {
+      source.publish(empty);
+      return () => source.stop();
+    }
     let alive = true;
     let fingerprint = '';
     let force = true;
     let running = false;
     let queued = false;
+    const publish = (resolved: ReadonlyMap<string, string>) => {
+      clearTimeout(initialTimeout);
+      const previous = source.names;
+      const next =
+        previous.size === resolved.size &&
+        [...resolved].every(([key, name]) => previous.get(key) === name)
+          ? previous
+          : resolved;
+      source.publish(next);
+      if (next !== previous) changedNames((revision) => revision + 1);
+    };
+    // A failed or hung Contacts bridge must not strand chat queries. Normal
+    // startup waits for the first names, while a late successful read still
+    // refreshes the projection after this exceptional fallback.
+    const initialTimeout = setTimeout(() => {
+      if (alive) publish(empty);
+    }, PHONEBOOK_INITIAL_WAIT_MS);
     const update = async () => {
       if (running) {
         queued = true;
@@ -50,23 +119,18 @@ export function usePhonebookNames(
                   return name ? [[c.key, name] as const] : [];
                 }),
               );
-              if (alive) {
+              // A native/permission change during this scan invalidates it.
+              // Keep initial readers pending until the queued fresh scan.
+              if (alive && !force) {
                 fingerprint = next;
-                setResolvedNames((previous) =>
-                  previous.engine === engine &&
-                  previous.number === ownNumber &&
-                  previous.names.size === resolved.size &&
-                  [...resolved].every(([key, name]) => previous.names.get(key) === name)
-                    ? previous
-                    : { engine, number: ownNumber, names: resolved },
-                );
+                publish(resolved);
               }
             }
           } catch {
             // Permission changes/read failures clear the projection, never the saved alias.
-            if (alive) {
+            if (alive && !force) {
               fingerprint = '';
-              setResolvedNames({ engine, number: ownNumber, names: empty });
+              publish(empty);
             }
           }
         } while (alive && queued);
@@ -89,13 +153,14 @@ export function usePhonebookNames(
     void update();
     return () => {
       alive = false;
+      clearTimeout(initialTimeout);
+      source.stop();
       changes();
       permission();
       nativeChanges();
       foreground.remove();
     };
-  }, [engine, enabled, ownNumber]);
-  return enabled && resolvedNames.engine === engine && resolvedNames.number === ownNumber
-    ? resolvedNames.names
-    : empty;
+  }, [engine, enabled, ownNumber, source]);
+  const names = source.names;
+  return useMemo(() => ({ names, readNames: source.readNames }), [names, source]);
 }

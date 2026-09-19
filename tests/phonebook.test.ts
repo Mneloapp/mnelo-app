@@ -63,6 +63,54 @@ test('permission revoked during a contact read discards already read names', asy
   expect((await savedPhoneNames(['+12025550101'])).size).toBe(0);
 });
 
+test('startup consumers share the same pending scan but later reads see contact changes', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  let finish!: (rows: never) => void;
+  let started!: () => void;
+  const reading = new Promise<void>((resolve) => (started = resolve));
+  jest.mocked(Contact.getAllDetails).mockImplementationOnce(() => {
+    started();
+    return new Promise((resolve) => (finish = resolve));
+  });
+  const first = savedPhoneNames(['+12025550101', '+12025550102'], '+12025550103');
+  const second = savedPhoneNames(['+12025550102', '+12025550101', '+12025550101'], '+12025550103');
+  await reading;
+  expect(Contact.getAllDetails).toHaveBeenCalledTimes(1);
+  finish([{ fullName: 'Local name', phones: [{ number: '+12025550101' }] }] as never);
+  const [a, b] = await Promise.all([first, second]);
+  expect(a.get('+12025550101')).toBe('Local name');
+  expect(b.get('+12025550101')).toBe('Local name');
+  a.clear();
+  expect(b.get('+12025550101')).toBe('Local name');
+
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValueOnce([
+      { fullName: 'Renamed locally', phones: [{ number: '+12025550101' }] },
+    ] as never);
+  expect(
+    (await savedPhoneNames(['+12025550101', '+12025550102'], '+12025550103')).get('+12025550101'),
+  ).toBe('Renamed locally');
+  expect(Contact.getAllDetails).toHaveBeenCalledTimes(2);
+});
+
+test('a shared failed read is released and a later attempt can recover', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockRejectedValueOnce(new Error('Contacts unavailable'));
+  const results = await Promise.allSettled([
+    savedPhoneNames(['+12025550101']),
+    savedPhoneNames(['+12025550101']),
+  ]);
+  expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected']);
+  expect(Contact.getAllDetails).toHaveBeenCalledTimes(1);
+  jest
+    .mocked(Contact.getAllDetails)
+    .mockResolvedValueOnce([
+      { fullName: 'Available again', phones: [{ number: '+12025550101' }] },
+    ] as never);
+  expect(await savedPhoneName('+12025550101')).toBe('Available again');
+});
+
 test('duplicate phone contacts keep the first nonempty name in device order and every distinct alias', async () => {
   jest.mocked(getPermissionsAsync).mockResolvedValue({ granted: true } as never);
   const rows = [

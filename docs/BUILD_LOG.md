@@ -1156,3 +1156,36 @@ trace contains no call, so no fresh physical answer-to-audio/video timing is
 claimed. Build 37 and all other prior releases remain retained. The previously
 documented intermittent suspension crash remains unresolved and outside this
 bounded call change.
+
+Build 42 distribution completed at approximately 19:35 Asia/Tbilisi. App Store
+Connect separately confirmed **Testing** in Mnelo Development (one internal
+tester) and Mnelo Preview (two external testers), with saved test instructions
+and automatic notification enabled. Apple build ID:
+`5960c377-37b3-4de5-97eb-6a6382fd2e17`. Exact source is private commit
+`8da609231cfbf9dedbd23818d3ef4f6a286ba9ef`, public tag `ios-0.1.0-42` at
+`e1959f45f5df827cd4373211160edda53f679506`; its CI passed. The exported IPA
+passed distribution identity, entitlement, configuration and packaged-secret
+checks; the final resend guard was verified in its decoded Hermes bytecode.
+The four existing vendor dSYM warnings did not block Apple's upload. George's
+phone received an in-place build-42 installation, verified through device app
+metadata; launch was blocked by the locked phone. Two-phone media acceptance
+remains pending. Evidence: `artifacts/build42-evidence.json`.
+
+## September 19, 2026 — Build 43 cold-launch contact names
+
+Initial name-dependent queries now wait for the memory-only phonebook projection
+instead of publishing a profile/number title before its saved contact alias.
+Identical concurrent scans share work; later reads remain fresh. Initial native
+read stalls have a five-second fallback, and permission, session and refresh
+races are covered. Network, navigation, message processing and media remain
+independent. Call start targets and call-action trust checks use raw identity
+queries so label resolution cannot add call latency.
+
+Full checks pass 738 tests (558 Jest/101 suites, three server and 177
+device/protocol), type/lint/format/source guards, both mobile exports and the
+history/source/bundle secret scans. A final targeted call/dial run resolves the
+test-only asynchronous trust-query warning and passes 34 tests without warnings.
+Archive/distribution/TestFlight are pending at this checkpoint. No server or
+dependency change; physical cold-launch acceptance remains pending. See
+[BUILD_43](BUILD_43.md). Earlier releases are preserved and the existing
+intermittent suspension crash remains outside this fix.

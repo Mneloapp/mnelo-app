@@ -6,11 +6,15 @@ import type { Chat } from './model';
 export class ContactView {
   constructor(
     private readonly engine: DeviceMessenger,
-    private readonly names: ReadonlyMap<string, string>,
+    private readonly names:
+      ReadonlyMap<string, string> | (() => Promise<ReadonlyMap<string, string>>),
   ) {}
   private async displayNames() {
-    const names = await this.engine.contactDisplayNames();
-    for (const [peer, name] of this.names) names.set(peer, name);
+    const [names, phoneNames] = await Promise.all([
+      this.engine.contactDisplayNames(),
+      typeof this.names === 'function' ? this.names() : this.names,
+    ]);
+    for (const [peer, name] of phoneNames) names.set(peer, name);
     return names;
   }
   private title = (chat: Chat, names: ReadonlyMap<string, string>) =>

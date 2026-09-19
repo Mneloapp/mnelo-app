@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import type { LocalCall } from '@/messenger/model';
 import { CallsScreen, NewCallScreen } from '@/messenger/screens/CallsScreen';
+import { CallActions } from '@/messenger/screens/CallActions';
 
 jest.mock('@/messenger/phone-client', () => ({ devicePhoneClient: () => null }));
 jest.mock('@/messenger/screens/FindPhoneScreen', () => ({ FindPhoneScreen: () => null }));
@@ -30,8 +31,12 @@ const mockRuntime = {
     start: jest.fn(async () => undefined),
   },
 };
+const mockDisplayContacts = jest.fn(() => mockRuntime.engine.contacts());
 jest.mock('@/messenger/DeviceProvider', () => ({
-  useDevice: () => ({ ...mockRuntime, view: mockRuntime.engine }),
+  useDevice: () => ({
+    ...mockRuntime,
+    view: { ...mockRuntime.engine, contacts: mockDisplayContacts },
+  }),
 }));
 async function show(children: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
@@ -128,5 +133,30 @@ test.each(['voice', 'video'] as const)(
       key: 'alice',
       name: 'Development Alice',
     });
+  },
+);
+
+test.each(['alice', 'blocked'] as const)(
+  'pending display names do not change raw call permission for %s',
+  async (key) => {
+    mockRuntime.calls.supportsQueuedSignaling = true;
+    mockDisplayContacts.mockImplementationOnce(() => new Promise(() => {}));
+    await show(<CallActions target={{ key, name: 'Resolved contact name' }} onClose={() => {}} />);
+    expect(screen.getByText('Resolved contact name')).toBeOnTheScreen();
+    if (key === 'alice') {
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Voice call' })).toBeEnabled());
+      await fireEvent.press(screen.getByRole('button', { name: 'Voice call' }));
+      await waitFor(() => expect(mockRuntime.calls.start).toHaveBeenCalledWith('alice', 'voice'));
+      expect(mockRuntime.engine.trustContact).toHaveBeenCalledWith({
+        key: 'alice',
+        name: 'Development Alice',
+      });
+    } else {
+      await waitFor(() => expect(mockRuntime.engine.contacts).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: 'Voice call' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Video call' })).toBeDisabled();
+      expect(mockRuntime.calls.start).not.toHaveBeenCalled();
+    }
+    expect(screen.queryByText('Development Alice')).toBeNull();
   },
 );

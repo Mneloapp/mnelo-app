@@ -125,7 +125,10 @@ test('first-use number needs an explicit action and never starts offline media',
     phone: '+12025550102',
     name: 'Development Bob',
   });
-  expect(await screen.findByRole('button', { name: 'Voice call' })).toBeDisabled();
+  // Wait for the separate raw-trust query to settle before asserting that
+  // offline reachability, rather than pending contact access, disables dialing.
+  await waitFor(() => expect(mockMesh.focus).toHaveBeenCalledWith(peer));
+  expect(screen.getByRole('button', { name: 'Voice call' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Video call' })).toBeDisabled();
   expect(mockCalls.start).not.toHaveBeenCalled();
 });

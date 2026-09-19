@@ -136,10 +136,10 @@ export function DeviceProvider({ children }: PropsWithChildren) {
       deviceNetworkFailed();
     }
   }, [engine, identity?.key, authenticated]);
-  const phoneNames = usePhonebookNames(engine, authenticated, enrollment?.phone);
+  const phonebook = usePhonebookNames(engine, authenticated, enrollment?.phone);
   const contactView = useMemo(
-    () => (engine ? new ContactView(engine, phoneNames) : null),
-    [engine, phoneNames],
+    () => (engine ? new ContactView(engine, phonebook.readNames) : null),
+    [engine, phonebook],
   );
   useEffect(() => {
     if (contactView) void cache.invalidateQueries({ queryKey: ['device'] });

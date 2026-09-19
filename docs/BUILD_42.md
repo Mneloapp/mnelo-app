@@ -32,9 +32,11 @@ native bridge/event-loop delay; background suspension can extend the observation
 delay. No peer identifiers, SDP, message
 contents, addresses or credentials are added to diagnostics.
 
-The owner currently has only one phone available. George's paired phone has
-build 41 installed; its retrieved diagnostic cache contains startup/delivery
-events but no call. Consequently no fresh physical answer-to-audio or
+The owner currently has only one phone available. George's build-41 diagnostic
+cache contains startup/delivery events but no call. Build 42 was subsequently
+installed in place on that phone and its installed version was verified. The
+launch check was blocked by the locked device, rather than an observed app crash.
+Consequently no fresh physical answer-to-audio or
 answer-to-video result is claimed for this change. The two-phone test remains
 necessary when both devices are available.
 
@@ -57,9 +59,10 @@ moderate transitive findings.
 
 The real Chromium/WebRTC harness passed **32 calls** over live authenticated
 relay-only TURN. Each call required audio RTP on both peers; video calls also
-required decoded video frames on both peers. Consent, old-recipient discard and
-resend, 400 ms delayed capture, mute, decline, hangup and cleanup passed with no
-browser errors. Median answer-to-observed-media times, three samples per cell:
+required decoded video frames on both peers. Consent, simulated build-41
+preaccept-discard compatibility, 400 ms delayed capture, mute, decline, hangup
+and cleanup passed with no browser errors. Median answer-to-observed-media
+times, three samples per configuration:
 
 | TURN transport | Voice, baseline → early offer | Video, baseline → early offer |
 | -------------- | ----------------------------: | ----------------------------: |
@@ -79,5 +82,41 @@ unavailable Testing-framework imports. The final resend guard predates the
 archive's JavaScript bundle phase. Archive Hermes SHA-256:
 `6e733bf2480a07c2781949e9a0ba187592ea09f6a21f10403b0200e3e7ad9279`.
 
-Distribution export, source publication and TestFlight availability remain
-pending at this checkpoint; completion evidence will be appended below.
+## Distribution checkpoint
+
+The exact release source is preserved as private commit
+`8da609231cfbf9dedbd23818d3ef4f6a286ba9ef` and public tag `ios-0.1.0-42`,
+public commit `e1959f45f5df827cd4373211160edda53f679506`. The public-source
+[CI run](https://github.com/Mneloapp/mnelo-app/actions/runs/35451279458) passed,
+including all 722 tests, Expo Doctor's 21 checks and the dependency audit's
+high-severity gate.
+
+The distribution-signed IPA passed the same artifact and regression checks,
+including production APNs and disabled debugging entitlements. Archive and
+exported Hermes bundles match. The final redundant-resend guard was also
+verified in the decoded distributed Hermes bytecode. Packaged and decoded
+secret scans report zero findings. The IPA is retained at
+`artifacts/Mnelo-0.1.0-42-export/Mnelo.ipa` (121,086,766 bytes), SHA-256
+`b395174f2ba4422d12275d24284b459984c1a00c616177589adea38a16f7de2f`.
+
+Xcode confirmed **Uploaded to Apple** at 19:24 Asia/Tbilisi on September 19.
+The four existing vendor dSYM warnings for React, ReactNativeDependencies,
+WebRTC and Hermes did not block upload; native vendor stack symbolication
+remains limited for those binaries.
+
+## TestFlight availability
+
+At approximately 19:35 Asia/Tbilisi on September 19, App Store Connect showed
+**Testing** for build `0.1.0 (42)` in both existing groups: **Mnelo Development**
+(internal, one tester) and **Mnelo Preview** (external, two testers). Each group's
+build table was checked separately. The build ID is
+`5960c377-37b3-4de5-97eb-6a6382fd2e17`.
+
+The retained export-compliance answers are standard encryption in addition to
+the operating system and no France distribution. What to Test was saved, with
+automatic tester notifications enabled. The notes explicitly request physical
+answer-to-sound/picture checks and retain the known suspension-crash limitation.
+No prior build was expired or removed and no tester membership was changed.
+This completion record is documentation added after the frozen release source;
+the published release tag remains unchanged. Consolidated local evidence is
+`artifacts/build42-evidence.json`.

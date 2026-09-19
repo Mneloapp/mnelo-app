@@ -31,6 +31,7 @@ export function Page({
   title,
   right,
   back = false,
+  onBack,
   scroll = true,
   titleLines,
   bottomSafe = true,
@@ -52,6 +53,7 @@ export function Page({
   title?: string;
   right?: ReactNode;
   back?: boolean;
+  onBack?: (() => void) | undefined;
   scroll?: boolean;
   titleLines?: number;
   bottomSafe?: boolean;
@@ -102,7 +104,9 @@ export function Page({
               <IconButton
                 label={tr('common.back')}
                 icon="chevron-left"
-                onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+                onPress={
+                  onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')))
+                }
               />
             )}
             {!back && title === tr('brand') ? (

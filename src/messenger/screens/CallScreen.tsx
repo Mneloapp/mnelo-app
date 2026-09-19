@@ -4,7 +4,7 @@ import { router, useIsFocused, useLocalSearchParams, usePathname } from 'expo-ro
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/ui';
-import { PeerAvatar } from '../components/ContactCard';
+import { GroupAvatar, PeerAvatar } from '../components/ContactCard';
 import { GroupCallSetup } from '../components/GroupCallSetup';
 import { CallSurface } from '../components/CallSurface';
 import { useDevice } from '../DeviceProvider';
@@ -133,7 +133,9 @@ export function CallScreen() {
       title={name}
       names={names}
       avatar={
-        avatarPeer ? (
+        chat.data?.kind === 'group' ? (
+          <GroupAvatar chat={id} name={name} size="call" />
+        ) : avatarPeer ? (
           <PeerAvatar peer={avatarPeer} name={name} size="call" />
         ) : (
           <Avatar name={name} size="call" />

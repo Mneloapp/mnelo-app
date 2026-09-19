@@ -8,6 +8,7 @@ import { Avatar, Row, ui } from '@/components/ui';
 import { theme } from '@/theme/tokens';
 import { useDevice } from '../DeviceProvider';
 import { safeWebsite, type LocalProfile } from '../local-profile';
+import { readGroupProfile } from '../group-profile';
 import { avatarUri } from '../profile-avatar';
 import { fallbackAvatarColor } from '../avatar-color';
 import { useLocalAction } from '../screens/shared';
@@ -117,3 +118,30 @@ export const cardStyles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
   },
 });
+
+export function GroupAvatar({
+  chat,
+  name,
+  size,
+}: {
+  chat: string;
+  name: string;
+  size?: 'small' | 'large' | 'call';
+}) {
+  const { engine } = useDevice();
+  const query = useQuery({
+    queryKey: ['device', 'group-profile', chat],
+    queryFn: () => engine.chat(chat),
+    networkMode: 'always',
+    staleTime: Infinity,
+  });
+  return (
+    <Avatar
+      group
+      name={name}
+      size={size ?? 'normal'}
+      uri={avatarUri(query.data ? readGroupProfile(query.data).avatar : '')}
+      fallbackRingColor={fallbackAvatarColor('group:' + chat)}
+    />
+  );
+}

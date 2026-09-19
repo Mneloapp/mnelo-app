@@ -9,7 +9,7 @@ import licenseText from '@/lib/open-source-license.json';
 
 const source = 'https://github.com/Mneloapp/mnelo-app';
 // Retain this exact public source tag for the distributed binary.
-const sourceRef = 'ios-0.1.0-47';
+const sourceRef = 'ios-0.1.0-48';
 
 export function OpenSourceScreen() {
   const { t } = useTranslation();

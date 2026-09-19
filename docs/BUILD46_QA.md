@@ -28,7 +28,7 @@ The compiled source is private commit `70edb05ee0af706608a182893d548e7cee8e7f94`
 
 ## Physical TestFlight checks still required
 
-1. Upgrade both phones from build 45 to 46. Confirm the existing account, contacts and history remain available, and startup neither crashes nor shows the phone-service-unavailable screen.
+1. Upgrade both phones from build 45 to successor build 47, which includes these changes. Confirm the existing account, contacts and history remain available, and startup neither crashes nor shows the phone-service-unavailable screen.
 2. With Mnelo closed or the phone locked, receive a message and check that the app badge updates before opening it. Tap the notification and confirm the exact sender's chat opens. In the foreground, confirm there is one banner rather than a generic banner followed by a named duplicate.
 3. Send messages in both directions at roughly one-second intervals, including while the receiving chat is open. Check arrival order and delay, the uncolored delivery leaf and its transition to green after reading.
 4. Try voice and video calls from locked, background and foreground states. Measure answer, first audible speech and first rendered remote frame; collect the retained call-phase diagnostics immediately afterward. Confirm the correct caller name appears on the first incoming screen, Calling changes to Ringing when appropriate, ringback is audible, the speaker button matches the actual route, and the timer tracks the connected call.

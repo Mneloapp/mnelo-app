@@ -93,7 +93,12 @@ export function GroupScreen() {
         </>
       ) : (
         <>
-          <Avatar name={group.data?.title ?? ''} uri={avatarUri(profile.avatar)} size="profile" />
+          <Avatar
+            group
+            name={group.data?.title ?? ''}
+            uri={avatarUri(profile.avatar)}
+            size="profile"
+          />
           {profile.headline ? <AppText variant="headline">{profile.headline}</AppText> : null}
           {profile.about ? <AppText tone="secondary">{profile.about}</AppText> : null}
           <CardDetails profile={{ ...emptyProfile(), ...profile }} />

@@ -28,6 +28,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var defaultSpeaker = false
   private var explicitSpeaker: Bool?
   private var routeObserver: NSObjectProtocol?
+  private var proximityObserver: NSObjectProtocol?
   private var preparingAudio = false
   private var timingEvents = MneloConnectionTimings()
   private var timingFlush: Timer?
@@ -67,6 +68,12 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     RTCAudioSession.sharedInstance().isAudioEnabled = false
     routeObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.reportAudioRoute() }
+    }
+    proximityObserver = NotificationCenter.default.addObserver(forName: UIDevice.proximityStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+      Task { @MainActor in
+        guard let self, !self.live.isEmpty else { return }
+        self.timing(UIDevice.current.proximityState ? "CALL_PROXIMITY_NEAR" : "CALL_PROXIMITY_FAR")
+      }
     }
     timing("APP_STARTED")
   }

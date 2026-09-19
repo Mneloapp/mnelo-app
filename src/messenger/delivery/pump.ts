@@ -29,6 +29,7 @@ export class DeliveryPump {
   private stopped = true;
   private running: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private scheduledRevision = 0;
   private initialized = false;
   private retry = 1000;
   private wakePending = false;
@@ -94,18 +95,31 @@ export class DeliveryPump {
     this.wakePending = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    this.scheduledRevision++;
   }
   private schedule(delay: number) {
     if (this.stopped) return;
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => {
+    this.timer = null;
+    const revision = ++this.scheduledRevision;
+    const run = () => {
+      if (this.stopped || revision !== this.scheduledRevision) return;
       this.timer = null;
       void this.tick(false);
-    }, delay);
+    };
+    // An accepted call / native inbox wake must run even with the screen off.
+    // Keep backoff on timers, but don't gate ready work on a display frame.
+    if (delay === 0) queueMicrotask(run);
+    else this.timer = setTimeout(run, delay);
   }
   async tick(forcePoll = true) {
     if (this.stopped) return;
-    if (this.running) return this.running.catch(() => undefined); // The owning tick reports the failure once.
+    if (this.running) {
+      // A caller joining an event-started cycle can still request its inbox
+      // poll. Keep a single owner for encryption and error reporting.
+      this.forcePoll ||= forcePoll;
+      return this.running.catch(() => undefined);
+    }
     this.issue = undefined;
     this.forcePoll = forcePoll;
     const operation = this.cycle();

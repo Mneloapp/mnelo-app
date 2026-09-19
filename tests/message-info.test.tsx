@@ -3,7 +3,7 @@ import { MessageReceiptDetails } from '@/messenger/screens/MessageInfoScreen';
 import { formatDate, formatTime } from '@/i18n/format';
 import type { MessageInfo } from '@/messenger/message-info';
 
-jest.mock('@/messenger/screens/ChatScreen', () => ({ ChatMessageBubble: () => null }));
+jest.mock('@/messenger/components/ChatMessageBubble', () => ({ ChatMessageBubble: () => null }));
 jest.mock('@/messenger/DeviceProvider', () => ({ useDevice: () => ({}) }));
 jest.mock('@/messenger/components/ContactCard', () => ({ PeerAvatar: () => null }));
 jest.mock('@react-native-community/netinfo', () =>

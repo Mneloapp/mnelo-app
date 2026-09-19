@@ -39,7 +39,7 @@ function fixture() {
 beforeEach(() => jest.useFakeTimers());
 afterEach(() => jest.useRealTimers());
 
-test('first relay candidate starts setup before an unreachable fallback finishes gathering', async () => {
+test('first relay candidate starts setup with display timers paused, before an unreachable fallback finishes gathering', async () => {
   const f = fixture();
   let ready = false;
   const operation = gatherCallCandidates(f.rtc).then(() => {
@@ -49,7 +49,7 @@ test('first relay candidate starts setup before an unreachable fallback finishes
   expect(ready).toBe(false);
   f.peer.localDescription.sdp = sdp([relay]);
   f.emit('icecandidate');
-  await jest.advanceTimersByTimeAsync(40);
+  // No timer advancement: a phone held at the ear can stop display frames.
   await operation;
   expect(ready).toBe(true);
   expect(f.peer.iceGatheringState).toBe('gathering');

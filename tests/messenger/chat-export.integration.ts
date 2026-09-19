@@ -55,6 +55,48 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 const decoded = (files: Record<string, string>, path: string) =>
   Buffer.from(files[path]!, 'base64').toString('utf8');
 
+test('unchanged native dictionary rows export despite different property enumeration on every pass', async () => {
+  const f = await fixture();
+  try {
+    await f.engine.send(f.chat, 'უცვლელი ტექსტი https://example.org/place', {
+      deferDelivery: true,
+    });
+    await f.engine.send(f.chat, 'Photo', {
+      kind: 'image',
+      media: { name: 'photo.png', mime: 'image/png', bytes: 'cGhvdG8=', duration: null },
+      deferDelivery: true,
+    });
+    const read = f.engine.exportPage.bind(f.engine);
+    let pass = 0;
+    f.engine.exportPage = async (...args) => {
+      const rows = await read(...args);
+      // Swift [String: Any] dictionaries do not promise SQL-column key order.
+      const shift = ++pass;
+      return rows.map((row) => {
+        const entries = Object.entries(row);
+        return Object.fromEntries([
+          ...entries.slice(shift % entries.length),
+          ...entries.slice(0, shift % entries.length),
+        ]) as typeof row;
+      });
+    };
+    const chunks: Uint8Array[] = [];
+    const result = await createChatExport(f.engine, f.view, f.chat, {
+      write: (chunk) => {
+        chunks.push(chunk.slice());
+      },
+    });
+    assert.equal(result.messages, 2);
+    assert.equal(result.attachments, 1);
+    const files = extract(chunks);
+    assert.ok(decoded(files, 'Chat.html').includes('უცვლელი ტექსტი'));
+    assert.ok(decoded(files, 'Links/index.html').includes('https://example.org/place'));
+    assert.equal(decoded(files, 'Media/2-photo.png'), 'photo');
+  } finally {
+    await f.close();
+  }
+});
+
 test('export streams every bounded page in chronological order, aliases and complete UTF-8 HTML; live arrivals excluded', async () => {
   const f = await fixture();
   try {

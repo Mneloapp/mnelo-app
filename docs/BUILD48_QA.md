@@ -1,0 +1,29 @@
+# iOS 0.1.0 (48) regression build
+
+This update addresses the follow-up reports after build 47. Existing archives and IPAs, including build 37, remain retained. No local account, key, registration or history format is changed.
+
+## Changes and evidence
+
+- Direct APNs taps now read the iOS push trigger payload as well as Expo/local content data. The installed Expo 57 serializer exposes direct APNs userInfo in `trigger.payload`, whereas `content.data` unwraps only an Expo `body` dictionary. A regression covers the actual data-null / trigger-payload shape and duplicate responses. Navigation still waits for a verified message in the local encrypted vault and never trusts a destination URL from the push.
+- Ready delivery work runs from a microtask after a native wake, instead of waiting for a zero-delay UI timer. The first usable relay candidate and subsequent candidates publish from native events without 40 ms / 150 ms timer gates. Existing rate limits, encryption serialization, call authorization, retry backoff and cancellation are preserved. A real Signal delivery test sends accepted-call signaling with timeout timers paused. Gathering also completes from the candidate event with timers paused. Native call diagnostics additionally record near/far proximity changes, without identifiers or content. These tests do not prove the owner's physical proximity failure is resolved; the same at-ear scenario must be repeated on build 48.
+- Message info follows a leftward drag as a complete screen over the existing chat. A rightward drag or the back button returns to the same timeline. A short/cancelled or vertical drag does not navigate. The responder persists through receipt updates, and captures direction before React Native resets displacement on grant. The long-press action opens the same info view. Direct/group receipt behavior is retained.
+- Export integrity hashing canonicalizes native dictionary field order. A real database/ZIP regression reproduced `EXPORT_CHANGED` on unchanged native-style dictionaries before the fix and extracts the same text, media and links afterward. Actual edits and deletions still abort; receipt changes and new messages outside the starting boundary do not invalidate the snapshot.
+- Received contact cards offer Message, Voice call and Save to phone Contacts. Phone lookup respects existing identity bindings, blocked/self/missing recipients, and a navigation/account cancellation guard. Tests use the real local database and ensure rejected actions cannot create or replace contacts. No raw Mnelo key is displayed or trusted from a shared card.
+- Location offers Apple Maps' in-app place picker and Google Maps. The Google choice opens its official universal Maps URL; the user chooses a place there and uses Share → Mnelo. Existing share handling receives the place link, and validated Google/Apple place URLs are actionable in the conversation. A provider sheet dismisses before presenting native map UI. My location retains explicit current-coordinate sharing.
+- Photo-free avatar colors are deterministically derived from each stable contact/group identity, so launch order and restarting cannot change them. The palette has varied hues, saturation and brightness; it cannot promise infinitely unique colors. Group fallbacks use the multi-person icon in creation, details, chat headers and calls. Call history also loads group photos when set.
+
+## Verification and distribution
+
+The final full host check passed 888 tests: 664 Jest tests in 115 suites, 3 server tests and 221 device integration tests. TypeScript, ESLint, formatting, security invariants, environment, localization and brand checks passed. iOS and Android production bundle exports passed. The regenerated iOS project contains all 143 pods, including ExpoModulesWorkletsAdapter 57.0.18. Native archive, export, source publication and TestFlight evidence will be recorded after completion; this source checkpoint does not yet claim tester availability.
+
+## Physical acceptance
+
+1. Update both existing installations without deleting Mnelo. Check account, contacts and history.
+2. Force-close Mnelo, receive a message, tap its notification and confirm the exact chat opens. Repeat while merely backgrounded and with a locked phone.
+3. Start a voice call and hold the caller's phone at the ear before the recipient answers. Repeat with the recipient answering at the ear. Verify ringback stops, both directions hear audio and neither side remains Connecting or times out. Repeat speaker/receiver, locked receiver, Wi-Fi/cellular, video and decline. Record actual answer-to-audio and video delay; capture local timing logs if phones are available on USB.
+4. Drag outgoing text, media and an album left slowly and quickly; return by swipe/back. Try a short drag and vertical scroll; check the original timeline position remains.
+5. Export an unchanged conversation, Save to Files, unzip and open Chat.html, Media, Links and Documents. No extra app is required to view the HTML transcript.
+6. Use all three shared-contact actions. Share a chosen place via each Maps provider and open it at the receiver.
+7. Restart twice and compare each contact/group avatar across Chats and Calls. Confirm multi-person group icons and existing profile photos.
+
+Do not interpret host tests or the earlier positive build 47 call report as instrumented acceptance of these new scenarios.

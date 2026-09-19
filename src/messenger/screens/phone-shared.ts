@@ -7,6 +7,10 @@ import type { phoneEn } from '../phone-copy';
 
 const errors: Record<string, keyof typeof phoneEn> = {
   PHONE_INVALID: 'invalid',
+  PHONE_NOT_FOUND: 'noResult',
+  PHONE_SELF: 'own',
+  PHONE_BLOCKED: 'blockedSharedContact',
+  CONTACT_BLOCKED: 'blockedSharedContact',
   PHONE_IDENTITY_CHANGED: 'identityChanged',
   PHONE_CODE_INVALID: 'invalidCode',
   PHONE_CODE_EXPIRED: 'expires',

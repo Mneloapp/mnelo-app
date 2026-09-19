@@ -206,3 +206,34 @@ test('an obsolete custom call-reply notification does not open a message or trig
   expect(open).not.toHaveBeenCalled();
   stop();
 });
+
+// Real Expo iOS NotificationContentRecord leaves data empty for direct APNs;
+// NotificationTriggerRecord retains the raw userInfo as payload.
+test('direct APNs cold-launch payload opens the message even with content.data null', () => {
+  const id = '88cdf46d-6f1a-4ab1-b88f-2876d7420be6';
+  const response = {
+    actionIdentifier: 'default',
+    notification: {
+      date: 900,
+      request: {
+        identifier: 'apple-remote-response',
+        content: { data: null },
+        trigger: {
+          type: 'push',
+          payload: {
+            aps: { alert: { title: 'Mnelo' } },
+            mnelo: { v: 1, kind: 'message', id },
+            url: '/account',
+          },
+        },
+      },
+    },
+  } as unknown as Notifications.NotificationResponse;
+  const open = jest.fn();
+  const stop = observeAlertTaps(open);
+  mockResponseHandler!(response);
+  mockResponseHandler!(response);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith('message', id);
+  stop();
+});

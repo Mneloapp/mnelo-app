@@ -5,16 +5,15 @@ import { theme } from '@/theme/tokens';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Avatar, IconButton, Page, StateView, ui } from '@/components/ui';
+import { IconButton, Page, StateView, ui } from '@/components/ui';
 import { PullSearch, usePullSearch } from '@/components/PullSearch';
 import { CallContactSearch } from '../components/CallContactSearch';
-import { PeerAvatar } from '../components/ContactCard';
+import { GroupAvatar, PeerAvatar } from '../components/ContactCard';
 import { ContactPickerScreen } from './ContactPickerScreen';
 import { useDevice } from '../DeviceProvider';
 import { useVisibleRead } from '../useVisibleRead';
 import { CallHistoryRow } from '../components/CallHistoryRow';
 import { HistoryLoading } from '../components/HistoryLoading';
-import { fallbackAvatarColor } from '../avatar-color';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 
 export function CallsScreen() {
@@ -83,11 +82,7 @@ export function CallsScreen() {
             call={item}
             avatar={
               item.group ? (
-                <Avatar
-                  name={item.name}
-                  group
-                  fallbackRingColor={fallbackAvatarColor('group:' + item.chatId)}
-                />
+                <GroupAvatar name={item.name} chat={item.chatId} />
               ) : (
                 <PeerAvatar peer={item.peer} name={item.name} colorfulFallback />
               )

@@ -11,7 +11,8 @@ import { DeliveryLeaf } from '../components/MessageMetadata';
 import { PeerAvatar } from '../components/ContactCard';
 import { presentSharedContact } from '../contact-share';
 import type { MessageInfo, MessageRecipientInfo } from '../message-info';
-import { ChatMessageBubble } from './ChatScreen';
+import { ChatMessageBubble } from '../components/ChatMessageBubble';
+import type { LocalMessage } from '../model';
 
 function receiptTime(time: number | null) {
   if (time === null) return '—';
@@ -108,6 +109,20 @@ function RecipientRow({ person, separated }: { person: MessageRecipientInfo; sep
 
 export function MessageInfoScreen() {
   const { id, chat } = useLocalSearchParams<{ id: string; chat: string }>();
+  return <MessageInfoContent id={id} chat={chat} />;
+}
+
+export function MessageInfoContent({
+  id,
+  chat,
+  preview,
+  onBack,
+}: {
+  id: string;
+  chat: string;
+  preview?: LocalMessage;
+  onBack?: () => void;
+}) {
   const { view } = useDevice();
   const { t } = useTranslation();
   const info = useQuery({
@@ -121,22 +136,31 @@ export function MessageInfoScreen() {
     queryFn: () => view.contacts(),
     networkMode: 'always',
   });
+  const message = info.data?.message ?? (info.isPending ? preview : undefined);
   return (
-    <Page title={t('messenger.messageInfo')} back contentStyle={styles.page}>
-      {info.data ? (
+    <Page title={t('messenger.messageInfo')} back onBack={onBack} contentStyle={styles.page}>
+      {message ? (
         <>
           <View style={styles.preview}>
             <AppText variant="caption" tone="secondary" style={styles.date}>
-              {formatDate(new Date(info.data.message.sentAt).toISOString())}
+              {formatDate(new Date(message.sentAt).toISOString())}
             </AppText>
             <ChatMessageBubble
-              message={presentSharedContact(info.data.message, contacts.data ?? [])}
+              message={presentSharedContact(message, contacts.data ?? [])}
               onSelect={() => {}}
               onReply={() => {}}
               menuOpen
             />
           </View>
-          <MessageReceiptDetails info={info.data} />
+          {info.data ? (
+            <MessageReceiptDetails info={info.data} />
+          ) : (
+            <StateView
+              loading={info.isPending}
+              error={info.isError ? t('messenger.genericError') : undefined}
+              message={t('messenger.messageInfoUnavailable')}
+            />
+          )}
         </>
       ) : (
         <StateView

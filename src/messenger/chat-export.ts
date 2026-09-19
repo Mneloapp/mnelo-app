@@ -133,7 +133,13 @@ export async function createChatExport(
         check();
         // Metadata only: edits, removals, reply changes and newly available
         // attachments invalidate the export, while receipt traffic does not.
-        digest.update(textBytes(JSON.stringify(row) + '\n'));
+        // SQLite's native dictionaries can enumerate identical columns in a
+        // different order on each pass. Canonicalize keys, keeping every value
+        // in the integrity check so real edits/deletions still abort.
+        const canonical = Object.keys(row)
+          .sort()
+          .map((key) => [key, row[key as keyof ExportMessage]]);
+        digest.update(textBytes(JSON.stringify(canonical) + '\n'));
         yield row;
       }
       const last = page.at(-1)!;

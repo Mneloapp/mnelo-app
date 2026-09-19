@@ -218,8 +218,13 @@ export async function setDeviceBadge(count: number) {
 export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string) => void) {
   const consume = (response: Notifications.NotificationResponse) => {
     if (response.actionIdentifier !== defaultAction) return;
-    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-    const remote = objectData(data?.mnelo);
+    const request = response.notification.request;
+    const data = objectData(request.content.data);
+    // Expo 57 exposes direct APNs userInfo under trigger.payload. content.data
+    // only unwraps Expo's `body` envelope, which our private APNs does not use.
+    const trigger = objectData(request.trigger);
+    const payload = trigger?.type === 'push' ? objectData(trigger.payload) : null;
+    const remote = objectData(data?.mnelo) ?? objectData(payload?.mnelo);
     if (remote?.kind === 'message' && typeof remote.id === 'string') {
       listener('message', remote.id);
       return;

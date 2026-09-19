@@ -118,6 +118,7 @@ export const messengerEn = {
   deliveryPeerNotReady:
     'A recipient is not ready for secure messaging yet. Ask them to update and open Mnelo. Pending messages stay on this device.',
   googleMaps: 'Google Maps',
+  googleMapsShareHint: 'Choose a place in Google Maps, then tap Share → Mnelo to send it.',
   appleMaps: 'Apple Maps',
   openPhoto: 'Open photo',
   openVideo: 'Play video',
@@ -445,6 +446,7 @@ export const messengerKa: Record<keyof typeof messengerEn, string> = {
   deliveryPeerNotReady:
     'ერთ-ერთი მიმღები დაცული მიმოწერისთვის ჯერ მზად არ არის. სთხოვეთ, განაახლოს და გახსნას Mnelo. გასაგზავნი შეტყობინებები ამ მოწყობილობაზე რჩება.',
   googleMaps: 'Google Maps',
+  googleMapsShareHint: 'Google Maps-ში აირჩიე ადგილი, შემდეგ Share → Mnelo-თი გააზიარე.',
   appleMaps: 'Apple Maps',
   openPhoto: 'ფოტოს გახსნა',
   openVideo: 'ვიდეოს დაკვრა',

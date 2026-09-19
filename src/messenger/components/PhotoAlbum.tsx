@@ -117,6 +117,7 @@ export function PhotoAlbum({
     <MessageTimeReveal
       onReply={menuOpen ? undefined : () => onReply(latest)}
       onInfo={!menuOpen && onInfo ? () => onInfo(latest) : undefined}
+      infoMessage={latest}
     >
       <MessageBubble
         own={latest.sender === identity?.key}

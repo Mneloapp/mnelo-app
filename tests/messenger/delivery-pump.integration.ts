@@ -827,3 +827,73 @@ test('full sync pages drain without three-second gaps and batch cleanup never dr
     b.sql.close();
   }
 });
+
+test('native call wakes send encrypted work with display timers paused and stop cancels queued starts', async (context) => {
+  const a = device(),
+    b = device();
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  let uploaded = 0;
+  let ready!: () => void;
+  let cycleReady = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  const pump = new DeliveryPump(
+    {
+      execute: async (command) => {
+        if (
+          command.action === 'delivery-submit' ||
+          (command.action === 'delivery-sync' && command.envelope)
+        )
+          uploaded++;
+        return { delivery: delivery.execute(a.root.key, command) };
+      },
+    },
+    a.journal,
+    async () => ({}),
+    (state) => {
+      if (state === 'ready') ready();
+    },
+    Date.now,
+    { outgoingOnly: true },
+  );
+  try {
+    await a.journal.initialize();
+    const keys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+    context.mock.timers.enable({ apis: ['setTimeout'] });
+    pump.start();
+    await cycleReady;
+    const call = randomUUID();
+    await a.journal.enqueue(
+      b.root.key,
+      call,
+      'fixture accepted call',
+      Date.now(),
+      undefined,
+      undefined,
+      2,
+    );
+    cycleReady = new Promise<void>((resolve) => {
+      ready = resolve;
+    });
+    pump.receiveWake();
+    await cycleReady;
+    assert.equal(uploaded, 1, 'No timer tick is needed to upload accepted-call signaling');
+    pump.stop();
+    pump.start();
+    pump.stop();
+    await Promise.resolve();
+    assert.equal(uploaded, 1);
+  } finally {
+    pump.stop();
+    context.mock.timers.reset();
+    a.sql.close();
+    b.sql.close();
+  }
+});

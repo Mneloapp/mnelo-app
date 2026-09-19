@@ -1,29 +1,14 @@
-// Cosmetic, in-memory colors only. A peer or group keeps its color while the
-// app runs; a fresh launch starts a new shuffled palette without persisted data.
-const palette = [
-  '#EAC0CB',
-  '#BDD3F0',
-  '#D3C1ED',
-  '#EDC9A8',
-  '#B6D8CF',
-  '#E6D89E',
-  '#C0CDEA',
-  '#D0DDB7',
-];
-const assigned = new Map<string, string>();
-let remaining: string[] = [];
-
+// Cosmetic identity hash, not cryptography. A contact keeps the same color
+// across launches and chat/call rendering orders, without a loading flash.
+// Groups use their own IDs; saved profile photos override this fallback.
 export function fallbackAvatarColor(identity: string): string {
-  const existing = assigned.get(identity);
-  if (existing) return existing;
-  if (!remaining.length) {
-    remaining = [...palette];
-    for (let index = remaining.length - 1; index > 0; index--) {
-      const other = Math.floor(Math.random() * (index + 1));
-      [remaining[index], remaining[other]] = [remaining[other]!, remaining[index]!];
-    }
-  }
-  const color = remaining.pop()!;
-  assigned.set(identity, color);
-  return color;
+  let hash = 2166136261;
+  for (let index = 0; index < identity.length; index++)
+    hash = Math.imul(hash ^ identity.charCodeAt(index), 16777619);
+  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
+  hash = (hash ^ (hash >>> 13)) >>> 0;
+  const hue = hash % 360;
+  const saturation = 46 + ((hash >>> 9) % 16);
+  const lightness = 76 + ((hash >>> 17) % 7);
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
 }

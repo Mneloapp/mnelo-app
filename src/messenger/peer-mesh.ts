@@ -729,7 +729,6 @@ export class PeerMesh implements PeerTransport {
     let sent = initial;
     let sending = false;
     let cancelled = false;
-    let batch: ReturnType<typeof setTimeout> | undefined;
     const flush = async () => {
       if (cancelled || sending) return;
       sending = true;
@@ -744,11 +743,10 @@ export class PeerMesh implements PeerTransport {
       }
     };
     const update = () => {
-      clearTimeout(batch);
-      // A first relay candidate may not work on the current network. Publish
-      // each newly gathered fallback promptly, even if another TURN transport
-      // is still timing out. Waiting for 'complete' adds up to ten seconds.
-      batch = setTimeout(() => void flush().catch(() => undefined), 150);
+      // Deliver candidates from native events even while the proximity sensor
+      // has put display-driven timers to sleep. The in-flight loop coalesces
+      // updates without postponing the first usable fallback.
+      void flush().catch(() => undefined);
     };
     const timeout = setTimeout(() => {
       void flush()
@@ -758,7 +756,6 @@ export class PeerMesh implements PeerTransport {
     link.stopGathering = () => {
       cancelled = true;
       clearTimeout(timeout);
-      clearTimeout(batch);
       peer.removeEventListener('icecandidate', update);
       peer.removeEventListener('icegatheringstatechange', update);
       delete link.stopGathering;

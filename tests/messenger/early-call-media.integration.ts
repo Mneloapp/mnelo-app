@@ -342,8 +342,11 @@ test('a block during initial candidate gathering suppresses early SDP publicatio
   try {
     await f.a.mesh.prepareOutgoingMedia(f.b.own.key, f.id, f.stream);
     f.a.state.peers[0]!.iceGatheringState = 'gathering';
+    f.a.state.peers[0]!.localDescription!.sdp = sdp().replace(relay, '');
     await f.a.mesh.publishPreparedMedia(f.b.own.key, f.id);
     f.a.state.allowed = false;
+    f.a.state.peers[0]!.localDescription!.sdp = sdp();
+    f.a.state.peers[0]!.dispatchEvent(new Event('icecandidate'));
     await pause(100);
     assert.equal(published, 0);
   } finally {

@@ -2,10 +2,11 @@
 // must not delay both halves of the offer/answer handshake by ten seconds each.
 export function gatherCallCandidates(peer: RTCPeerConnection): Promise<void> {
   return new Promise((resolve, reject) => {
-    let settle: ReturnType<typeof setTimeout> | undefined;
+    let finished = false;
     const finish = (error?: Error) => {
       clearTimeout(deadline);
-      clearTimeout(settle);
+      if (finished) return;
+      finished = true;
       peer.removeEventListener('icecandidate', update);
       peer.removeEventListener('icegatheringstatechange', update);
       peer.removeEventListener('connectionstatechange', update);
@@ -15,11 +16,10 @@ export function gatherCallCandidates(peer: RTCPeerConnection): Promise<void> {
     const update = () => {
       if (peer.connectionState === 'closed') finish(new Error('CALL_CANCELLED'));
       else if (peer.iceGatheringState === 'complete') finish();
-      else if (
-        !settle &&
-        /^a=candidate:.* typ relay(?: |\r?$)/m.test(peer.localDescription?.sdp ?? '')
-      )
-        settle = setTimeout(() => finish(), 40);
+      else if (/^a=candidate:.* typ relay(?: |\r?$)/m.test(peer.localDescription?.sdp ?? ''))
+        // Screen-off/proximity can pause display-driven JS timers. Publish the
+        // usable path from the native candidate event, without a timer gate.
+        finish();
     };
     const deadline = setTimeout(() => finish(new Error('ICE_TIMEOUT')), 10000);
     peer.addEventListener('icecandidate', update);

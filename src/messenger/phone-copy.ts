@@ -1,6 +1,8 @@
 export const phoneEn = {
   contactNames: 'Allow access to contacts',
   saveToPhone: 'Save to phone Contacts',
+  savedToPhone: 'Saved in Contacts',
+  blockedSharedContact: 'Unblock this person in Me → Blocked contacts before calling or messaging.',
   saveToPhoneHint: 'Save this person in your phone Contacts and Mnelo.',
   contactsPermissionRequired: 'Allow Contacts access to save this person on your phone.',
   contactsUnavailable: 'Phone Contacts are available in the mobile app.',
@@ -89,6 +91,8 @@ export const phoneEn = {
 export const phoneKa: Record<keyof typeof phoneEn, string> = {
   contactNames: 'კონტაქტებზე წვდომის დაშვება',
   saveToPhone: 'ტელეფონის კონტაქტებში შენახვა',
+  savedToPhone: 'კონტაქტებში შენახულია',
+  blockedSharedContact: 'დარეკვის ან მიწერის წინ მოხსენი ბლოკი Me → დაბლოკილი კონტაქტებიდან.',
   saveToPhoneHint: 'შეინახე ეს ადამიანი ტელეფონის კონტაქტებსა და Mnelo-ში.',
   contactsPermissionRequired: 'ტელეფონში შესანახად დაუშვი კონტაქტებზე წვდომა.',
   contactsUnavailable: 'ტელეფონის კონტაქტები ხელმისაწვდომია მობილურ აპში.',

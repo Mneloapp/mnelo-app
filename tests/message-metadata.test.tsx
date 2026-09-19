@@ -28,9 +28,13 @@ test('left swipe opens own-message info while right swipe replies and vertical/s
   expect(options.onMoveShouldSetPanResponder!(event, gesture(-70))).toBe(true);
   expect(options.onMoveShouldSetPanResponder!(event, gesture(70))).toBe(true);
   expect(options.onMoveShouldSetPanResponder!(event, gesture(-10, 70))).toBe(false);
+  options.onMoveShouldSetPanResponder!(event, gesture(-70));
+  await act(() => options.onPanResponderGrant!(event, gesture(0)));
   await act(() => options.onPanResponderRelease!(event, gesture(-70)));
   expect(info).toHaveBeenCalledTimes(1);
   expect(reply).not.toHaveBeenCalled();
+  options.onMoveShouldSetPanResponder!(event, gesture(70));
+  await act(() => options.onPanResponderGrant!(event, gesture(0)));
   await act(() => options.onPanResponderRelease!(event, gesture(70)));
   expect(reply).toHaveBeenCalledTimes(1);
   await act(() => options.onPanResponderRelease!(event, gesture(-2)));

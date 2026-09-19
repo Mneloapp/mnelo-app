@@ -52,6 +52,7 @@ export function GroupProfileFields({
           style={profileStyles.avatarRing}
         >
           <Avatar
+            group
             name={name || t('messenger.newGroup')}
             uri={avatarUri(profile.avatar)}
             size="profile"

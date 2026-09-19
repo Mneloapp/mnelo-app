@@ -1,14 +1,19 @@
-export type PhoneRequestScheduler = <T>(request: () => Promise<T>, urgent?: boolean) => Promise<T>;
+export type PhoneRequestScheduler = {
+  <T>(request: () => Promise<T>, urgent?: boolean): Promise<T>;
+  enableDeliverySync?: () => void;
+};
 
-// The server allows 120 commands/minute, not one command every 750 ms.
-// Allow a short handshake burst, then refill at 72/minute (at most 96 starts
-// in any minute). Reserve four tokens for inbox/call/receipt traffic, leaving
-// capacity for the share extension without delaying every idle request.
+// Start within the legacy 120-command server limit (72/minute + 24 burst).
+// Authenticated sync capability raises this to 240/minute + 48 burst, below
+// the registered 360-command limit. Four tokens stay reserved for incoming
+// calls/receipts, with headroom for the share/notification extension.
 export class PhoneRequestQueue {
   private pending: { urgent: boolean; run: () => Promise<void> }[] = [];
   private draining = false;
   private pausedUntil = 0;
   private tokens = 24;
+  private capacity = 24;
+  private refillPerMinute = 72;
   private updatedAt: number;
   private wakeWait: (() => void) | undefined;
   constructor(
@@ -25,6 +30,12 @@ export class PhoneRequestQueue {
       }),
   ) {
     this.updatedAt = now();
+    this.run.enableDeliverySync = () => {
+      // Negotiated only after an authenticated capability response. Retain the
+      // current balance: rechecking capabilities must never mint fresh tokens.
+      this.capacity = 48;
+      this.refillPerMinute = 240;
+    };
   }
   readonly run: PhoneRequestScheduler = <T>(request: () => Promise<T>, urgent = false) =>
     new Promise<T>((resolve, reject) => {
@@ -49,7 +60,10 @@ export class PhoneRequestQueue {
     let urgentCount = 0;
     while (this.pending.length) {
       const now = this.now();
-      this.tokens = Math.min(24, this.tokens + (Math.max(0, now - this.updatedAt) * 72) / 60000);
+      this.tokens = Math.min(
+        this.capacity,
+        this.tokens + (Math.max(0, now - this.updatedAt) * this.refillPerMinute) / 60000,
+      );
       this.updatedAt = now;
       const preferUrgent = urgentCount < 4;
       let preferred = this.pending.findIndex((item) => item.urgent === preferUrgent);
@@ -61,7 +75,11 @@ export class PhoneRequestQueue {
       }
       const required = this.pending[preferred]!.urgent ? 1 : 5;
       const delay = Math.ceil(
-        Math.max(this.pausedUntil - now, ((required - this.tokens) * 60000) / 72, 0),
+        Math.max(
+          this.pausedUntil - now,
+          ((required - this.tokens) * 60000) / this.refillPerMinute,
+          0,
+        ),
       );
       if (delay > 0) {
         // An urgent request can wake a bulk-budget wait immediately. It still

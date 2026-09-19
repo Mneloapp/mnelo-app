@@ -80,9 +80,23 @@ export const signalDirectoryIdentity = publicSignalIdentity.extend({
 export const deliveryCursor = z
   .object({ acceptedAt: z.number().int().nonnegative(), sender: peerKey, id: z.string().uuid() })
   .strict();
+export const deliveryAcknowledgement = z
+  .object({ sender: peerKey, id: z.string().uuid() })
+  .strict();
 export const deliveryCommands = [
   ...mediaCommands,
-  z.object({ action: z.literal('delivery-status') }).strict(),
+  z
+    .object({ action: z.literal('delivery-status'), capabilities: z.literal(true).optional() })
+    .strict(),
+  z
+    .object({
+      action: z.literal('delivery-sync'),
+      envelope: deliveryEnvelope.optional(),
+      acknowledgements: z.array(deliveryAcknowledgement).max(20),
+      after: deliveryCursor.optional(),
+      receive: z.boolean(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal('delivery-publish'),
@@ -113,6 +127,7 @@ export const deliveryResponse = z
   .object({
     version: z.literal(2),
     availableKeys: z.number().int().min(0).max(200).optional(),
+    sync: z.literal(true).optional(),
     identity: signalDirectoryIdentity.nullable().optional(),
     keys: z
       .object({ bundle: signalBundle, signature: z.string().regex(/^[a-f0-9]{128}$/) })

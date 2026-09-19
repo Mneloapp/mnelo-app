@@ -303,3 +303,76 @@ test('failed receipt persistence can retry and a dismissed incoming call never a
     f.calls.stop();
   }
 });
+
+test('caller media preparation overlaps invite delivery and a pending invite cannot restart a cancelled call', async () => {
+  let delivered!: () => void;
+  const send = jest.fn(async (_peer, control) => {
+    if (control.action === 'invite')
+      await new Promise<void>((resolve) => {
+        delivered = resolve;
+      });
+  });
+  const f = runtime({ send });
+  f.mesh.prepareOutgoingMedia = jest.fn(async () => {});
+  try {
+    const pending = f.calls.start('peer', 'video');
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(send).toHaveBeenCalledWith('peer', expect.objectContaining({ action: 'invite' }));
+    expect(f.mesh.prepareOutgoingMedia).toHaveBeenCalledWith(
+      'peer',
+      'outgoing-id',
+      f.calls.snapshot()?.local,
+    );
+    expect(f.calls.snapshot()?.status).toBe('ringing');
+    await f.calls.end();
+    delivered();
+    await pending;
+    expect(f.calls.snapshot()?.status).toBe('ended');
+    expect(f.mesh.prepareOutgoingMedia).toHaveBeenCalledTimes(1);
+    expect(f.mesh.endMedia).toHaveBeenCalledWith('peer', 'outgoing-id');
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('pending media setup releases the inbox for hangup and cannot fail a replacement call later', async () => {
+  const f = runtime({ send: jest.fn(async () => {}) });
+  let fail!: (error: Error) => void;
+  f.mesh.startMedia = jest.fn(
+    () =>
+      new Promise<void>((_resolve, reject) => {
+        fail = reject;
+      }),
+  );
+  try {
+    await f.calls.start('peer', 'video');
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'outgoing-id',
+      action: 'accept',
+      media: 'video',
+    });
+    expect(f.calls.snapshot()?.status).toBe('connecting');
+    expect(f.calls.snapshot()?.connectedAt).toBeUndefined();
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'outgoing-id',
+      action: 'end',
+      media: 'video',
+    });
+    expect(f.calls.snapshot()?.status).toBe('ended');
+    await f.calls.receive('second-peer', {
+      type: 'call',
+      id: 'new-call',
+      action: 'invite',
+      media: 'voice',
+    });
+    fail(new Error('TURN_UNAVAILABLE'));
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(f.calls.snapshot()?.id).toBe('new-call');
+    expect(f.calls.snapshot()?.status).toBe('incoming');
+    expect(f.recordCall).toHaveBeenCalledTimes(1);
+  } finally {
+    f.calls.stop();
+  }
+});

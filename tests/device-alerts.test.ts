@@ -5,10 +5,14 @@ import {
   requestAlerts,
   enableAlertsByDefault,
   observeAlertTaps,
+  observeCallReplies,
 } from '@/messenger/device-alerts.native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
-  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  addNotificationResponseReceivedListener: jest.fn((listener) => {
+    mockResponseHandler = listener;
+    return { remove: jest.fn() };
+  }),
   getLastNotificationResponse: jest.fn(() => null),
   clearLastNotificationResponseAsync: jest.fn(async () => {}),
   getPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
@@ -22,6 +26,7 @@ jest.mock('expo-notifications', () => ({
   IosAuthorizationStatus: { PROVISIONAL: 3 },
 }));
 type Permission = Awaited<ReturnType<typeof Notifications.getPermissionsAsync>>;
+let mockResponseHandler: ((response: Notifications.NotificationResponse) => void) | undefined;
 const granted = { granted: true, status: 'granted', canAskAgain: true } as Permission;
 const undetermined = { granted: false, status: 'undetermined', canAskAgain: true } as Permission;
 const originalState = AppState.currentState;
@@ -145,10 +150,34 @@ test('a cached cold-launch response and its live replay open only one destinatio
   jest.mocked(Notifications.getLastNotificationResponse).mockReturnValueOnce(response);
   const open = jest.fn();
   const stop = observeAlertTaps(open);
-  const receive = jest.mocked(Notifications.addNotificationResponseReceivedListener).mock
-    .calls[0]![0];
-  receive(response);
+  mockResponseHandler!(response);
   expect(open).toHaveBeenCalledTimes(1);
   expect(open).toHaveBeenCalledWith('message', 'd9ec43ef-49db-4510-9f84-2f0da9e7bceb');
   stop();
+});
+
+test('a call reply is replayed when its consumer registers during cold launch', async () => {
+  const response = {
+    actionIdentifier: 'MNELO_CALL_REPLY',
+    userText: 'I will call you back',
+    notification: {
+      date: 456,
+      request: {
+        identifier: 'mnelo-call-call-id',
+        content: {
+          data: { mneloCall: { v: 1, kind: 'call-reply', id: 'call-id' } },
+        },
+      },
+    },
+  } as unknown as Notifications.NotificationResponse;
+  const first = jest.fn();
+  const stopFirst = observeCallReplies(first);
+  mockResponseHandler!(response);
+  const late = jest.fn();
+  const stopLate = observeCallReplies(late);
+  await Promise.resolve();
+  expect(first).toHaveBeenCalledWith('call-id', 'I will call you back');
+  expect(late).toHaveBeenCalledWith('call-id', 'I will call you back');
+  stopLate();
+  stopFirst();
 });

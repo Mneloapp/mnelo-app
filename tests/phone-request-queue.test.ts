@@ -133,3 +133,27 @@ test('even an all-urgent backlog cannot exceed 96 starts in a rolling minute', a
       starts.filter((time) => time >= start && time < start + 60000).length,
     ).toBeLessThanOrEqual(96);
 });
+
+test('negotiated sync budget remains bounded across capability rechecks without refilling spent tokens', async () => {
+  let clock = 0;
+  const queue = new PhoneRequestQueue(
+    () => clock,
+    async (ms) => {
+      clock += ms;
+    },
+  );
+  queue.run.enableDeliverySync!();
+  const starts: number[] = [];
+  for (let i = 0; i < 400; i++) {
+    // Repeated foreground registration cannot reset the budget.
+    queue.run.enableDeliverySync!();
+    await queue.run(async () => {
+      starts.push(clock);
+    }, true);
+  }
+  expect(starts[24]).toBe(250);
+  for (const start of starts)
+    expect(
+      starts.filter((time) => time >= start && time < start + 60000).length,
+    ).toBeLessThanOrEqual(288);
+});

@@ -1,4 +1,5 @@
 import { Platform, AppState } from 'react-native';
+import { CryptoDigestAlgorithm, digestStringAsync } from 'expo-crypto';
 import { requireOptionalNativeModule, type NativeModule } from 'expo-modules-core';
 import * as Notifications from 'expo-notifications';
 import type { DeviceCalls, DeviceCall } from './calls';
@@ -7,13 +8,15 @@ import type { PhoneClient } from './phone-client';
 import { pushRegistration } from './wake-protocol';
 import { z } from 'zod';
 import { setBackgroundStatus, registerBackgroundRetry } from './background-status';
+import { observeCallReplies } from './device-alerts.native';
 type NativeCalls = NativeModule<{ changed: () => void }> & {
   addListener(name: 'changed', listener: () => void): { remove(): void };
   state(): Promise<{ voipToken?: string; environment: string }>;
   drain(): Promise<unknown[]>;
-  incoming(id: string, video: boolean): Promise<void>;
+  incoming(id: string, video: boolean, callerHint?: string): Promise<void>;
   outgoing(id: string, video: boolean): Promise<void>;
   identify?(id: string, name: string, phone: string, video: boolean): Promise<void>;
+  cacheCaller?(hint: string, name: string, phone: string): Promise<void>;
   answer(id: string): Promise<void>;
   connected(id: string): Promise<void>;
   ringback?(id: string, enabled: boolean): Promise<void>;
@@ -22,6 +25,17 @@ type NativeCalls = NativeModule<{ changed: () => void }> & {
   prepareCallAudio?(speaker: boolean): Promise<void>;
 };
 const native = requireOptionalNativeModule<NativeCalls>('MneloCalls');
+export async function callerHint(peer: string) {
+  try {
+    return await digestStringAsync(CryptoDigestAlgorithm.SHA256, peer);
+  } catch {
+    return peer;
+  }
+}
+export async function cacheSystemCallContact(peer: string, name: string, phone = '') {
+  if (!native?.cacheCaller) return;
+  await native.cacheCaller(await callerHint(peer), name, phone);
+}
 export function systemCallAudio() {
   return Boolean(native);
 }
@@ -65,6 +79,7 @@ export function observeSystemCalls(
     string,
     { expires: number; reason: 'local' | 'remote' | 'decline' | 'timeout' }
   >();
+  const quickReplies = new Map<string, { text: string; expires: number }>();
   let shown: string | null = null;
   let connected: string | null = null;
   let ringing: string | null = null;
@@ -153,7 +168,11 @@ export function observeSystemCalls(
     if (shown !== call.id) {
       shown = call.id;
       await (call.incoming
-        ? bridge.incoming(call.id, call.media === 'video')
+        ? bridge.incoming(
+            call.id,
+            call.media === 'video',
+            ...(typeof call.peer === 'string' ? [await callerHint(call.peer)] : []),
+          )
         : bridge.outgoing(call.id, call.media === 'video'));
     }
     if (caller && bridge.identify && !identifying.has(call.id)) {
@@ -177,6 +196,12 @@ export function observeSystemCalls(
       // A successful native report and an authenticated invite must both exist.
       // Do not wait for the receipt's storage/network work before processing an answer.
       void calls.confirmIncoming(call.id).catch(() => undefined);
+    }
+    const reply = quickReplies.get(call.id);
+    if (reply && reply.expires > Date.now() && call.status === 'incoming') {
+      quickReplies.delete(call.id);
+      void calls.replyAndDecline(call.id, reply.text).catch(() => undefined);
+      return;
     }
     const shouldRing = isRemoteRinging(call) && Boolean(call.local);
     if (ringing && (!shouldRing || ringing !== call.id)) {
@@ -286,6 +311,14 @@ export function observeSystemCalls(
       void bridge.end(value.id).catch(() => undefined);
     }
   });
+  const callReplies = observeCallReplies((id, text) => {
+    const call = calls.snapshot();
+    if (call?.id === id && call.status === 'incoming') {
+      void calls.replyAndDecline(id, text).catch(() => undefined);
+      return;
+    }
+    quickReplies.set(id, { text, expires: Date.now() + 120000 });
+  });
   registerBackgroundRetry(register);
   const changes = bridge.addListener('changed', () => {
     void drain().catch(() => undefined);
@@ -320,6 +353,7 @@ export function observeSystemCalls(
     changes.remove();
     unsubscribe();
     controls();
+    callReplies();
     registerBackgroundRetry(null);
     app.remove();
     tokens.remove();

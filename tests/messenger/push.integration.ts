@@ -141,10 +141,11 @@ test('APNs uses a valid ES256 provider JWT, correct topics, zero retention and n
   await provider.send(
     { channel: 'voip', environment: 'production', token: token() },
     { kind: 'call', id, video: false },
-    { expiresAt: now + 10000 },
+    { expiresAt: now + 10000, callerHint: 'a'.repeat(64) },
   );
   assert.equal(requests.at(-1)!.headers['apns-expiration'], '0');
   assert.equal(JSON.parse(requests.at(-1)!.body).mnelo.expires, now + 10000);
+  assert.equal(JSON.parse(requests.at(-1)!.body).mnelo.callerHint, 'a'.repeat(64));
 });
 test('push route ownership, revocation, expiry, token rotation and unlink fail closed', async () => {
   const db = new DatabaseSync(':memory:');

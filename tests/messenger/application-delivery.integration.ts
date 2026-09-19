@@ -254,6 +254,8 @@ test('real app histories receive first-contact text and media with sender offlin
       (await ae.messages(chat)).some((row) => row.id === olderCallerId),
       false,
     );
+    // The next exchange batches the server cleanup after local ACK projection.
+    await appA.pump.tick();
     assert.equal(
       delivery.store.fetch(ar.key).length,
       0,

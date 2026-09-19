@@ -47,7 +47,12 @@ export class WakeService {
     if (this.inFlight >= 32) throw new Error('PUSH_RATE_LIMITED');
     this.inFlight++;
     try {
-      const result = await this.provider.send(route, event, options);
+      const result = await this.provider.send(route, event, {
+        ...options,
+        ...(event.kind === 'call'
+          ? { callerHint: createHash('sha256').update(sender).digest('hex') }
+          : {}),
+      });
       if (result.invalidatedAt !== undefined) this.registry.invalidate(route, result.invalidatedAt);
       return result.accepted;
     } finally {
@@ -111,7 +116,16 @@ export class WakeService {
     this.inFlight++;
     this.seen.set(event, this.now() + 120000);
     try {
-      const result = await this.provider.send(route, command.event);
+      const result = await this.provider.send(
+        route,
+        command.event,
+        command.event.kind === 'call'
+          ? {
+              expiresAt: this.now() + 60000,
+              callerHint: createHash('sha256').update(key).digest('hex'),
+            }
+          : undefined,
+      );
       if (result.invalidatedAt !== undefined) this.registry.invalidate(route, result.invalidatedAt);
     } catch (error) {
       this.seen.delete(event);

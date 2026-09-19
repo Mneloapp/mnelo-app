@@ -3,6 +3,8 @@ import PushKit
 import CallKit
 import AVFoundation
 import WebRTC
+import UserNotifications
+import UIKit
 
 private let wakeChanged = Notification.Name("MneloNativeCallChanged")
 
@@ -32,6 +34,10 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var reporting: [UUID: [() -> Void]] = [:]
   private var deadlines: [UUID: Timer] = [:]
   private var ended: [UUID: Date] = [:]
+  private var callNotifications: Set<UUID> = []
+  private let callerCacheKey = "MneloCallersV1"
+  private let callReplyCategory = "MNELO_INCOMING_CALL"
+  private let callReplyAction = "MNELO_CALL_REPLY"
 
   override init() {
     let config = CXProviderConfiguration()
@@ -43,6 +49,20 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     provider = CXProvider(configuration: config)
     super.init()
     provider.setDelegate(self, queue: .main)
+    let reply = UNTextInputNotificationAction(
+      identifier: callReplyAction,
+      title: "Reply",
+      options: [],
+      textInputButtonTitle: "Send",
+      textInputPlaceholder: "Message"
+    )
+    let category = UNNotificationCategory(
+      identifier: callReplyCategory,
+      actions: [reply],
+      intentIdentifiers: [],
+      options: []
+    )
+    UNUserNotificationCenter.current().setNotificationCategories([category])
     RTCAudioSession.sharedInstance().useManualAudio = true
     RTCAudioSession.sharedInstance().isAudioEnabled = false
     routeObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -120,7 +140,13 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     let id = (value?["id"] as? String).flatMap(UUID.init(uuidString:))
     // Even malformed/late VoIP pushes are reported and immediately ended. Never
     // misuse PushKit for message/background work or omit Apple's completion.
-    incoming(id ?? UUID(), video: value?["video"] as? Bool ?? false, usable: valid && id != nil, completion: completion)
+    incoming(
+      id ?? UUID(),
+      video: value?["video"] as? Bool ?? false,
+      callerHint: value?["callerHint"] as? String,
+      usable: valid && id != nil,
+      completion: completion
+    )
   }
   private func arm(_ id: UUID) {
     deadlines[id]?.invalidate()
@@ -131,16 +157,21 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
       }
     }
   }
-  func incoming(_ id: UUID, video: Bool, usable: Bool = true, completion: @escaping () -> Void = {}) {
+  func incoming(_ id: UUID, video: Bool, callerHint: String? = nil, usable: Bool = true, completion: @escaping () -> Void = {}) {
     ended = ended.filter { $0.value > Date() }
     if reporting[id] != nil { reporting[id]?.append(completion); return }
     if live.contains(id) { completion(); return }
     let allowed = usable && ended[id] == nil && live.isEmpty
     reporting[id] = [completion]
     if allowed { live.insert(id); defaultSpeaker = video; explicitSpeaker = nil }
+    let cached = callerHint.flatMap { cachedCaller($0) }
+    let displayName = cached?.name ?? "Mnelo"
     let update = CXCallUpdate()
-    update.remoteHandle = CXHandle(type: .generic, value: "Mnelo")
-    update.localizedCallerName = "Mnelo"
+    update.remoteHandle = CXHandle(
+      type: cached?.phone.hasPrefix("+") == true ? .phoneNumber : .generic,
+      value: cached?.phone.isEmpty == false ? cached!.phone : displayName
+    )
+    update.localizedCallerName = displayName
     update.hasVideo = video
     update.supportsHolding = false
     update.supportsGrouping = false
@@ -149,6 +180,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
       Task { @MainActor in
         if error == nil && allowed && self.ended[id] == nil {
           self.arm(id)
+          self.scheduleCallReplyNotification(id, video: video, title: displayName)
           self.event(["type": "incoming", "id": id.uuidString.lowercased(), "video": video])
         } else {
           self.live.remove(id)
@@ -158,6 +190,45 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
         self.reporting.removeValue(forKey: id)?.forEach { $0() }
       }
     }
+  }
+  private func cachedCaller(_ hint: String) -> (name: String, phone: String)? {
+    guard hint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil,
+      let cache = UserDefaults.standard.dictionary(forKey: callerCacheKey),
+      let value = cache[hint] as? [String: Any],
+      let name = value["name"] as? String, !name.isEmpty else { return nil }
+    return (name, value["phone"] as? String ?? "")
+  }
+  func cacheCaller(_ hint: String, name: String, phone: String) {
+    guard hint.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { return }
+    let cleanName = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(160))
+    guard !cleanName.isEmpty else { return }
+    var cache = UserDefaults.standard.dictionary(forKey: callerCacheKey) as? [String: [String: String]] ?? [:]
+    cache[hint] = ["name": cleanName, "phone": String(phone.prefix(40))]
+    if cache.count > 256, let oldest = cache.keys.sorted().first { cache.removeValue(forKey: oldest) }
+    UserDefaults.standard.set(cache, forKey: callerCacheKey)
+  }
+  private func scheduleCallReplyNotification(_ id: UUID, video: Bool, title: String) {
+    guard UIApplication.shared.applicationState != .active, !callNotifications.contains(id) else { return }
+    callNotifications.insert(id)
+    let content = UNMutableNotificationContent()
+    content.title = title
+    content.body = video ? "Incoming video call" : "Incoming voice call"
+    content.categoryIdentifier = callReplyCategory
+    content.userInfo = [
+      "mneloCall": ["v": 1, "kind": "call-reply", "id": id.uuidString.lowercased()]
+    ]
+    let request = UNNotificationRequest(
+      identifier: "mnelo-call-" + id.uuidString.lowercased(),
+      content: content,
+      trigger: nil
+    )
+    UNUserNotificationCenter.current().add(request)
+  }
+  private func removeCallReplyNotification(_ id: UUID) {
+    callNotifications.remove(id)
+    let identifier = "mnelo-call-" + id.uuidString.lowercased()
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
   }
   func outgoing(_ id: UUID, video: Bool) {
     guard !live.contains(id), live.isEmpty else { return }
@@ -197,6 +268,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func finish(_ id: UUID, reason: CXCallEndedReason = .remoteEnded) {
     ringback(id, enabled: false)
+    removeCallReplyNotification(id)
     connectedCalls.remove(id)
     deadlines.removeValue(forKey: id)?.invalidate()
     ended[id] = Date().addingTimeInterval(120)
@@ -301,8 +373,9 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
-    event(["type":"end", "id":action.callUUID.uuidString.lowercased()])
-    finish(action.callUUID); action.fulfill()
+    let declined = live.contains(action.callUUID) && !outgoingCalls.contains(action.callUUID) && !answeredCalls.contains(action.callUUID)
+    event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "reason": declined ? "decline" : "local"])
+    finish(action.callUUID, reason: declined ? .declinedElsewhere : .remoteEnded); action.fulfill()
   }
   func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
     event(["type":"mute", "id":action.callUUID.uuidString.lowercased(), "muted":action.isMuted]); action.fulfill()
@@ -363,13 +436,16 @@ public class MneloCallsModule: Module {
     AsyncFunction("speaker") { (enabled: Bool) async throws in try await MainActor.run { try MneloCallManager.shared.speaker(enabled) } }
     AsyncFunction("timing") { (code: String, duration: Double) async in await MainActor.run { MneloCallManager.shared.timing(code, duration: duration) } }
     AsyncFunction("drain") { () async -> [[String: Any]] in await MainActor.run { MneloCallManager.shared.drain() } }
-    AsyncFunction("incoming") { (value: String, video: Bool) async in
+    AsyncFunction("incoming") { (value: String, video: Bool, callerHint: String?) async in
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
         Task { @MainActor in
           guard let id = UUID(uuidString: value) else { continuation.resume(); return }
-          MneloCallManager.shared.incoming(id, video: video) { continuation.resume() }
+          MneloCallManager.shared.incoming(id, video: video, callerHint: callerHint) { continuation.resume() }
         }
       }
+    }
+    AsyncFunction("cacheCaller") { (hint: String, name: String, phone: String) async in
+      await MainActor.run { MneloCallManager.shared.cacheCaller(hint, name: name, phone: phone) }
     }
     AsyncFunction("identify") { (value: String, name: String, phone: String, video: Bool) async in
       await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.identify(id, name: name, phone: phone, video: video) } }

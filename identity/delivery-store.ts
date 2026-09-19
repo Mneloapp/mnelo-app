@@ -230,15 +230,23 @@ export class DeliveryStore {
     return result;
   }
   acknowledge(actor: string, sender: string, id: string) {
+    return this.acknowledgeBatch(actor, [{ sender, id }]);
+  }
+  acknowledgeBatch(actor: string, acknowledgements: readonly { sender: string; id: string }[]) {
     this.authorize(actor);
-    peerKey.parse(sender);
+    for (const row of acknowledgements) peerKey.parse(row.sender);
+    if (!acknowledgements.length) return;
     return this.transaction(() => {
-      this.db
-        .prepare('DELETE FROM delivery_spool WHERE sender=? AND recipient=? AND id=?')
-        .run(sender, actor, id);
-      this.db
-        .prepare('UPDATE delivery_receipts SET delivered=1 WHERE sender=? AND recipient=? AND id=?')
-        .run(sender, actor, id);
+      const remove = this.db.prepare(
+        'DELETE FROM delivery_spool WHERE sender=? AND recipient=? AND id=?',
+      );
+      const delivered = this.db.prepare(
+        'UPDATE delivery_receipts SET delivered=1 WHERE sender=? AND recipient=? AND id=?',
+      );
+      for (const { sender, id } of acknowledgements) {
+        remove.run(sender, actor, id);
+        delivered.run(sender, actor, id);
+      }
     });
   }
   hasPending(actor: string, sender: string, id: string) {

@@ -17,3 +17,4 @@ export async function systemCallSpeaker(_enabled: boolean) {
 export async function prepareSystemCallAudio(_speaker: boolean) {
   return false;
 }
+export async function cacheSystemCallContact(_peer: string, _name: string, _phone = '') {}

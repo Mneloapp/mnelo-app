@@ -213,11 +213,12 @@ class MneloCallsModule:Module(){
     OnStopObserving{MneloAndroidCalls.changed=null}
     AsyncFunction("state"){MneloAndroidCalls.state()}
     AsyncFunction("drain"){MneloAndroidCalls.drain()}
-    AsyncFunction("incoming"){id:String,video:Boolean->MneloAndroidCalls.add(id,video,true)}
+    AsyncFunction("incoming"){id:String,video:Boolean,_callerHint:String?->MneloAndroidCalls.add(id,video,true)}
     AsyncFunction("outgoing"){id:String,video:Boolean->MneloAndroidCalls.add(id,video,false)}
     AsyncFunction("connected"){id:String->MneloAndroidCalls.connected(id)}
     AsyncFunction("answer"){id:String->MneloAndroidCalls.answer(id)}
     AsyncFunction("end"){id:String->MneloAndroidCalls.end(id)}
+    AsyncFunction("cacheCaller"){_hint:String,_name:String,_phone:String->}
     AsyncFunction("speaker") Coroutine {enabled:Boolean-> withContext(Dispatchers.Main.immediate) { MneloAndroidCalls.speaker(enabled) } }
   }
 }

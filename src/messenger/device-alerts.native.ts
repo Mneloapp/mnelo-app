@@ -4,7 +4,78 @@ import type { AlertKind, AlertPermission } from './device-alerts';
 import { alertKind } from './notification-policy';
 const prefix = 'mnelo-local-';
 const channelId = 'mnelo-private-alerts';
-Notifications.setNotificationHandler({
+const callReplyAction = 'MNELO_CALL_REPLY';
+const callReplyKind = 'call-reply';
+const defaultAction = Notifications.DEFAULT_ACTION_IDENTIFIER ?? 'default';
+
+type ResponseListener = (response: Notifications.NotificationResponse) => void;
+let responseSubscription: { remove(): void } | null = null;
+const responseListeners = new Set<ResponseListener>();
+const seenResponses = new Set<string>();
+let lastResponse: Notifications.NotificationResponse | null = null;
+let lastResponseAt = 0;
+function responseKey(response: Notifications.NotificationResponse) {
+  return `${response.notification.request.identifier}:${response.notification.date}:${response.actionIdentifier}`;
+}
+function observeResponses() {
+  if (responseSubscription) return;
+  if (typeof Notifications.addNotificationResponseReceivedListener !== 'function') return;
+  responseSubscription = Notifications.addNotificationResponseReceivedListener((response) => {
+    const key = responseKey(response);
+    if (seenResponses.has(key)) return;
+    seenResponses.add(key);
+    lastResponse = response;
+    lastResponseAt = Date.now();
+    if (seenResponses.size > 128) seenResponses.delete(seenResponses.values().next().value!);
+    responseListeners.forEach((listener) => listener(response));
+    void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+  });
+  const getLast =
+    (
+      Notifications as typeof Notifications & {
+        getLastNotificationResponseAsync?: () => Promise<Notifications.NotificationResponse | null>;
+      }
+    ).getLastNotificationResponseAsync ??
+    (() => Promise.resolve(Notifications.getLastNotificationResponse()));
+  void getLast()
+    .then((response) => {
+      if (!response) return;
+      const key = responseKey(response);
+      if (seenResponses.has(key)) return;
+      seenResponses.add(key);
+      lastResponse = response;
+      lastResponseAt = Date.now();
+      if (seenResponses.size > 128) seenResponses.delete(seenResponses.values().next().value!);
+      responseListeners.forEach((listener) => listener(response));
+      void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+    })
+    .catch(() => undefined);
+}
+function addResponseListener(listener: ResponseListener) {
+  responseListeners.add(listener);
+  observeResponses();
+  // The app may register a second consumer just after iOS delivered the
+  // response (for example, a cold-start call reply). Replay that response to
+  // the late consumer for a short window so routing is not lost during boot.
+  if (lastResponse && Date.now() - lastResponseAt < 10000) {
+    const response = lastResponse;
+    queueMicrotask(() => {
+      if (responseListeners.has(listener)) listener(response);
+    });
+  }
+  return () => responseListeners.delete(listener);
+}
+function objectData(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value !== 'string' || value.length > 4096) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+Notifications.setNotificationHandler?.({
   handleNotification: async () => {
     // Foreground presentation belongs to DeviceNotifications, which knows the
     // visible chat and local contact name. Also suppress delayed local alerts.
@@ -96,25 +167,39 @@ export async function setDeviceBadge(count: number) {
   await Notifications.setBadgeCountAsync(count);
 }
 export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string) => void) {
-  const seen = new Set<string>();
-  const consume = (response: Notifications.NotificationResponse | null) => {
-    if (!response) return;
-    const responseKey = `${response.notification.request.identifier}:${response.notification.date}:${response.actionIdentifier}`;
-    if (seen.has(responseKey)) return;
-    seen.add(responseKey);
-    if (seen.size > 64) seen.delete(seen.values().next().value!);
-    const remote = response.notification.request.content.data?.mnelo;
-    if (remote && typeof remote === 'object' && 'kind' in remote && remote.kind === 'message') {
-      listener('message', 'id' in remote && typeof remote.id === 'string' ? remote.id : undefined);
-      void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+  const consume = (response: Notifications.NotificationResponse) => {
+    if (response.actionIdentifier !== defaultAction) return;
+    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+    const remote = objectData(data?.mnelo);
+    if (remote?.kind === 'message' && typeof remote.id === 'string') {
+      listener('message', remote.id);
       return;
     }
+    if (remote?.kind === 'call' && typeof remote.id === 'string') {
+      listener('incoming-call', remote.id);
+      return;
+    }
+    if (objectData(data?.mneloCall)?.kind === callReplyKind) return;
     if (!response.notification.request.identifier.startsWith(prefix)) return;
-    const kind = alertKind(response.notification.request.content.data);
+    const kind = alertKind(data);
     if (kind) listener(kind, response.notification.request.identifier.slice(prefix.length));
-    void Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
   };
-  const subscription = Notifications.addNotificationResponseReceivedListener(consume);
-  consume(Notifications.getLastNotificationResponse());
-  return () => subscription.remove();
+  return addResponseListener(consume);
+}
+
+// CallKit cannot add an application-specific reply action to its full-screen
+// sheet. The native call module posts a notification with a text-input action;
+// this listener carries that action back to the durable call runtime when the
+// app is launched from the lock screen.
+export function observeCallReplies(listener: (id: string, text: string) => void) {
+  const consume = (response: Notifications.NotificationResponse) => {
+    if (response.actionIdentifier !== callReplyAction) return;
+    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
+    const call = objectData(data?.mneloCall);
+    const id = call?.id;
+    const text = response.userText;
+    if (call?.kind === callReplyKind && typeof id === 'string' && typeof text === 'string')
+      listener(id, text);
+  };
+  return addResponseListener(consume);
 }

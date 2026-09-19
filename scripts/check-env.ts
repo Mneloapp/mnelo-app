@@ -10,6 +10,7 @@ const allowed = new Set([
   'EXPO_PUBLIC_APP_ENV',
   'EXPO_PUBLIC_RELAY_URL',
   'EXPO_PUBLIC_PHONE_IDENTITY_URL',
+  'EXPO_PUBLIC_DELIVERY_V2',
 ]);
 const legacy = new Set([
   'EXPO_PUBLIC_SUPABASE_URL',

@@ -480,9 +480,14 @@ export class SignalJournal {
     );
   }
   async acknowledged(sender: string, id: string) {
-    return this.atomic((db) =>
-      db.run('UPDATE signal_inbox SET acknowledged=1 WHERE sender=? AND id=?', sender, id),
-    );
+    return this.acknowledgedBatch([{ sender, id }]);
+  }
+  async acknowledgedBatch(rows: readonly { sender: string; id: string }[]) {
+    if (!rows.length) return;
+    return this.atomic(async (db) => {
+      for (const { sender, id } of rows)
+        await db.run('UPDATE signal_inbox SET acknowledged=1 WHERE sender=? AND id=?', sender, id);
+    });
   }
   async prune() {
     return this.atomic(async (db) => {

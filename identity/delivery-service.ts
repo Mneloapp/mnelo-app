@@ -40,7 +40,31 @@ export class DeliveryService {
     }
     switch (command.action) {
       case 'delivery-status':
-        return { version: 2, availableKeys: this.directory.count(actor) };
+        return {
+          version: 2,
+          availableKeys: this.directory.count(actor),
+          ...(command.capabilities ? { sync: true as const } : {}),
+        };
+      case 'delivery-sync': {
+        let accepted: DeliveryResponse['accepted'];
+        if (command.envelope) {
+          if (
+            !this.directory.identity(actor) ||
+            !this.directory.identity(command.envelope.recipient)
+          )
+            throw new Error('DELIVERY_UNAVAILABLE');
+          accepted = this.store.submit(actor, command.envelope);
+          this.onAccepted?.(actor, command.envelope.recipient);
+        }
+        // Every acknowledgement remains scoped to the authenticated recipient.
+        // Each operation is idempotent, including a response lost after submit.
+        this.store.acknowledgeBatch(actor, command.acknowledgements);
+        return {
+          version: 2,
+          ...(accepted ? { accepted } : {}),
+          ...(command.receive ? { inbox: this.store.fetch(actor, command.after) } : {}),
+        };
+      }
       case 'delivery-publish':
         return {
           version: 2,

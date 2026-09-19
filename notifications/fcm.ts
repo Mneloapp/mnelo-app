@@ -103,6 +103,9 @@ export class FirebasePushProvider implements PushProvider {
             ...(event.kind === 'call'
               ? { expires: Math.min(this.now() + 60000, options?.expiresAt ?? Infinity) }
               : {}),
+            ...(event.kind === 'call' && options?.callerHint
+              ? { callerHint: options.callerHint }
+              : {}),
             ...(options?.missedCall ? { reason: 'missed-call' } : {}),
           }),
         },

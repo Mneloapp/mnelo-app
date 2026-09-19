@@ -82,6 +82,7 @@ export class PeerMesh implements PeerTransport {
   private stopped = false;
   private pendingLinks = new Map<string, string>();
   private pendingMedia = new Map<string, string>();
+  private callSignalTasks = new Map<string, { id: string; pending: Signal | null }>();
   private seenSignals = new Map<string, number>();
   private ready = false;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -831,7 +832,29 @@ export class PeerMesh implements PeerTransport {
       !(await this.engine.acceptsPeer(sender))
     )
       throw new Error('CALL_SIGNAL_INVALID');
-    await this.mediaSignal(signal);
+    const call = this.calls?.snapshot();
+    if (!call || call.id !== signal.session || ['ended', 'failed'].includes(call.status)) return;
+    const current = this.callSignalTasks.get(sender);
+    if (current?.id === signal.session) {
+      // Signed SDP updates contain the accumulated candidates. Keep only the
+      // latest while native negotiation is pending, bounding memory and work.
+      current.pending = signal;
+      return;
+    }
+    const task = { id: signal.session, pending: signal as Signal | null };
+    this.callSignalTasks.set(sender, task);
+    // Native negotiation/TURN must never hold the durable inbox open: a
+    // declined call and unrelated messages need to be processed immediately.
+    // Serialize this call's SDP so a fallback cannot overtake its initial offer.
+    void (async () => {
+      while (this.callSignalTasks.get(sender) === task && task.pending) {
+        const next = task.pending;
+        task.pending = null;
+        await this.mediaSignal(next).catch(() => undefined);
+      }
+    })().finally(() => {
+      if (this.callSignalTasks.get(sender) === task) this.callSignalTasks.delete(sender);
+    });
   }
   private publishMediaInBackground(
     remote: string,
@@ -951,6 +974,7 @@ export class PeerMesh implements PeerTransport {
     return next;
   }
   endMedia(remote: string, id: string) {
+    if (this.callSignalTasks.get(remote)?.id === id) this.callSignalTasks.delete(remote);
     if (this.preparedMedia.get(remote)?.id === id) this.preparedMedia.delete(remote);
     if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);
     const link = this.mediaLinks.get(remote);
@@ -966,6 +990,7 @@ export class PeerMesh implements PeerTransport {
     this.pendingLinks.clear();
     this.pendingMedia.clear();
     this.preparedMedia.clear();
+    this.callSignalTasks.clear();
     this.ready = false;
     if (this.retry) clearTimeout(this.retry);
     if (this.poll) clearInterval(this.poll);

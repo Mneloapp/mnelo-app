@@ -79,7 +79,7 @@ export class PhoneClient {
       this.identity.secret,
       phoneProofPayload(this.identity.key, nonce, command),
     );
-    return phoneResponse.parse(
+    const result = phoneResponse.parse(
       await this.post(command.action.startsWith('delivery-') ? '/delivery' : '/execute', {
         key: this.identity.key,
         nonce,
@@ -87,6 +87,9 @@ export class PhoneClient {
         command,
       }),
     );
+    if (command.action === 'delivery-status' && command.capabilities && result.delivery?.sync)
+      this.schedule.enableDeliverySync?.();
+    return result;
   }
 }
 export function configuredPhoneService() {

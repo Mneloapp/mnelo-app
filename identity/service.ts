@@ -48,7 +48,11 @@ export class PhoneService {
     // A shared mobile carrier/Wi-Fi address may represent all 50 development
     // testers. Signed per-device and action-specific quotas still apply below.
     this.limit('challenge:' + source, 1200, 60000);
-    this.limit('challenge-key:' + key, 120, 60000);
+    // A live chat can exchange submit, delivered and read controls each second.
+    // Only admitted registered identities receive the interactive budget; SMS,
+    // lookup and prekey quotas below remain independent and unchanged.
+    const registered = (!this.access || this.access.scope(key)) && this.registry.status(key);
+    this.limit('challenge-key:' + key, registered ? 360 : 120, 60000);
     if (this.challenges.size >= 1000) throw new Error('PHONE_RATE_LIMITED');
     const nonce = randomBytes(32).toString('hex');
     this.challenges.set(nonce, { key, expires: this.now() + 60000 });
@@ -138,7 +142,7 @@ export class PhoneService {
     if (!registration) throw new Error('PHONE_REGISTRATION_REQUIRED');
     if (command.action.startsWith('delivery-')) {
       if (!this.delivery) throw new Error('DELIVERY_UNAVAILABLE');
-      this.limit('delivery-device:' + key, 120, 60000);
+      this.limit('delivery-device:' + key, 360, 60000);
       if (command.action === 'delivery-verify-sender') {
         // Only confirm a number voluntarily shared inside an envelope already
         // addressed to this actor. This is not a reverse-number directory.

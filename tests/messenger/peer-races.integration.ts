@@ -234,12 +234,16 @@ test('unknown offers require a verified directory match; blocked/spoofed introdu
   }
 });
 
-test('call offer/answer connects using the first relay paths while slower candidates are added without renegotiation', async () => {
+test('call SDP updates wait for native negotiation while the inbox remains free and candidates add without renegotiation', async () => {
   const alice = { ...createKeys(randomBytes), name: 'Fixture Alice' };
   const bob = { ...createKeys(randomBytes), name: 'Fixture Bob' };
   const id = randomUUID();
   const relay = 'a=candidate:1 1 udp 100 192.0.2.1 4000 typ relay raddr 0.0.0.0 rport 0';
   const fallback = 'a=candidate:2 1 udp 90 192.0.2.2 4001 typ relay raddr 0.0.0.0 rport 0';
+  let allowAnswer!: () => void;
+  const answerReady = new Promise<void>((resolve) => {
+    allowAnswer = resolve;
+  });
   class Peer extends EventTarget {
     iceGatheringState = 'gathering';
     signalingState = 'stable';
@@ -256,6 +260,7 @@ test('call offer/answer connects using the first relay paths while slower candid
       return { type: 'offer', sdp: this.sdp() };
     }
     async createAnswer() {
+      await answerReady;
       return { type: 'answer', sdp: this.sdp() };
     }
     sdp() {
@@ -350,6 +355,14 @@ test('call offer/answer connects using the first relay paths while slower candid
       'the inbox returns while TURN gathering is still pending',
     );
     const until = Date.now() + 3000;
+    while (!bp.remoteDescription) {
+      assert.ok(Date.now() < until, 'offer arrives before the delayed native answer');
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    ap.fallback();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(bp.added.length, 0, 'fallback stays queued behind pending native negotiation');
+    allowAnswer();
     while (!ap.remoteDescription) {
       assert.ok(Date.now() < until, 'the asynchronous handshake still completes');
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -358,7 +371,6 @@ test('call offer/answer connects using the first relay paths while slower candid
     assert.equal(bp.iceGatheringState, 'gathering');
     assert.equal(ap.remoteDescription?.type, 'answer');
     assert.equal(bp.remoteDescription?.type, 'offer');
-    ap.fallback();
     bp.fallback();
     await new Promise((resolve) => setTimeout(resolve, 250));
     assert.equal(ap.iceGatheringState, 'gathering', 'fallback sent before slow TURN timeout');
@@ -370,5 +382,68 @@ test('call offer/answer connects using the first relay paths while slower candid
   } finally {
     a.stop();
     b.stop();
+  }
+});
+
+test('authenticated call SDP does not hold the inbox while TURN is pending; hangup cancels allocation', async () => {
+  const { signSignal } = await import('../../src/messenger/signaling');
+  const own = { ...createKeys(randomBytes), name: 'Fixture' };
+  const remote = createKeys(randomBytes);
+  const id = randomUUID();
+  let configure!: (value: RTCConfiguration) => void;
+  let creations = 0;
+  const stream = { getTracks: () => [] } as unknown as MediaStream;
+  let call = {
+    id,
+    peer: remote.key,
+    incoming: true,
+    status: 'connecting',
+    local: stream,
+  } as DeviceCall;
+  const mesh = new PeerMesh(
+    own,
+    { acceptsPeer: async () => true } as unknown as DeviceMessenger,
+    'ws://127.0.0.1:8084',
+    () => {
+      creations++;
+      throw new Error('Unexpected peer');
+    },
+    randomUUID,
+    () => {},
+    () =>
+      new Promise((resolve) => {
+        configure = resolve;
+      }),
+  );
+  mesh.calls = {
+    snapshot: () => call,
+    allowedOffer: () => (call.status === 'connecting' ? stream : null),
+    mediaAllowed: () => call.status === 'connecting',
+    stage: () => {},
+    failed: async () => {},
+    stop: () => {},
+  } as unknown as DeviceCalls;
+  const offer = signSignal(remote.secret, {
+    protocol: 'mnelo-dtls-v1',
+    from: remote.key,
+    to: own.key,
+    session: id,
+    purpose: 'call',
+    expires: Date.now() + 60000,
+    type: 'offer',
+    sdp: 'a=fingerprint:sha-256 ' + Array(32).fill('AA').join(':'),
+  });
+  try {
+    // This promise must complete before configuration is resolved, so the
+    // serial caller can deliver a following message or decline immediately.
+    await mesh.receiveCallSignal(remote.key, offer);
+    assert.equal(typeof configure, 'function');
+    call = { ...call, status: 'ended' };
+    mesh.endMedia(remote.key, id);
+    configure({ iceServers: [] });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(creations, 0, 'late credentials do not create cancelled media');
+  } finally {
+    mesh.stop();
   }
 });

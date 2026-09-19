@@ -992,3 +992,64 @@ Xcode Organizer confirms **0.1.0 (36), Uploaded to Apple, September 15 at 23:14 
 The owner requested one new external tester. Existing-group membership initially showed No Builds Available; assigning build 36 activated the invitation and Apple now shows Invited. Separately, that owner's supplied phone was appended to the development SMS admission list, retaining both existing indexes. The active process verifies three admitted numbers, unchanged other configuration/index key, healthy HTTPS/signaling, and no SMS sent by the operator. Phone and email are retained only in private task evidence, not source. This explicitly authorized cohort addition supersedes historical two-number operational descriptions; OTP ownership verification and budgets remain enforced.
 
 The owner confirms delivered/read leaf behavior is now correct, but reports persistent call/video delay. USB traces reproduce approximately six-second stalls in native media setup and delayed first frames. Build 36 contains the UI changes and retains build 35 media behavior; it is **not** acceptance of the call issue. A separate native lifecycle initialization correction is under investigation after this immutable release.
+
+## September 16, 2026 — Build 37 available in TestFlight
+
+Notification taps retain their target through cold launch, authentication and inbox loading, then open the verified sender conversation once navigation is ready. The notification service supplies the app badge while the app is closed, and foreground presentation waits for the sender/preview instead of displaying a generic banner followed by a second banner. Consecutive photos form a compact album with individual media/actions preserved; chat and call search fields keep their position and focus. Details and acceptance boundaries: [BUILD_37](BUILD_37.md).
+
+Call setup now initializes the installed native audio lifecycle listeners before capture/peer creation, removes repeated unchanged push-token registrations, prepares the outgoing local media/offer while ringing, and shortens the initial relay-candidate coalescing delay. CallKit ownership, actual speaker-route state, acceptance and cancellation guards remain enforced. The owner's physical 36.3 test confirmed noticeably faster media and correct speaker output. Its recorded first video frames arrived 0.41/0.61 seconds after transport connection. Further prewarming in final 37 has not yet received physical answer-to-media acceptance; it is not claimed as measured faster on both phones.
+
+All 675 local checks pass (512 Jest tests across 98 suites, 3 server tests and 160 device/protocol tests); Doctor passes 21/21 and dependency compatibility passes. Actual browser components verified the album grid/opening the fourth photo and a stationary focused search field. One earlier local test process exited abnormally under build load; the complete rerun passed. The initial public build-37 source CI encountered a newly recommended expo-build-properties patch. After reviewing the opt-in-only scene-support patch, the package was updated from 57.0.18 to 57.0.19, with the option unset and no SDK migration. The original immutable tag remains untouched and no binary from it was distributed.
+
+Final private source `28743e4c458a540ac580de500aec33ff135e5278` matches public corresponding source `9268d5828f6acd51d710b86aa8b46c845e263194`, tag `ios-0.1.0-37-r1`, source tree `39b7abf025463d8cf9f8f4db1385c1f7a0d28e0d`. Exact-source [CI 35019383786](https://github.com/Mneloapp/mnelo-app/actions/runs/35019383786) passes. The signed native archive and exported IPA pass all four bundle versions/identifiers, production entitlements, shared vault/keychain, permissions, compiled feature/source/endpoints and packaged/decoded-Hermes secret checks. IPA is 120,963,639 bytes, SHA-256 `a941483f4d4e34b2664e344982a1e9dbe15bd1eea68fec5246682b86f7797f35`.
+
+Xcode Organizer confirms **0.1.0 (37), Uploaded to Apple, September 16 at 00:55 Asia/Tbilisi**. The four known nonblocking vendor symbol warnings remain (React, ReactNativeDependencies, WebRTC, hermesvm). Apple processing is **Complete**, build `84242ae0-20f3-47de-8ce6-86311a6c1bc1`; existing encryption answers and the 486-character test instructions are saved. Both existing groups' Builds tables confirm **Testing — Expires in 90 days**: Mnelo Development (internal, one tester) and Mnelo Preview (external, two testers), with automatic tester notification. The newly invited external tester now shows **Installed 0.1.0 (37)**. No group/tester scope or earlier build was removed or expanded in this release.
+
+The APNs fallback-badge server change is deployed from `0fc9ed96f2b83bb5b32a9122a9114c6cd412bd5d`; authenticated HTTPS/signaling checks pass and all four existing identities remain. SMS admission, keys and budgets remain unchanged and no SMS was sent by the operator. Final 37 was installed in place on both connected iPhones, preserving histories and keys. Automated launch attempts encountered locked devices; final 37 startup, notification-tap/badge behavior and media latency acceptance remain with the owner, who has been asked to test them.
+
+Disk space was recovered without discarding shipped binaries: older native archives 25–30 were losslessly zipped with ZIP integrity and per-file hash verification before removing expanded copies. Their signatures and symbols remain in the ZIP archives. Downloadable dependency caches and regenerable archive intermediates were cleared; final archive 37, exported IPA, earlier shipped IPAs and archive 36 remain. Temporary preview servers/tabs were closed. Release evidence is retained in `artifacts/build37-apple.json`, `build37-archive-verification.json`, `build37-export-verification.json`, `build37-ipa.json`, `build37-ci.json`, `build37-usb-status.json` and related check logs. This post-release ledger does not change corresponding-source tags or the signed binary.
+
+## September 16, 2026 — Build 38 uploaded
+
+Build 38 carries the cold-start notification response bridge, exact verified chat routing after a notification tap, locally resolved caller aliases for CallKit, lock-screen text replies for incoming calls and explicit decline propagation so the caller stops ringing. The server carries only a SHA-256 sender hint; names and message text remain device-local. Existing unread badges, delivery/read leaves, call expiry and authentication guards are unchanged. Full Jest (515), device/protocol (160), TypeScript, lint, formatting and diff checks pass. Xcode 26.6 Debug simulator compilation and signed Release archive validation pass for all extensions.
+
+Xcode Organizer confirms **0.1.0 (38), Uploaded to Apple, September 16 at 12:58 Asia/Tbilisi**. Upload completed with six non-blocking vendor-symbol warnings (ExpoImageManipulator, React, ReactNativeDependencies, SDWebImage, WebRTC and hermesvm). App Store Connect processing and group assignment remain to be refreshed in the expired browser session; no build-38 TestFlight installation or physical-device acceptance is claimed yet. Details: [BUILD_38](BUILD_38.md).
+
+## September 19, 2026 — Build 41 preparation, archive in progress
+
+Build 41 makes the build-40 service-configuration recovery reproducible through
+Expo prebuild and a failing archive guard, overlaps caller media preparation with
+invite delivery, and keeps native SDP/TURN waits out of the durable inbox. A
+capability-negotiated delivery exchange combines submit, bounded acknowledgements
+and inbox retrieval; authenticated interactive request budgets support sustained
+chat while preserving legacy fallback, encryption and recipient isolation. The
+13 reviewed SDK 57 patches are aligned, with the React Native/React/WebRTC
+platform retained. Details: [BUILD_41](BUILD_41.md) and
+[dependency review](BUILD_41_DEPENDENCIES.md).
+
+Full source validation passes **698 tests** (529 Jest across 99 suites, 3 server,
+166 device/protocol), types/lint/format and the source guards. Doctor passes
+**21/21** and dependency compatibility passes. Audit has **16 moderate findings,
+no high or critical findings**; it is not a clean-audit claim. In the controlled
+real Signal/signed HTTP/WebSocket fixture with 80 ms added per HTTP request,
+send-to-projection is **343 ms**, projection-to-delivered **353 ms**,
+mark-read-to-read **342 ms**, and voice/video accept–offer–answer **1,046/1,045 ms**.
+Sixty ordered messages one second apart have maximum projection/read delays of
+**383/959 ms**. These measurements exclude physical iPhone media and APNs timing.
+Evidence: `artifacts/build41-check.log`, `build41-doctor-final.log` and
+`build41-audit-final.log`.
+
+iOS/Android JavaScript exports pass, and source/history/exported-bundle Gitleaks
+scans report zero findings (`artifacts/build41-export.log` and
+`build41-secret-scan.log`). This does not replace final signed-artifact checks.
+
+Clean TestFlight prebuild and CocoaPods installation pass. A bare Xcode archive,
+started without caller-supplied Expo variables, is in progress to verify the
+generated environment handoff (`artifacts/build41-prebuild.log`, `build41-pods.log`,
+`build41-archive.log`). Signed archive/export, corresponding-source publication,
+Apple upload/processing and tester access remain pending. The hosted service
+still runs `0fc9ed96f2b83bb5b32a9122a9114c6cd412bd5d` at this checkpoint; build-41
+server deployment has not yet been recorded. Both phones require fresh in-place
+cold-launch, notification and voice/video acceptance; no new physical timing
+result or completed TestFlight-41 rollout is claimed.
+Both phones are currently disconnected, so a fresh physical run remains pending.

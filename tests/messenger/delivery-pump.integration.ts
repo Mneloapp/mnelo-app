@@ -75,9 +75,12 @@ test('accepting a call during an ongoing bulk upload sends its encrypted control
     {
       execute: async (command, priority) => {
         const result = delivery.execute(a.root.key, command);
-        if (command.action === 'delivery-submit') {
-          order.push(command.envelope.id);
-          if (command.envelope.id === first)
+        if (
+          command.action === 'delivery-submit' ||
+          (command.action === 'delivery-sync' && command.envelope)
+        ) {
+          order.push(command.envelope!.id);
+          if (command.envelope!.id === first)
             await a.journal.enqueue(
               b.root.key,
               urgent,
@@ -87,7 +90,7 @@ test('accepting a call during an ongoing bulk upload sends its encrypted control
               undefined,
               2,
             );
-          if (command.envelope.id === urgent)
+          if (command.envelope!.id === urgent)
             assert.equal(priority, true, 'call keeps priority at the HTTP queue');
         }
         return { delivery: result };
@@ -140,8 +143,15 @@ test('remote wake interrupts a bulk batch and fetches the inbox at urgent priori
     {
       execute: async (command, urgent) => {
         const result = delivery.execute(a.root.key, command);
-        if (command.action === 'delivery-inbox') order.push(urgent ? 'urgent-inbox' : 'inbox');
-        if (command.action === 'delivery-submit') {
+        if (
+          command.action === 'delivery-inbox' ||
+          (command.action === 'delivery-sync' && !command.envelope)
+        )
+          order.push(urgent ? 'urgent-inbox' : 'inbox');
+        if (
+          command.action === 'delivery-submit' ||
+          (command.action === 'delivery-sync' && command.envelope)
+        ) {
           order.push('upload');
           if (!hinted) {
             hinted = true;
@@ -162,9 +172,9 @@ test('remote wake interrupts a bulk batch and fetches the inbox at urgent priori
     for (let n = 0; n < 4; n++) await a.journal.enqueue(b.root.key, randomUUID(), `BULK_${n}`);
     pump.start();
     await pump.tick();
-    assert.deepEqual(order, ['inbox', 'upload']);
+    assert.deepEqual(order, ['upload', 'urgent-inbox', 'upload', 'upload', 'upload']);
     await pump.tick();
-    assert.deepEqual(order, ['inbox', 'upload', 'urgent-inbox', 'upload', 'upload', 'upload']);
+    assert.deepEqual(order, ['upload', 'urgent-inbox', 'upload', 'upload', 'upload', 'inbox']);
   } finally {
     pump.stop();
     delivery.close();
@@ -190,7 +200,10 @@ test('an unready peer shares lookup backoff across a large backlog and restart, 
   const client = {
     async execute(command: Parameters<PhoneClient['execute']>[0]) {
       if (command.action === 'delivery-identity' && command.peer === b.root.key) lookups++;
-      if (command.action === 'delivery-submit' && command.envelope.recipient === b.root.key)
+      if (
+        (command.action === 'delivery-submit' || command.action === 'delivery-sync') &&
+        command.envelope?.recipient === b.root.key
+      )
         submitted++;
       return { delivery: delivery.execute(a.root.key, command) };
     },
@@ -329,6 +342,9 @@ test('two real Signal clients use authenticated HTTP delivery without a live sen
     ap.start();
     await ap.tick();
     assert.deepEqual(receipts, ['FICTIONAL_DELIVERY_RECEIPT']);
+    // Server cleanup is piggybacked on the next inbox exchange; local receipt
+    // projection and sender-visible status already completed exactly once.
+    await ap.tick();
     assert.equal(delivery.store.fetch(a.root.key).length, 0);
     assert.equal(statesA.at(-1), 'ready');
     assert.equal(statesB.at(-1), 'ready');
@@ -351,6 +367,7 @@ test('two real Signal clients use authenticated HTTP delivery without a live sen
     assert.equal(statesB.at(-1), 'message-error');
     assert.ok(received.includes('FICTIONAL_VALID_AFTER_BAD'));
     assert.ok(!received.includes('FICTIONAL_INVALID_APP_PACKET'));
+    await bp.tick();
     assert.equal(
       delivery.store.fetch(b.root.key).length,
       2,
@@ -518,8 +535,15 @@ test('call signaling is uploaded before maintenance or an old inbox backlog', as
   );
   const urgent = randomUUID();
   let maintenance = 0;
+  const uploads: string[] = [];
   const pump = new DeliveryPump(
-    { execute: async (command) => ({ delivery: delivery.execute(a.root.key, command) }) },
+    {
+      execute: async (command) => {
+        const result = delivery.execute(a.root.key, command);
+        if ('envelope' in command && command.envelope) uploads.push(command.envelope.id);
+        return { delivery: result };
+      },
+    },
     a.journal,
     async () => ({}),
     () => {},
@@ -553,10 +577,140 @@ test('call signaling is uploaded before maintenance or an old inbox backlog', as
     pump.start();
     await pump.tick();
     assert.equal(maintenance, 1);
-    assert.equal(delivery.store.fetch(b.root.key)[0]?.id, urgent);
+    assert.equal(
+      uploads[0],
+      urgent,
+      'call is submitted first even when server acceptance timestamps tie',
+    );
     assert.ok((await a.journal.pending()).length > 0, 'bulk work remains durable');
   } finally {
     pump.stop();
+    delivery.close();
+    a.sql.close();
+    b.sql.close();
+  }
+});
+
+for (const outgoingOnly of [false, true])
+  test(`legacy-server fallback and share isolation (outgoingOnly=${outgoingOnly})`, async () => {
+    const a = device(),
+      b = device();
+    const delivery = new DeliveryService(
+      new DeliveryStore(new DatabaseSync(':memory:'), {
+        registered: () => true,
+        canContact: () => true,
+      }),
+      new SignalDirectory(new DatabaseSync(':memory:')),
+    );
+    let attempts = 0,
+      uploads = 0;
+    const pump = new DeliveryPump(
+      {
+        execute: async (command) => {
+          if (command.action === 'delivery-status' && command.capabilities) {
+            attempts++;
+            throw new Error('PHONE_REQUEST_FAILED');
+          }
+          assert.notEqual(command.action, 'delivery-sync');
+          if (command.action === 'delivery-submit') uploads++;
+          return { delivery: delivery.execute(a.root.key, command) };
+        },
+      },
+      a.journal,
+      async () => ({}),
+      () => {},
+      Date.now,
+      { outgoingOnly },
+    );
+    try {
+      const keys = await b.journal.initialize();
+      delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+      await a.journal.initialize();
+      await a.journal.enqueue(b.root.key, randomUUID(), 'LEGACY_COMPATIBILITY');
+      pump.start();
+      await pump.tick();
+      await pump.tick();
+      assert.equal(attempts, outgoingOnly ? 0 : 1);
+      assert.equal(uploads, 1);
+      assert.equal(delivery.store.fetch(b.root.key).length, 1);
+    } finally {
+      pump.stop();
+      delivery.close();
+      a.sql.close();
+      b.sql.close();
+    }
+  });
+
+test('full sync pages drain without three-second gaps and batch cleanup never drops poison ciphertext', async () => {
+  const a = device(),
+    b = device();
+  const delivery = new DeliveryService(
+    new DeliveryStore(new DatabaseSync(':memory:'), {
+      registered: () => true,
+      canContact: () => true,
+    }),
+    new SignalDirectory(new DatabaseSync(':memory:')),
+  );
+  const client = (actor: string) => ({
+    execute: async (command: Parameters<PhoneClient['execute']>[0]) => {
+      const result = delivery.execute(actor, command);
+      return { delivery: result };
+    },
+  });
+  const received = new Set<string>();
+  const ap = new DeliveryPump(
+    client(a.root.key),
+    a.journal,
+    async () => ({}),
+    () => {},
+  );
+  const bp = new DeliveryPump(
+    client(b.root.key),
+    b.journal,
+    async (_sender, body) => {
+      received.add(body);
+      return {};
+    },
+    () => {},
+  );
+  try {
+    const keys = await b.journal.initialize();
+    delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+    await a.journal.initialize();
+    for (let n = 0; n < 45; n++) await a.journal.enqueue(b.root.key, randomUUID(), 'PAGE_' + n);
+    ap.start();
+    for (let n = 0; n < 5; n++) await ap.tick();
+    ap.stop();
+    const poison = randomUUID();
+    delivery.store.submit(a.root.key, {
+      version: 2,
+      id: poison,
+      createdAt: Date.now(),
+      recipient: b.root.key,
+      type: 3,
+      ciphertext: 'AAAA',
+    });
+    const started = Date.now();
+    bp.start();
+    while (received.size < 45) {
+      assert.ok(
+        Date.now() - started < 1500,
+        'full inbox pages must not wait for the fallback poll: received=' + received.size,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    // The next real sync persists the final bounded acknowledgement batch.
+    await bp.tick();
+    await bp.tick();
+    assert.equal(received.size, 45);
+    assert.deepEqual(
+      delivery.store.fetch(b.root.key).map((row) => row.id),
+      [poison],
+    );
+    assert.ok(await b.journal.retry('receive', a.root.key, poison));
+  } finally {
+    ap.stop();
+    bp.stop();
     delivery.close();
     a.sql.close();
     b.sql.close();

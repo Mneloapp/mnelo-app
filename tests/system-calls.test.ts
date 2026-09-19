@@ -39,6 +39,10 @@ jest.mock('expo-notifications', () => ({
   addPushTokenListener: jest.fn(() => ({ remove: jest.fn() })),
   IosAuthorizationStatus: { PROVISIONAL: 3 },
 }));
+jest.mock('expo-crypto', () => ({
+  digestStringAsync: jest.fn(async () => 'a'.repeat(64)),
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+}));
 const native = jest.requireMock('expo-modules-core').__native;
 const notifications = jest.requireMock('expo-notifications');
 const id = 'b9870ee4-4c80-4bb3-9b52-a9c77f905b9a';
@@ -84,8 +88,17 @@ function fixture(
     media: DeviceCall['media'] = 'voice',
     incoming = true,
     ringingConfirmed = false,
+    peer?: string,
   ) => {
-    value = { id, incoming, media, status, ringingConfirmed, local: {} } as DeviceCall;
+    value = {
+      id,
+      incoming,
+      media,
+      status,
+      ringingConfirmed,
+      local: {},
+      ...(peer ? { peer } : {}),
+    } as DeviceCall;
     changed();
   };
   return {
@@ -221,6 +234,21 @@ test('a native decline before rendezvous rejects a late authenticated invite', a
     f.stop();
   }
 });
+
+test('a native decline reports the decline reason to the remote caller', async () => {
+  const f = fixture();
+  try {
+    await tick();
+    f.update('incoming');
+    await tick();
+    native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'decline' }]);
+    native.changed();
+    await tick();
+    expect(f.calls.end).toHaveBeenCalledWith(false, true, 'decline');
+  } finally {
+    f.stop();
+  }
+});
 test('answer in the app activates the native call audio path exactly once', async () => {
   const f = fixture();
   try {
@@ -332,6 +360,17 @@ test('caller identity updates the reported call from authenticated local data wi
     f.update('active');
     await tick();
     expect(caller).toHaveBeenCalledTimes(1);
+  } finally {
+    f.stop();
+  }
+});
+
+test('an incoming call carries an opaque caller cache hint to native CallKit', async () => {
+  const f = fixture();
+  try {
+    f.update('incoming', 'voice', true, false, 'peer-key');
+    await tick();
+    expect(native.incoming).toHaveBeenCalledWith(id, false, 'a'.repeat(64));
   } finally {
     f.stop();
   }

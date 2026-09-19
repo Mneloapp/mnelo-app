@@ -567,12 +567,14 @@ export class DeviceCalls {
           ?.wake(peer, { kind: 'call', id, video: media === 'video' })
           .catch(() => undefined);
       if (this.value?.id !== id || !this.active()) return;
-      await this.send(peer, { type: 'call', id, action: 'invite', media });
-      // Prepare only the caller's already-authorized local media. Publish the
-      // offer after acceptance; the recipient opens no media before answering.
+      // Gather the caller's already-authorized media while the invite is being
+      // persisted/delivered. A quick answer must not wait for a second cold
+      // setup after that network round trip. The offer is still published only
+      // after acceptance; the recipient opens no media before answering.
       if (this.signaling)
         void this.mesh.prepareOutgoingMedia?.(peer, id, stream).catch(() => undefined);
-      this.expire();
+      await this.send(peer, { type: 'call', id, action: 'invite', media });
+      if (this.value?.id === id && this.active()) this.expire();
     } catch (error) {
       if (this.value?.id === id) await this.end(true);
       throw error;
@@ -631,12 +633,16 @@ export class DeviceCalls {
     this.controls.forEach((listener) => listener(control));
     if (control.action === 'accept' && !call.incoming && call.status === 'ringing' && call.local) {
       this.update({ ...call, status: 'connecting' });
-      try {
-        this.stage('MEDIA_OFFER');
-        await this.mesh.startMedia(peer, call.id, call.local);
-      } catch {
-        if (this.value?.id === call.id) await this.end(true);
-      }
+      this.stage('MEDIA_OFFER');
+      // The authenticated inbox must remain available for a remote hangup and
+      // messages while TURN credentials or the native offer are still pending.
+      // PeerMesh checks this call again before allocating/publishing its media.
+      void this.mesh
+        .startMedia(peer, call.id, call.local)
+        .catch(async () => {
+          if (this.value?.id === call.id) await this.end(true);
+        })
+        .catch(() => undefined);
     } else if (control.action === 'end' || control.action === 'decline')
       await this.end(false, false, control.action === 'decline' ? 'decline' : 'remote');
   }

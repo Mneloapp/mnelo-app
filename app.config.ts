@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '37',
+    buildNumber: '41',
     privacyManifests: {
       NSPrivacyAccessedAPITypes: [
         {
@@ -111,6 +111,7 @@ const config: ExpoConfig = {
         },
         ios: {
           useFrameworks: 'static',
+          usePrecompiledModules: false,
           // expo-camera 57 splits scanning into a companion pod. The installed
           // autolinker omitted it even with barcodeScannerEnabled=true; persist
           // the explicit dependency through prebuild, never patch generated Swift.
@@ -129,6 +130,8 @@ const config: ExpoConfig = {
     ],
     ['./plugins/with-local-network.cjs', { local: environment.appEnv === 'local' }],
     './plugins/with-signal.cjs',
+    './plugins/with-source-expo-camera.cjs',
+    './plugins/with-native-build-environment.cjs',
     ['@livekit/react-native-expo-plugin', { android: { enableScreenShareService: true } }],
     [
       'expo-calendar',

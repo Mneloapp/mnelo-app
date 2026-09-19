@@ -1245,7 +1245,7 @@
     },
     {
       "package": "@expo/cli",
-      "version": "57.0.24",
+      "version": "57.0.26",
       "license": "MIT",
       "direct": false,
       "developmentOnly": false,
@@ -1416,7 +1416,7 @@
     },
     {
       "package": "@expo/metro-runtime",
-      "version": "57.0.15",
+      "version": "57.0.16",
       "license": "MIT",
       "direct": false,
       "developmentOnly": false,
@@ -1470,7 +1470,7 @@
     },
     {
       "package": "@expo/router-server",
-      "version": "57.0.9",
+      "version": "57.0.10",
       "license": "MIT",
       "direct": false,
       "developmentOnly": false,
@@ -1515,7 +1515,7 @@
     },
     {
       "package": "@expo/ui",
-      "version": "57.0.18",
+      "version": "57.0.19",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -3981,7 +3981,7 @@
     },
     {
       "package": "babel-preset-expo",
-      "version": "57.0.11",
+      "version": "57.0.12",
       "license": "MIT",
       "direct": false,
       "developmentOnly": false,
@@ -5709,7 +5709,7 @@
     },
     {
       "package": "expo",
-      "version": "57.0.22",
+      "version": "57.0.24",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5727,7 +5727,7 @@
     },
     {
       "package": "expo-asset",
-      "version": "57.0.17",
+      "version": "57.0.18",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5745,7 +5745,7 @@
     },
     {
       "package": "expo-build-properties",
-      "version": "57.0.17",
+      "version": "57.0.21",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5754,7 +5754,7 @@
     },
     {
       "package": "expo-calendar",
-      "version": "57.0.3",
+      "version": "57.0.4",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5781,7 +5781,7 @@
     },
     {
       "package": "expo-constants",
-      "version": "57.0.18",
+      "version": "57.0.19",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5790,7 +5790,7 @@
     },
     {
       "package": "expo-contacts",
-      "version": "57.0.5",
+      "version": "57.0.6",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5907,7 +5907,7 @@
     },
     {
       "package": "expo-image-manipulator",
-      "version": "57.0.17",
+      "version": "57.0.19",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5916,7 +5916,7 @@
     },
     {
       "package": "expo-image-picker",
-      "version": "57.0.17",
+      "version": "57.0.19",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -5961,7 +5961,7 @@
     },
     {
       "package": "expo-location",
-      "version": "57.0.17",
+      "version": "57.0.19",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -6006,7 +6006,7 @@
     },
     {
       "package": "expo-notifications",
-      "version": "57.0.18",
+      "version": "57.0.20",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -6015,7 +6015,7 @@
     },
     {
       "package": "expo-router",
-      "version": "57.0.21",
+      "version": "57.0.22",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,
@@ -6042,7 +6042,7 @@
     },
     {
       "package": "expo-sharing",
-      "version": "57.0.19",
+      "version": "57.0.21",
       "license": "MIT",
       "direct": true,
       "developmentOnly": false,

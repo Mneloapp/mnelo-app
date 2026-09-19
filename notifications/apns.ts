@@ -2,7 +2,7 @@ import { connect, type ClientHttp2Session } from 'node:http2';
 import { createPrivateKey, sign, type KeyObject } from 'node:crypto';
 import type { PushRegistration, WakeEvent } from '../src/messenger/wake-protocol';
 export type PushResult = { accepted: boolean; invalidatedAt?: number };
-export type PushDeliveryOptions = { expiresAt: number; missedCall?: boolean };
+export type PushDeliveryOptions = { expiresAt: number; missedCall?: boolean; callerHint?: string };
 export interface PushProvider {
   available?(registration: PushRegistration): boolean;
   send(
@@ -29,7 +29,12 @@ export function apnsPayload(event: WakeEvent, now = Date.now(), options?: PushDe
       }
     : {
         aps: {},
-        mnelo: { v: 1, ...event, expires: Math.min(now + 60000, options?.expiresAt ?? Infinity) },
+        mnelo: {
+          v: 1,
+          ...event,
+          expires: Math.min(now + 60000, options?.expiresAt ?? Infinity),
+          ...(options?.callerHint ? { callerHint: options.callerHint } : {}),
+        },
       };
 }
 const sessions = new Map<string, ClientHttp2Session>();

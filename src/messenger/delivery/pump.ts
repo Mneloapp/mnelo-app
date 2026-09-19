@@ -1,6 +1,11 @@
 import type { PhoneClient } from '../phone-client';
 import type { SignalJournal, RetryCode } from './journal';
-import { deliveryResponse, type DeliveryCommand } from './schema';
+import {
+  deliveryResponse,
+  type DeliveryCommand,
+  type DeliveryEnvelope,
+  type QueuedEnvelope,
+} from './schema';
 import type { PublicKeys } from './signal';
 
 export type DeliveryState = 'starting' | 'ready' | 'offline' | RetryCode;
@@ -30,6 +35,11 @@ export class DeliveryPump {
   private issue: RetryCode | undefined;
   private keysCheckedAt = 0;
   private keyCapacityReached = false;
+  private syncSupported = false;
+  private bufferedInbox: QueuedEnvelope[] = [];
+  private lastInboxFetchAt = 0;
+  private forcePoll = false;
+  private serverHasMore = false;
   private serverCursor: { acceptedAt: number; sender: string; id: string } | undefined;
   private projectCursor: { createdAt: number; sender: string; id: string } | undefined;
   constructor(
@@ -87,13 +97,14 @@ export class DeliveryPump {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      void this.tick();
+      void this.tick(false);
     }, delay);
   }
-  async tick() {
+  async tick(forcePoll = true) {
     if (this.stopped) return;
     if (this.running) return this.running.catch(() => undefined); // The owning tick reports the failure once.
     this.issue = undefined;
+    this.forcePoll = forcePoll;
     const operation = this.cycle();
     this.running = operation;
     try {
@@ -150,7 +161,23 @@ export class DeliveryPump {
   }
   private async cycle() {
     if (!this.initialized) {
-      await this.command({ action: 'delivery-status' });
+      try {
+        const status = await this.command({
+          action: 'delivery-status',
+          ...(!this.hooks.outgoingOnly ? { capabilities: true as const } : {}),
+        });
+        this.syncSupported = status.sync === true;
+      } catch (error) {
+        // Older servers reject the opt-in field; their ordinary response stays
+        // unchanged so older installed apps can also continue using that server.
+        if (
+          this.hooks.outgoingOnly ||
+          !(error instanceof Error) ||
+          error.message !== 'PHONE_REQUEST_FAILED'
+        )
+          throw error;
+        await this.command({ action: 'delivery-status' });
+      }
       const keys = await this.journal.initialize();
       if (this.stopped) return;
       const available = await this.publish(keys);
@@ -164,12 +191,16 @@ export class DeliveryPump {
     // All journal mutation and encryption remain serial.
     await this.sendOutgoing(tokens, 2);
     await this.hooks.beforeCycle?.();
+    // A submit exchange already fetches the inbox. Sending ordinary work first
+    // avoids an empty poll before every message; a remote hint still preempts it.
+    if (this.syncSupported) await this.sendOutgoing(tokens);
     if (!this.hooks.outgoingOnly) await this.receiveCycle();
     await this.maintainKeys();
     await this.journal.prune();
     await this.sendOutgoing(tokens);
     this.issue ??= await this.journal.outgoingIssue(tokens);
     await this.hooks.afterCycle?.();
+    if (this.bufferedInbox.length) this.wakePending = true;
   }
   private async sendOutgoing(tokens?: readonly string[], minPriority = 0) {
     const outgoing = await this.journal.readyOutgoing(tokens, minPriority);
@@ -177,7 +208,12 @@ export class DeliveryPump {
       if (this.stopped) return;
       // A remote delivery hint interrupts the bulk snapshot at a safe boundary.
       // The next serial cycle fetches it before any more ordinary uploads.
-      if (minPriority < 2 && row.priority < 2 && this.incomingPending && !this.hooks.outgoingOnly)
+      if (
+        minPriority < 2 &&
+        row.priority < 2 &&
+        (this.incomingPending || this.bufferedInbox.length > 0) &&
+        !this.hooks.outgoingOnly
+      )
         return;
       // Calls can arrive after readyOutgoing took its snapshot. Preempt between
       // bulk sends instead of waiting for the entire paced upload batch.
@@ -207,7 +243,9 @@ export class DeliveryPump {
         }
         const envelope = await this.journal.seal(row.id, leased?.bundle);
         if (this.stopped) return;
-        const { accepted } = await this.command({ action: 'delivery-submit', envelope }, urgent);
+        const { accepted } = this.syncSupported
+          ? await this.sync(envelope, urgent)
+          : await this.command({ action: 'delivery-submit', envelope }, urgent);
         if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
         await this.journal.uploaded(row.id);
         await this.journal.recovered('send', row.peer, row.id);
@@ -217,12 +255,61 @@ export class DeliveryPump {
       }
     }
   }
+  private async sync(envelope?: DeliveryEnvelope, urgent = false) {
+    const acknowledgements = await this.journal.acknowledgements();
+    const receive = !this.hooks.outgoingOnly && this.bufferedInbox.length === 0;
+    const result = await this.command(
+      {
+        action: 'delivery-sync',
+        ...(envelope ? { envelope } : {}),
+        acknowledgements,
+        ...(this.serverCursor ? { after: this.serverCursor } : {}),
+        receive,
+      },
+      urgent,
+    );
+    if (receive && !result.inbox) throw new Error('DELIVERY_RESPONSE_INVALID');
+    await this.journal.acknowledgedBatch(acknowledgements);
+    if (result.inbox) {
+      this.lastInboxFetchAt = this.now();
+      this.serverHasMore = result.inbox.length === 20;
+      const last = result.inbox.at(-1);
+      this.serverCursor = last
+        ? { acceptedAt: last.acceptedAt, sender: last.sender, id: last.id }
+        : undefined;
+      this.bufferedInbox.push(...result.inbox);
+      // The encrypted receipt's round trip can carry the next message or call
+      // signal. The current cycle projects it without an additional poll.
+    }
+    return result;
+  }
   private async receiveCycle() {
     const urgent = this.incomingPending;
     this.incomingPending = false;
     // Project durable local inbox first; a crash cannot consume another prekey or
     // advance a ratchet twice while replaying this stage.
     await this.project();
+    if (this.syncSupported) {
+      if (
+        !this.bufferedInbox.length &&
+        (urgent ||
+          this.forcePoll ||
+          this.serverHasMore ||
+          this.now() - this.lastInboxFetchAt >= 3000)
+      )
+        await this.sync(undefined, urgent);
+      // Keep each cycle bounded; every unacknowledged ciphertext is still on the
+      // server if the process is interrupted before its local journal commit.
+      let processed = 0;
+      do {
+        const inbox = this.bufferedInbox.splice(0, 20);
+        processed += inbox.length;
+        await this.receiveEnvelopes(inbox, urgent);
+        await this.project();
+      } while (this.bufferedInbox.length && processed < 40 && !this.stopped);
+      if (this.bufferedInbox.length) this.wakePending = true;
+      return;
+    }
     const { inbox } = await this.command(
       {
         action: 'delivery-inbox',
@@ -232,6 +319,17 @@ export class DeliveryPump {
     );
     if (!inbox) throw new Error('DELIVERY_RESPONSE_INVALID');
     if (!inbox.length) this.serverCursor = undefined;
+    await this.receiveEnvelopes(inbox, urgent);
+    await this.project();
+    for (const row of await this.journal.acknowledgements()) {
+      if (this.stopped || this.incomingPending) return;
+      await this.sendOutgoing(undefined, 2);
+      await this.command({ action: 'delivery-ack', sender: row.sender, id: row.id });
+      await this.journal.acknowledged(row.sender, row.id);
+    }
+  }
+  private async receiveEnvelopes(inbox: QueuedEnvelope[], urgent: boolean) {
+    if (inbox.length === 20) this.wakePending = true;
     for (const envelope of inbox) {
       if (this.stopped) return;
       await this.sendOutgoing(undefined, 2);
@@ -254,18 +352,12 @@ export class DeliveryPump {
         }
       // Advance past a bad item without acknowledging or discarding it. Retry
       // state survives restart; the server retains ciphertext until ACK/expiry.
-      this.serverCursor = {
-        acceptedAt: envelope.acceptedAt,
-        sender: envelope.sender,
-        id: envelope.id,
-      };
-    }
-    await this.project();
-    for (const row of await this.journal.acknowledgements()) {
-      if (this.stopped || this.incomingPending) return;
-      await this.sendOutgoing(undefined, 2);
-      await this.command({ action: 'delivery-ack', sender: row.sender, id: row.id });
-      await this.journal.acknowledged(row.sender, row.id);
+      if (!this.syncSupported)
+        this.serverCursor = {
+          acceptedAt: envelope.acceptedAt,
+          sender: envelope.sender,
+          id: envelope.id,
+        };
     }
   }
   private async project() {

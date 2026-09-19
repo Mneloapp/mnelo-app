@@ -25,6 +25,10 @@ for (const [name, entry] of Object.entries(entries)) {
     platform: 'node',
     target: 'node24',
     format: 'esm',
+    // Worktrees may share the checked dependency directory through a symlink.
+    // Keep those inputs under node_modules so the source allowlist below can
+    // remain strict without admitting arbitrary parent-workspace files.
+    preserveSymlinks: true,
     metafile: true,
     sourcemap: false,
     legalComments: 'inline',

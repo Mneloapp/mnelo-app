@@ -83,7 +83,13 @@ test('real Signal, signed HTTP and WebSocket wakes deliver prompt receipts and c
   }
   // 80 ms per HTTP round trip. Every command still performs the real nonce,
   // proof, schema validation, server operation and Signal journal transaction.
+  const commands: Record<string, number> = {};
   const request: typeof fetch = async (...args) => {
+    const body = JSON.parse(String(args[1]?.body ?? '{}'));
+    if (body.command) {
+      const type = body.command.action + (body.command.envelope ? ':submit' : ':poll');
+      commands[type] = (commands[type] ?? 0) + 1;
+    }
     await wait(80);
     return fetch(...args);
   };
@@ -231,8 +237,60 @@ test('real Signal, signed HTTP and WebSocket wakes deliver prompt receipts and c
       await until(() => answered);
       result[media + 'AcceptOfferAnswer'] = Date.now() - accept;
     }
+    const burst: { id: string; sent: number }[] = [];
+    const receivedAt = new Map<string, number>();
+    const readAt = new Map<string, number>();
+    let reading = Promise.resolve();
+    const stopRead = engines[0]!.subscribe(() => {
+      reading = reading.then(async () => {
+        for (const message of await engines[0]!.messages(chat))
+          if (message.status === 'read' && !readAt.has(message.id))
+            readAt.set(message.id, Date.now());
+      });
+    });
+    const stopIncoming = engines[1]!.subscribeIncoming((message) => {
+      if (message.type !== 'message') return;
+      receivedAt.set(message.id, Date.now());
+      void engines[1]!.markRead(chat);
+    });
+    try {
+      for (let index = 0; index < 60; index++) {
+        const sent = Date.now();
+        burst.push({ id: await engines[0]!.send(chat, 'Synthetic burst ' + index), sent });
+        await wait(1000);
+      }
+      await until(async () => {
+        const messages = await engines[0]!.messages(chat);
+        if (messages.length === 40)
+          messages.push(...(await engines[0]!.messages(chat, messages.at(-1)!.sequence)));
+        return burst.every((row) => messages.some((m) => m.id === row.id && m.status === 'read'));
+      });
+      await reading;
+      assert.deepEqual(
+        [...receivedAt.keys()],
+        burst.map((row) => row.id),
+        'consecutive messages remain in sending order',
+      );
+      result.burstMaximumRead = Math.max(...burst.map((row) => readAt.get(row.id)! - row.sent));
+      result.burstMaximumVisible = Math.max(
+        ...burst.map((row) => receivedAt.get(row.id)! - row.sent),
+      );
+    } finally {
+      stopIncoming();
+      stopRead();
+      await reading;
+    }
+    process.stdout.write('COMMAND_COUNTS ' + JSON.stringify(commands) + '\n');
     process.stdout.write('LATENCY_MS ' + JSON.stringify(result) + '\n');
     if (!process.env.MNELO_LATENCY_BASELINE) {
+      assert.ok(
+        result.burstMaximumRead! < 2500,
+        'read receipts must keep up throughout the full burst',
+      );
+      assert.ok(
+        result.burstMaximumVisible! < 2500,
+        'one-second message bursts must not exhaust the interactive queue',
+      );
       assert.ok(result.visibleToDelivered! < 1800, 'delivery receipt must precede housekeeping');
       assert.ok(
         result.markReadToRead! < 1800,

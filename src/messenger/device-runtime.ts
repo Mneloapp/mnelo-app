@@ -8,7 +8,7 @@ import { relayAddress } from './signaling';
 import { devicePhoneClient } from './phone-client';
 import { deviceIceConfiguration } from './ice-client';
 import { DeviceWake } from './wake-client';
-import { observeSystemCalls } from './system-calls';
+import { cacheSystemCallContact, observeSystemCalls } from './system-calls';
 import { enrollmentAllowsAccess } from './enrollment';
 import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -16,7 +16,7 @@ import { ApplicationDelivery } from './delivery/application';
 import { DeliveredCallControl } from './delivery/call-control';
 import { nativeSignal } from './delivery/native';
 import type { DeliveryState } from './delivery/pump';
-import { savedPhoneName } from './phonebook';
+import { savedPhoneName, savedPhoneNames } from './phonebook';
 import { deliveryV2 } from './delivery-mode';
 type NetworkView = {
   mesh: PeerMesh | null;
@@ -189,6 +189,9 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
               )
             : null;
           const name = saved ?? names.get(contact.key) ?? contact.name;
+          await cacheSystemCallContact(contact.key, name, contact.phone ?? '').catch(
+            () => undefined,
+          );
           const chat = call.group ? await engine.chat(call.chat) : null;
           return {
             name: chat ? `${name} · ${chat.title}` : name,
@@ -196,6 +199,23 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
           };
         })
       : () => undefined;
+    if (phone)
+      void (async () => {
+        const contacts = (await engine.contacts()).filter((contact) => !contact.blocked);
+        const names = await engine.contactDisplayNames();
+        const phoneNames = await savedPhoneNames(
+          contacts.flatMap((contact) => (contact.phone ? [contact.phone] : [])),
+          engine.currentEnrollment()?.phone,
+        ).catch(() => new Map<string, string>());
+        for (const contact of contacts) {
+          const name = contact.phone ? phoneNames.get(contact.phone) : null;
+          await cacheSystemCallContact(
+            contact.key,
+            name ?? names.get(contact.key) ?? contact.name,
+            contact.phone ?? '',
+          ).catch(() => undefined);
+        }
+      })().catch(() => undefined);
     engine.attachTransport(
       delivery
         ? {
@@ -236,7 +256,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
     const foreground = delivery
       ? AppState.addEventListener('change', (state) => {
           if (state === 'active') {
-            delivery.pump.wake();
+            delivery.pump.receiveWake();
             void engine.flush().catch(() => undefined);
           }
         })
@@ -244,7 +264,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
     const connectivity = delivery
       ? NetInfo.addEventListener((state) => {
           if (state.isConnected) {
-            delivery.pump.wake();
+            delivery.pump.receiveWake();
             void engine.flush().catch(() => undefined);
           }
         })

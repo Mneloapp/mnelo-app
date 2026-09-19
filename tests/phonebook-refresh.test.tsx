@@ -4,13 +4,25 @@ import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { AppText } from '@/components/AppText';
 import { PHONEBOOK_INITIAL_WAIT_MS, usePhonebookNames } from '@/messenger/usePhonebookNames';
 import { ContactView } from '@/messenger/contact-view';
+import type { PhonebookCacheScope } from '@/messenger/phonebook-cache';
 import { phonebookChanged } from '@/messenger/phonebook-events';
 import type { DeviceMessenger } from '@/messenger/engine';
 const mockRead = jest.fn(async () => new Map([['+12025550101', 'Local name']]));
+const mockAccess = jest.fn(async () => 'available');
+const mockCached = jest.fn(async (): Promise<Map<string, string> | null> => null);
+const mockReplace = jest.fn(
+  async (
+    _scope: PhonebookCacheScope,
+    _names: ReadonlyMap<string, string>,
+    _current: () => boolean,
+  ) => {},
+);
+const mockClearCache = jest.fn(async () => {});
 let mockNativeChanged = () => {};
 const mockNativeRemove = jest.fn();
 jest.mock('@/messenger/phonebook', () => ({
   savedPhoneNames: (...args: unknown[]) => mockRead(...(args as [])),
+  phonebookAccess: () => mockAccess(),
   observeNativePhonebook: (listener: () => void) => {
     mockNativeChanged = listener;
     return mockNativeRemove;
@@ -19,6 +31,11 @@ jest.mock('@/messenger/phonebook', () => ({
 let changed = () => {};
 const unsubscribe = jest.fn();
 const engine = {
+  currentIdentity: () => ({ key: 'owner' }),
+  currentEnrollment: () => null,
+  cachedPhonebookNames: mockCached,
+  replacePhonebookNames: mockReplace,
+  clearPhonebookNames: mockClearCache,
   contacts: async () => [
     { key: 'peer', name: 'Saved alias', phone: '+12025550101', blocked: false },
   ],
@@ -31,6 +48,10 @@ const engine = {
 } as unknown as DeviceMessenger;
 beforeEach(() => {
   mockRead.mockReset().mockResolvedValue(new Map([['+12025550101', 'Local name']]));
+  mockAccess.mockReset().mockResolvedValue('available');
+  mockCached.mockReset().mockResolvedValue(null);
+  mockReplace.mockReset().mockResolvedValue(undefined);
+  mockClearCache.mockReset().mockResolvedValue(undefined);
   jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
 });
 afterEach(() => jest.restoreAllMocks());
@@ -276,4 +297,169 @@ test('hung native reads time out, late success refreshes, and unmount releases w
   } finally {
     jest.useRealTimers();
   }
+});
+
+test('full access renders the encrypted warm alias before a slow Contacts scan, then refreshes it', async () => {
+  mockCached.mockResolvedValueOnce(new Map([['peer', 'Last saved name']]));
+  const fresh = deferred<Map<string, string>>();
+  mockRead.mockReturnValueOnce(fresh.promise);
+  const result = await render(<NameQuery />);
+  await screen.findByText('Last saved name');
+  expect(mockAccess).toHaveBeenCalledTimes(2);
+  expect(mockReplace).not.toHaveBeenCalled();
+  await act(async () => {
+    fresh.resolve(new Map([['+12025550101', 'Renamed contact']]));
+  });
+  await screen.findByText('Renamed contact');
+  expect(mockReplace).toHaveBeenCalledTimes(1);
+  const writeStillCurrent = mockReplace.mock.calls[0]![2];
+  expect(writeStillCurrent()).toBe(true);
+  await result.unmount();
+  expect(writeStillCurrent()).toBe(false);
+});
+
+test.each(['limited', 'settings'])(
+  '%s access never hydrates a persisted alias and clears it',
+  async (access) => {
+    mockAccess.mockResolvedValue(access);
+    mockCached.mockResolvedValue(new Map([['peer', 'No longer authorized alias']]));
+    const fresh = deferred<Map<string, string>>();
+    mockRead.mockReturnValueOnce(fresh.promise);
+    const result = await render(<NameQuery />);
+    expect(mockCached).not.toHaveBeenCalled();
+    expect(mockClearCache).toHaveBeenCalledWith('owner');
+    expect(screen.queryByText('No longer authorized alias')).not.toBeOnTheScreen();
+    await act(async () => {
+      fresh.resolve(
+        access === 'limited' ? new Map([['+12025550101', 'Selected contact']]) : new Map(),
+      );
+    });
+    await screen.findByText(access === 'limited' ? 'Selected contact' : 'Registered name');
+    expect(mockReplace).not.toHaveBeenCalled();
+    await result.unmount();
+  },
+);
+
+test('permission revoked while the cache is loading prevents its alias from being published', async () => {
+  const cached = deferred<Map<string, string> | null>();
+  mockCached.mockReturnValueOnce(cached.promise);
+  mockRead.mockResolvedValueOnce(new Map());
+  const result = await render(<NameQuery />);
+  mockAccess.mockResolvedValue('settings');
+  await act(async () => {
+    cached.resolve(new Map([['peer', 'Revoked warm alias']]));
+  });
+  await screen.findByText('Registered name');
+  expect(screen.queryByText('Revoked warm alias')).not.toBeOnTheScreen();
+  expect(mockClearCache).toHaveBeenCalledWith('owner');
+  expect(mockReplace).not.toHaveBeenCalled();
+  await result.unmount();
+});
+
+test('failed cache reads still perform a fresh scan, and a failed scan clears an already displayed cache', async () => {
+  mockCached.mockRejectedValueOnce(new Error('Cache unreadable'));
+  const first = await render(<NameQuery />);
+  await screen.findByText('Local name');
+  await first.unmount();
+  mockCached.mockResolvedValueOnce(new Map([['peer', 'Cached name']]));
+  const read = deferred<Map<string, string>>();
+  mockRead.mockImplementationOnce(() =>
+    read.promise.then(() => {
+      throw new Error('Contacts unavailable');
+    }),
+  );
+  const result = await render(<NameQuery />);
+  await screen.findByText('Cached name');
+  await act(async () => {
+    read.resolve(new Map());
+  });
+  await screen.findByText('Registered name');
+  expect(mockClearCache).toHaveBeenCalledWith('owner');
+  await result.unmount();
+});
+
+test.each(['cache', 'scan'])(
+  'a binding change during the %s read prevents stale publication',
+  async (stage) => {
+    let phone = '+12025550101';
+    const device = Object.assign(Object.create(engine), {
+      contacts: async () => [{ key: 'peer', name: 'Saved alias', phone, blocked: false }],
+    }) as DeviceMessenger;
+    const cached = deferred<Map<string, string> | null>();
+    const scan = deferred<Map<string, string>>();
+    const fresh = deferred<Map<string, string>>();
+    if (stage === 'cache') {
+      mockCached.mockReturnValueOnce(cached.promise);
+      mockRead.mockReturnValueOnce(fresh.promise);
+    } else mockRead.mockReturnValueOnce(scan.promise).mockReturnValueOnce(fresh.promise);
+    const result = await render(<NameQuery device={device} />);
+    phone = '+12025550103';
+    await act(async () => {
+      changed();
+      if (stage === 'cache') cached.resolve(new Map([['peer', 'Wrong binding cached name']]));
+      else scan.resolve(new Map([['+12025550101', 'Wrong binding fresh name']]));
+    });
+    expect(screen.getByText('Resolving')).toBeOnTheScreen();
+    expect(mockReplace).not.toHaveBeenCalled();
+    await act(async () => {
+      fresh.resolve(new Map([['+12025550103', 'New binding name']]));
+    });
+    await screen.findByText('New binding name');
+    await result.unmount();
+  },
+);
+
+test('a queued refresh invalidates an older cache-write guard before its transaction runs', async () => {
+  const result = await render(<NameQuery />);
+  await screen.findByText('Local name');
+  const valid = mockReplace.mock.calls[0]![2];
+  expect(valid()).toBe(true);
+  const fresh = deferred<Map<string, string>>();
+  mockRead.mockReturnValueOnce(fresh.promise);
+  await act(async () => {
+    mockNativeChanged();
+  });
+  expect(valid()).toBe(false);
+  await result.unmount();
+});
+
+test.each(['settings', 'limited'])(
+  'a stalled refresh cannot retain warm aliases after access becomes %s',
+  async (access) => {
+    mockCached.mockResolvedValueOnce(new Map([['peer', 'Warm private name']]));
+    mockRead.mockReturnValueOnce(new Promise(() => {}));
+    const result = await render(<NameQuery />);
+    await screen.findByText('Warm private name');
+    mockAccess.mockResolvedValue(access);
+    await act(async () => {
+      mockNativeChanged();
+    });
+    await screen.findByText('Registered name');
+    expect(currentNames.names.size).toBe(0);
+    expect(mockClearCache).toHaveBeenCalledWith('owner');
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockRead).toHaveBeenCalledTimes(1);
+    await result.unmount();
+  },
+);
+
+test('a stale permission response cannot clear names from a newer full-access refresh', async () => {
+  mockCached.mockResolvedValueOnce(new Map([['peer', 'Current private name']]));
+  mockRead.mockReturnValueOnce(new Promise(() => {}));
+  const result = await render(<NameQuery />);
+  await screen.findByText('Current private name');
+  const stale = deferred<string>();
+  mockAccess.mockReturnValueOnce(stale.promise);
+  await act(async () => {
+    mockNativeChanged();
+  });
+  await act(async () => {
+    mockNativeChanged();
+  });
+  await act(async () => {
+    stale.resolve('settings');
+  });
+  expect(screen.getByText('Current private name')).toBeOnTheScreen();
+  expect(mockClearCache).not.toHaveBeenCalled();
+  await result.unmount();
 });

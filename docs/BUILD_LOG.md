@@ -1175,8 +1175,11 @@ remains pending. Evidence: `artifacts/build42-evidence.json`.
 
 Initial name-dependent queries now wait for the memory-only phonebook projection
 instead of publishing a profile/number title before its saved contact alias.
-Identical concurrent scans share work; later reads remain fresh. Initial native
-read stalls have a five-second fallback, and permission, session and refresh
+Identical concurrent scans share work; reads after that scan settles recheck
+permission and names. A scan that never settles stays coalesced for the same
+numbers until process restart. No new persistent address-book cache is added;
+the existing native caller-ID cache is unchanged. Initial native
+read stalls have a five-second UI fallback, and permission, session and refresh
 races are covered. Network, navigation, message processing and media remain
 independent. Call start targets and call-action trust checks use raw identity
 queries so label resolution cannot add call latency.
@@ -1189,3 +1192,39 @@ Archive/distribution/TestFlight are pending at this checkpoint. No server or
 dependency change; physical cold-launch acceptance remains pending. See
 [BUILD_43](BUILD_43.md). Earlier releases are preserved and the existing
 intermittent suspension crash remains outside this fix.
+
+Build 43 distribution completed at approximately 20:28 Asia/Tbilisi. Both existing
+groups separately show **Testing**: Mnelo Development (one internal tester) and
+Mnelo Preview (two external testers). Saved test notes and automatic tester
+notification are enabled. Apple build ID:
+`4d8375e9-4d31-4221-9a52-f6ce63712ee5`. Frozen source is private
+`b327383a3f583b10014acfdb0e4bde5e86ba415d`, public tag `ios-0.1.0-43` at
+`0aae9b848529b399e7a460479916ab3d43083876`; exact-source CI passed. Archive and
+IPA checks pass, including production entitlements, all extensions, endpoints,
+source offer, Testing-framework absence and zero packaged-secret findings.
+The four existing vendor dSYM warnings remain nonblocking. No build-43 phone
+installation or launch was attempted because the owner cannot connect a phone
+now; physical cold-launch acceptance remains pending. See
+`artifacts/build43-evidence.json` and [BUILD_43](BUILD_43.md).
+
+## September 19, 2026 — Build 44 warm contact names and list placeholders
+
+The owner reported that build 43's name-read barrier leaves Chats on a blank
+centered Loading screen. Chats and Calls now use three quiet static list-row
+placeholders, keeping existing rows visible during refresh. A bounded cache of
+matched contact aliases in the encrypted device vault restores names on repeat
+launches only with current full Contacts access and matching identity, enrollment
+and contact bindings. Limited access requires a fresh read. Revocation, stale
+responses, contact changes, account removal and storage failure are covered. The
+cache is excluded from backups and never transmitted; network and calls stay
+independent of name loading.
+
+Full source checks pass 760 tests (575 Jest/102 suites, three server and 182
+device/protocol), type/lint/format/source guards, mobile exports and secret scans.
+An isolated browser fixture rendered the actual Chats/Calls components in English
+and Georgian with no new runtime error or horizontal overflow; native acceptance
+is still required. Archive, distribution and TestFlight are pending at this
+checkpoint. The first launch populates the cache. No physical-phone installation
+is attempted because the owner cannot connect one. Existing archives remain
+retained, and the previously documented intermittent suspension crash is not
+claimed fixed. See [BUILD_44](BUILD_44.md).

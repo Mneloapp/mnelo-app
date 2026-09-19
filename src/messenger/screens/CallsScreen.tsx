@@ -13,6 +13,7 @@ import { ContactPickerScreen } from './ContactPickerScreen';
 import { useDevice } from '../DeviceProvider';
 import { useVisibleRead } from '../useVisibleRead';
 import { CallHistoryRow } from '../components/CallHistoryRow';
+import { HistoryLoading } from '../components/HistoryLoading';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 
 export function CallsScreen() {
@@ -28,6 +29,7 @@ export function CallsScreen() {
     getNextPageParam: (page) => (page.length === 40 ? page.at(-1)?.sequence : undefined),
     networkMode: 'always',
   });
+  const rows = q.data?.pages.flat() ?? [];
   const newest = q.data?.pages[0]?.[0]?.sequence;
   useVisibleRead(engine, null, newest);
   return (
@@ -64,7 +66,7 @@ export function CallsScreen() {
         }
         testID="calls-history"
         showsVerticalScrollIndicator={false}
-        data={search.trim() ? [] : (q.data?.pages.flat() ?? [])}
+        data={search.trim() ? [] : rows}
         {...searchBar.scrollProps}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -101,12 +103,18 @@ export function CallsScreen() {
         ListEmptyComponent={
           search.trim() ? (
             <CallContactSearch search={search} embedded />
+          ) : q.isPending ? (
+            <HistoryLoading />
           ) : (
-            <StateView loading={q.isPending} message={t('messenger.noCalls')} />
+            <StateView
+              message={t('messenger.noCalls')}
+              error={q.isError ? t('messenger.genericError') : undefined}
+              {...(q.isError ? { onRetry: () => void q.refetch() } : {})}
+            />
           )
         }
         ListFooterComponent={
-          search.trim() ? null : q.isError ? (
+          search.trim() ? null : q.isError && rows.length > 0 ? (
             <StateView
               error={t('messenger.genericError')}
               onRetry={() => void (q.isFetchNextPageError ? q.fetchNextPage() : q.refetch())}

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 import type { DeviceMessenger } from './engine';
-import { observeNativePhonebook, savedPhoneNames } from './phonebook';
+import { observeNativePhonebook, phonebookAccess, savedPhoneNames } from './phonebook';
 import { observePhonebook, phonebookChanged } from './phonebook-events';
+import { phonebookBindings } from './phonebook-cache';
 
 const empty: ReadonlyMap<string, string> = new Map();
 export const PHONEBOOK_INITIAL_WAIT_MS = 5000;
@@ -15,7 +16,8 @@ function initialRead() {
   return { promise, finish };
 }
 
-// This projection is memory-only and scoped to one engine/number/access session.
+// The active projection is scoped to one engine/number/access session. A warm
+// snapshot may seed it only after a current full Contacts permission check.
 // A pending name query cannot keep an old session's names after cleanup.
 function nameSource(scope: {
   engine: DeviceMessenger | null;
@@ -74,6 +76,12 @@ export function usePhonebookNames(
     let force = true;
     let running = false;
     let queued = false;
+    let generation = 0;
+    let checkedCache = false;
+    const owner = engine.currentIdentity()?.key;
+    const enrolledNumber = engine.currentEnrollment()?.phone;
+    const clearCache = () =>
+      owner ? engine.clearPhonebookNames(owner).catch(() => undefined) : Promise.resolve();
     const publish = (resolved: ReadonlyMap<string, string>) => {
       clearTimeout(initialTimeout);
       const previous = source.names;
@@ -103,16 +111,64 @@ export function usePhonebookNames(
           try {
             const refresh = force;
             force = false;
+            const requested = generation;
+            const current = () =>
+              alive &&
+              generation === requested &&
+              !force &&
+              engine.currentIdentity()?.key === owner &&
+              engine.currentEnrollment()?.phone === enrolledNumber;
             const contacts = (await engine.contacts()).filter((c) => c.phone && !c.blocked);
-            const next = contacts
-              .map((c) => `${c.key}:${c.phone}`)
-              .sort()
-              .join('|');
+            const next = phonebookBindings(contacts);
             if (refresh || next !== fingerprint) {
+              let access = await phonebookAccess();
+              if (!current()) continue;
+              const scope = owner && ownNumber ? { owner, phone: ownNumber, bindings: next } : null;
+              if (access !== 'available') {
+                // A limited grant can have a different selected subset after a
+                // cold launch. Never use a durable full-access snapshot there.
+                void clearCache();
+                if (source.names.size) publish(empty);
+              }
+              if (!checkedCache) {
+                checkedCache = true;
+                if (access === 'available' && scope) {
+                  const cached = await engine.cachedPhonebookNames(scope).catch(() => null);
+                  // Permission may change while the vault read crosses a bridge.
+                  access = await phonebookAccess();
+                  if (!current()) continue;
+                  if (access === 'available' && cached !== null) {
+                    const bindings = phonebookBindings(await engine.contacts());
+                    if (!current()) continue;
+                    if (bindings !== next) {
+                      force = true;
+                      queued = true;
+                      continue;
+                    }
+                    publish(cached);
+                  } else if (access !== 'available') void clearCache();
+                }
+              }
               const byNumber = await savedPhoneNames(
                 contacts.map((c) => c.phone!),
                 ownNumber,
               );
+              const latestAccess = await phonebookAccess();
+              if (!current()) continue;
+              if (latestAccess !== access) {
+                void clearCache();
+                if (source.names.size) publish(empty);
+                force = true;
+                queued = true;
+                continue;
+              }
+              const bindings = phonebookBindings(await engine.contacts());
+              if (!current()) continue;
+              if (bindings !== next) {
+                force = true;
+                queued = true;
+                continue;
+              }
               const resolved = new Map(
                 contacts.flatMap((c) => {
                   const name = byNumber.get(c.phone!);
@@ -124,12 +180,18 @@ export function usePhonebookNames(
               if (alive && !force) {
                 fingerprint = next;
                 publish(resolved);
+                if (scope && latestAccess === 'available') {
+                  void engine.replacePhonebookNames(scope, resolved, current).catch(() => {
+                    if (current()) void clearCache();
+                  });
+                } else void clearCache();
               }
             }
           } catch {
             // Permission changes/read failures clear the projection, never the saved alias.
             if (alive && !force) {
               fingerprint = '';
+              void clearCache();
               publish(empty);
             }
           }
@@ -139,7 +201,25 @@ export function usePhonebookNames(
       }
     };
     const refresh = () => {
+      const requested = ++generation;
       force = true;
+      // A Contacts scan may be stuck in the native bridge. Recheck access
+      // independently so its queued refresh cannot retain revoked warm names.
+      const stillCurrent = () =>
+        alive &&
+        requested === generation &&
+        engine.currentIdentity()?.key === owner &&
+        engine.currentEnrollment()?.phone === enrolledNumber;
+      const discard = () => {
+        if (!stillCurrent()) return;
+        publish(empty);
+        void clearCache();
+      };
+      void phonebookAccess()
+        .then((access) => {
+          if (access !== 'available') discard();
+        })
+        .catch(discard);
       void update();
     };
     const changes = engine.subscribe(() => {

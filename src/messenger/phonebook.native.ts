@@ -122,7 +122,8 @@ async function matchedPhoneContacts(numbers: readonly string[], ownNumber?: stri
   if (!numbers.length || !(await phonebookPermission())) return matches;
   const wanted = new Set(numbers);
   const country = parsePhoneNumberFromString(ownNumber ?? numbers[0] ?? '')?.country;
-  // Only matched names live in memory. Never upload or persist the address book.
+  // Scan locally and discard unrelated entries. The app may retain matched
+  // Mnelo-contact aliases in its encrypted display cache, never the address book.
   for (let offset = 0; ; offset += 200) {
     const rows = await Contact.getAllDetails([ContactField.FULL_NAME, ContactField.PHONES], {
       limit: 200,

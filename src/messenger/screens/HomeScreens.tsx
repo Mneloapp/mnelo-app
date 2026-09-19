@@ -17,6 +17,7 @@ import type { ChatCursor, ChatFilter } from '../engine';
 import { callOutcomeCopy, readCallRecord } from '../call-record';
 import { PeerAvatar } from '../components/ContactCard';
 import { ContactRequests } from './ContactRequests';
+import { HistoryLoading } from '../components/HistoryLoading';
 
 export function ChatsScreen() {
   const { view } = useDevice();
@@ -110,14 +111,17 @@ export function ChatsScreen() {
           />
         )}
         ListEmptyComponent={
-          <StateView
-            loading={q.isPending}
-            error={q.isError ? t('messenger.genericError') : undefined}
-            message={t(
-              search.trim() || filter !== 'all' ? 'messenger.noChatResults' : 'messenger.noChats',
-            )}
-            {...(q.isError ? { onRetry: () => void q.refetch() } : {})}
-          />
+          q.isPending ? (
+            <HistoryLoading />
+          ) : (
+            <StateView
+              error={q.isError ? t('messenger.genericError') : undefined}
+              message={t(
+                search.trim() || filter !== 'all' ? 'messenger.noChatResults' : 'messenger.noChats',
+              )}
+              {...(q.isError ? { onRetry: () => void q.refetch() } : {})}
+            />
+          )
         }
       />
     </Page>

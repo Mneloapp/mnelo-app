@@ -33,6 +33,7 @@ import { readCallRecord, type CallDirection, type CallOutcome } from './call-rec
 import type { DeliveryAtomic } from './delivery/journal';
 import { groupProfile, readGroupProfile, type GroupProfile } from './group-profile';
 import { readPhotoPage, readSharedContent, type ContentTab } from './shared-content';
+import { phonebookBindings, readCachedAliases, type PhonebookCacheScope } from './phonebook-cache';
 
 export type ChatFilter = 'all' | 'unread' | 'direct' | 'group';
 export type ChatCursor = { activity: number; id: string };
@@ -392,6 +393,8 @@ export class DeviceMessenger {
     const receipt = phoneEnrollment.parse(input);
     await this.transaction(async () => {
       if (this.own().key !== expectedKey) throw new Error('IDENTITY_CHANGED');
+      if (this.enrollment?.phone !== receipt.phone)
+        await this.db.run('DELETE FROM phonebook_name_cache');
       await this.db.run(
         'INSERT INTO phone_registration VALUES(1,?) ON CONFLICT(singleton) DO UPDATE SET phone=excluded.phone',
         receipt.phone,
@@ -418,6 +421,7 @@ export class DeviceMessenger {
   async rememberPhone(phone: string | null) {
     this.own();
     await this.transaction(async () => {
+      await this.db.run('DELETE FROM phonebook_name_cache');
       await this.db.run('DELETE FROM phone_enrollment');
       if (phone === null) await this.db.run('DELETE FROM phone_registration');
       else
@@ -444,6 +448,7 @@ export class DeviceMessenger {
     await this.transaction(async () => {
       if ((await this.db.all('SELECT singleton FROM identity')).length)
         throw new Error('IDENTITY_EXISTS');
+      await this.db.run('DELETE FROM phonebook_name_cache');
       await this.db.run(
         'INSERT INTO identity(singleton,public_key,secret,name,first_name) VALUES(1,?,?,?,?)',
         created.key,
@@ -472,6 +477,9 @@ export class DeviceMessenger {
   }
   async contacts(): Promise<Contact[]> {
     await this.tail;
+    return this.readContacts();
+  }
+  private async readContacts(): Promise<Contact[]> {
     const rows = await this.db.all<{
       public_key: string;
       name: string;
@@ -486,6 +494,82 @@ export class DeviceMessenger {
       blocked: Boolean(row.blocked),
       ...(row.phone ? { phone: row.phone } : {}),
     }));
+  }
+  private async phonebookCacheContacts(scope: PhonebookCacheScope) {
+    if (
+      this.closing ||
+      this.identity?.key !== scope.owner ||
+      this.enrollment?.phone !== scope.phone
+    )
+      return null;
+    const current = (
+      await this.db.all<{ owner: string; phone: string }>(
+        'SELECT i.public_key AS owner,r.phone FROM identity i JOIN phone_registration r USING(singleton) JOIN phone_enrollment e USING(singleton) WHERE i.singleton=1',
+      )
+    )[0];
+    if (current?.owner !== scope.owner || current.phone !== scope.phone) return null;
+    const contacts = await this.readContacts();
+    return phonebookBindings(contacts) === scope.bindings ? contacts : null;
+  }
+  async cachedPhonebookNames(scope: PhonebookCacheScope): Promise<Map<string, string> | null> {
+    await this.tail;
+    const contacts = await this.phonebookCacheContacts(scope);
+    if (!contacts) return null;
+    const row = (
+      await this.db.all<{ aliases: string }>(
+        'SELECT aliases FROM phonebook_name_cache WHERE singleton=1 AND owner=? AND phone=? AND bindings=?',
+        scope.owner,
+        scope.phone,
+        scope.bindings,
+      )
+    )[0];
+    if (!row) return null;
+    try {
+      return readCachedAliases(
+        row.aliases,
+        new Set(
+          contacts
+            .filter((contact) => contact.phone && !contact.blocked)
+            .map((contact) => contact.key),
+        ),
+      );
+    } catch {
+      return null;
+    }
+  }
+  async replacePhonebookNames(
+    scope: PhonebookCacheScope,
+    names: ReadonlyMap<string, string>,
+    current: () => boolean,
+  ) {
+    // A queued cache write must recheck account and bindings inside its own
+    // transaction. Cleanup/permission changes can invalidate it while waiting.
+    const aliases = JSON.stringify([...names]);
+    await this.transaction(async () => {
+      if (!current()) return;
+      const contacts = await this.phonebookCacheContacts(scope);
+      if (!contacts || !current()) return;
+      readCachedAliases(
+        aliases,
+        new Set(
+          contacts
+            .filter((contact) => contact.phone && !contact.blocked)
+            .map((contact) => contact.key),
+        ),
+      );
+      await this.db.run(
+        'INSERT INTO phonebook_name_cache VALUES(1,?,?,?,?) ON CONFLICT(singleton) DO UPDATE SET owner=excluded.owner,phone=excluded.phone,bindings=excluded.bindings,aliases=excluded.aliases',
+        scope.owner,
+        scope.phone,
+        scope.bindings,
+        aliases,
+      );
+    });
+  }
+  async clearPhonebookNames(owner: string) {
+    await this.transaction(() =>
+      this.db.run('DELETE FROM phonebook_name_cache WHERE owner=?', owner),
+    );
   }
   async contactDisplayNames(): Promise<Map<string, string>> {
     await this.tail;
@@ -717,6 +801,7 @@ export class DeviceMessenger {
   async block(peer: string, blocked = true) {
     peerKey.parse(peer);
     await this.transaction(async () => {
+      await this.db.run('DELETE FROM phonebook_name_cache');
       await this.db.run('UPDATE contacts SET blocked=? WHERE public_key=?', Number(blocked), peer);
       await this.db.run(
         'INSERT INTO delivery_block_changes VALUES(?,?,?) ON CONFLICT(peer) DO UPDATE SET blocked=excluded.blocked,revision=excluded.revision',
@@ -1920,6 +2005,7 @@ export class DeviceMessenger {
     this.transport?.stop();
     this.transport = null;
     await this.transaction(async () => {
+      await this.db.run('DELETE FROM phonebook_name_cache');
       await this.db.run('DELETE FROM contact_requests');
       await this.db.run('DELETE FROM phone_registration');
       await this.db.run('DELETE FROM wake_capabilities');
@@ -2016,6 +2102,7 @@ export class DeviceMessenger {
     await this.transaction(async () => {
       if ((await this.db.all('SELECT singleton FROM identity')).length)
         throw new Error('RESTORE_REQUIRES_EMPTY_DEVICE');
+      await this.db.run('DELETE FROM phonebook_name_cache');
       for (const table of backupTables) {
         const columns = (await this.db.all<{ name: string }>(`PRAGMA table_info(${table})`)).map(
           (row) => row.name,

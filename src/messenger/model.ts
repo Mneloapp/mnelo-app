@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS contacts (public_key TEXT PRIMARY KEY, name TEXT NOT 
 CREATE TABLE IF NOT EXISTS contact_requests (public_key TEXT PRIMARY KEY, phone TEXT NOT NULL UNIQUE, received_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS contact_numbers (phone TEXT PRIMARY KEY CHECK(length(phone) BETWEEN 8 AND 16 AND substr(phone,1,1)='+'), public_key TEXT NOT NULL UNIQUE REFERENCES contacts(public_key) ON DELETE CASCADE);
 CREATE TABLE IF NOT EXISTS contact_profiles (public_key TEXT PRIMARY KEY REFERENCES contacts(public_key) ON DELETE CASCADE, username TEXT NOT NULL, first_name TEXT NOT NULL, last_name TEXT NOT NULL, headline TEXT NOT NULL, about TEXT NOT NULL, email TEXT NOT NULL, website TEXT NOT NULL, avatar TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS phonebook_name_cache (singleton INTEGER PRIMARY KEY CHECK(singleton=1), owner TEXT NOT NULL, phone TEXT NOT NULL, bindings TEXT NOT NULL, aliases TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS delivery_profile_clock(singleton INTEGER PRIMARY KEY CHECK(singleton=1),revision INTEGER NOT NULL,hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS delivery_profile_sent(peer TEXT PRIMARY KEY REFERENCES contacts(public_key) ON DELETE CASCADE,revision INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS delivery_profile_received(peer TEXT PRIMARY KEY REFERENCES contacts(public_key) ON DELETE CASCADE,revision INTEGER NOT NULL);

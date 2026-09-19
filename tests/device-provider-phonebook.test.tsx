@@ -18,6 +18,9 @@ const mockEngine = {
   currentProfile: () => emptyProfile,
   subscribe: () => jest.fn(),
   flush: async () => {},
+  cachedPhonebookNames: async () => null,
+  replacePhonebookNames: async () => {},
+  clearPhonebookNames: async () => {},
   contacts: async () => [
     { key: 'peer', phone: '+12025550101', name: 'Profile name', blocked: false },
   ],
@@ -38,6 +41,7 @@ jest.mock('@/messenger/device-runtime', () => ({
 }));
 jest.mock('@/messenger/enrollment', () => ({ enrollmentAllowsAccess: () => true }));
 jest.mock('@/messenger/phonebook', () => ({
+  phonebookAccess: async () => 'available',
   savedPhoneNames: (...args: unknown[]) => mockPhoneNames(...args),
   observeNativePhonebook: () => jest.fn(),
 }));

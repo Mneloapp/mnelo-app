@@ -314,6 +314,7 @@ test('caller media preparation overlaps invite delivery and a pending invite can
   });
   const f = runtime({ send });
   f.mesh.prepareOutgoingMedia = jest.fn(async () => {});
+  f.mesh.publishPreparedMedia = jest.fn(async () => {});
   try {
     const pending = f.calls.start('peer', 'video');
     for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -324,12 +325,158 @@ test('caller media preparation overlaps invite delivery and a pending invite can
       f.calls.snapshot()?.local,
     );
     expect(f.calls.snapshot()?.status).toBe('ringing');
+    expect(f.mesh.publishPreparedMedia).not.toHaveBeenCalled();
     await f.calls.end();
     delivered();
     await pending;
     expect(f.calls.snapshot()?.status).toBe('ended');
     expect(f.mesh.prepareOutgoingMedia).toHaveBeenCalledTimes(1);
+    expect(f.mesh.publishPreparedMedia).not.toHaveBeenCalled();
     expect(f.mesh.endMedia).toHaveBeenCalledWith('peer', 'outgoing-id');
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('early offer publication follows invite persistence and cannot hold the calling UI open', async () => {
+  let persist!: () => void;
+  const f = runtime({
+    send: async (_peer, control) => {
+      if (control.action === 'invite') await new Promise<void>((resolve) => (persist = resolve));
+    },
+  });
+  f.mesh.prepareOutgoingMedia = jest.fn(async () => {});
+  f.mesh.publishPreparedMedia = jest.fn(() => new Promise<void>(() => {}));
+  try {
+    const pending = f.calls.start('peer', 'voice');
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(f.mesh.publishPreparedMedia).not.toHaveBeenCalled();
+    persist();
+    await pending;
+    expect(f.mesh.publishPreparedMedia).toHaveBeenCalledWith('peer', 'outgoing-id');
+    expect(f.calls.snapshot()?.status).toBe('ringing');
+    expect(f.calls.snapshot()?.connectedAt).toBeUndefined();
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('answer signaling overlaps capture while cached media waits for capture consent and readiness', async () => {
+  let capture!: (stream: MediaStream) => void;
+  let persist!: () => void;
+  const send = jest.fn(async (_peer, control) => {
+    if (control.action === 'accept') await new Promise<void>((resolve) => (persist = resolve));
+  });
+  const f = runtime({ send });
+  f.mesh.resumeCallMedia = jest.fn(async () => {});
+  const stream = { getTracks: () => [] } as unknown as MediaStream;
+  jest
+    .mocked(captureCall)
+    .mockImplementationOnce(() => new Promise<MediaStream>((resolve) => (capture = resolve)));
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'video',
+    });
+    expect(send).not.toHaveBeenCalled();
+    const pending = f.calls.accept();
+    expect(send).toHaveBeenCalledWith('peer', expect.objectContaining({ action: 'accept' }));
+    expect(f.mesh.resumeCallMedia).not.toHaveBeenCalled();
+    expect(f.calls.snapshot()?.local).toBeNull();
+    capture(stream);
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(f.calls.snapshot()?.local).toBe(stream);
+    expect(f.mesh.resumeCallMedia).toHaveBeenCalledWith('peer', 'incoming-id');
+    expect(f.calls.snapshot()?.connectedAt).toBeUndefined();
+    persist();
+    await pending;
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('failed acceptance stops late captured tracks and never resumes the cached offer', async () => {
+  let capture!: (stream: MediaStream) => void;
+  const f = runtime({
+    send: async () => {
+      throw new Error('STORAGE_FAILED');
+    },
+  });
+  f.mesh.resumeCallMedia = jest.fn(async () => {});
+  const stop = jest.fn();
+  jest
+    .mocked(captureCall)
+    .mockImplementationOnce(() => new Promise<MediaStream>((resolve) => (capture = resolve)));
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    const pending = f.calls.accept();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    expect(f.calls.snapshot()?.status).toBe('failed');
+    capture({ getTracks: () => [{ stop }] } as unknown as MediaStream);
+    await pending;
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(f.mesh.resumeCallMedia).not.toHaveBeenCalled();
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('capture failure after accepting sends an end control so the caller cannot keep connecting', async () => {
+  const send = jest.fn(async () => {});
+  const f = runtime({ send });
+  jest.mocked(captureCall).mockRejectedValueOnce(new Error('PERMISSION_DENIED'));
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'video',
+    });
+    await f.calls.accept();
+    expect(send.mock.calls).toEqual([
+      ['peer', { type: 'call', id: 'incoming-id', action: 'accept', media: 'video' }],
+      ['peer', { type: 'call', id: 'incoming-id', action: 'end', media: 'video' }],
+    ]);
+    expect(f.calls.snapshot()?.status).toBe('failed');
+  } finally {
+    f.calls.stop();
+  }
+});
+
+test('a late acceptance failure cannot end a replacement incoming call', async () => {
+  let reject!: (error: Error) => void;
+  const f = runtime({
+    send: async (_peer, control) => {
+      if (control.action === 'accept') await new Promise<void>((_resolve, fail) => (reject = fail));
+    },
+  });
+  try {
+    await f.calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    const pending = f.calls.accept();
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+    await f.calls.end();
+    await f.calls.receive('second-peer', {
+      type: 'call',
+      id: 'next-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    reject(new Error('LATE_STORAGE_FAILURE'));
+    await pending;
+    expect(f.calls.snapshot()?.id).toBe('next-id');
+    expect(f.calls.snapshot()?.status).toBe('incoming');
   } finally {
     f.calls.stop();
   }

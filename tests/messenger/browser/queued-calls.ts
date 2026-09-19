@@ -3,6 +3,7 @@
 import { DeviceCalls, type CallControl } from '../../../src/messenger/calls';
 import { PeerMesh } from '../../../src/messenger/peer-mesh';
 import { createKeys } from '../../../src/messenger/crypto';
+import { readSignal } from '../../../src/messenger/signaling';
 import type { DeviceMessenger } from '../../../src/messenger/engine';
 
 const output = document.getElementById('results')!;
@@ -10,6 +11,13 @@ const peers: RTCPeerConnection[] = [];
 const audio: AudioContext[] = [];
 const frames: ReturnType<typeof setInterval>[] = [];
 let denyCapture = false;
+let captures = 0;
+let nextCaptureDelay = 0;
+const params = new URLSearchParams(location.search);
+const networkDelay = Math.min(500, Math.max(0, Number(params.get('delay') ?? 80)));
+const repeats = Math.min(5, Math.max(1, Number(params.get('repeats') ?? 3)));
+const delay = (milliseconds: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 const check = (ok: unknown, label: string) => {
   if (!ok) throw new Error(label);
   output.textContent += 'PASS ' + label + '\n';
@@ -23,6 +31,10 @@ async function until(predicate: () => boolean | Promise<boolean>, label: string)
 }
 Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
   value: async (options: MediaStreamConstraints) => {
+    captures++;
+    const captureDelay = nextCaptureDelay;
+    nextCaptureDelay = 0;
+    if (captureDelay) await delay(captureDelay);
     if (denyCapture) {
       denyCapture = false;
       throw new DOMException('Synthetic permission denial', 'NotAllowedError');
@@ -55,9 +67,18 @@ Object.defineProperty(navigator.mediaDevices, 'getUserMedia', {
     return stream;
   },
 });
-const receivers = new Map<string, { calls: DeviceCalls; mesh: PeerMesh }>();
+const receivers = new Map<
+  string,
+  {
+    calls: DeviceCalls;
+    mesh: PeerMesh;
+    receivedOffers: number;
+    droppedEarlyOffers: number;
+    legacyCallee: boolean;
+  }
+>();
 const queue: (() => Promise<void>)[] = [];
-const tcp = new URLSearchParams(location.search).has('tcp');
+const tcp = params.has('tcp');
 async function configuration(): Promise<RTCConfiguration> {
   const response = await fetch('/ice', { cache: 'no-store' });
   if (!response.ok) throw new Error('QA_TURN_REQUIRED');
@@ -69,7 +90,7 @@ async function configuration(): Promise<RTCConfiguration> {
     );
   return { iceServers: value.iceServers, iceTransportPolicy: 'relay', bundlePolicy: 'max-bundle' };
 }
-function fixture(name: string) {
+function fixture(name: string, mode: 'current' | 'legacy-caller' | 'legacy-callee' = 'current') {
   const identity = { ...createKeys((n) => crypto.getRandomValues(new Uint8Array(n))), name };
   const trusted = new Set<string>();
   const engine = {
@@ -77,12 +98,14 @@ function fixture(name: string) {
     acceptsPeer: async (key: string) => trusted.has(key),
     recordCall: async () => {},
   } as unknown as DeviceMessenger;
+  let peerCount = 0;
   const mesh = new PeerMesh(
     identity,
     engine,
     'ws://127.0.0.1:1/unused',
     (config) => {
       const peer = new RTCPeerConnection(config);
+      peerCount++;
       peers.push(peer);
       return peer;
     },
@@ -92,25 +115,49 @@ function fixture(name: string) {
   );
   mesh.deliveryWake = () => {};
   mesh.callSignaling = async (peer, envelope) => {
-    queue.push(() => receivers.get(peer)!.mesh.receiveCallSignal(identity.key, envelope));
+    await delay(networkDelay);
+    queue.push(async () => {
+      const receiver = receivers.get(peer);
+      if (!receiver) return;
+      if (readSignal(envelope, peer)?.type === 'offer') receiver.receivedOffers++;
+      // Model the build-41 receiver's preaccept discard boundary. This is a
+      // compatibility fixture, not execution of the full old native binary.
+      if (receiver.legacyCallee && receiver.calls.snapshot()?.status === 'incoming') {
+        receiver.droppedEarlyOffers++;
+        return;
+      }
+      await receiver.mesh.receiveCallSignal(identity.key, envelope);
+    });
   };
+  // Retain current capture/accept handling while measuring only the old
+  // postaccept offer-publication boundary, not every build-41 behavior.
+  if (mode === 'legacy-caller') mesh.publishPreparedMedia = async () => {};
   const calls = new DeviceCalls(engine, mesh, () => crypto.randomUUID(), {
     send: async (peer: string, packet: CallControl) => {
-      queue.push(() => receivers.get(peer)!.calls.receive(identity.key, packet));
+      await delay(networkDelay);
+      queue.push(async () => {
+        await receivers.get(peer)?.calls.receive(identity.key, packet);
+      });
     },
   });
-  receivers.set(identity.key, { calls, mesh });
-  return { identity, trusted, mesh, calls };
+  const receiver = {
+    calls,
+    mesh,
+    receivedOffers: 0,
+    droppedEarlyOffers: 0,
+    legacyCallee: mode === 'legacy-callee',
+  };
+  receivers.set(identity.key, receiver);
+  return { identity, trusted, mesh, calls, receiver, peerCount: () => peerCount };
 }
 async function relayMedia(video: boolean) {
   for (const peer of peers.filter((item) => item.connectionState === 'connected')) {
     await until(async () => {
       const stats = await peer.getStats();
-      return [...stats.values()].some(
-        (s) =>
-          s.type === 'inbound-rtp' &&
-          s.kind === (video ? 'video' : 'audio') &&
-          (video ? s.framesDecoded > 0 : s.packetsReceived > 0),
+      const inbound = [...stats.values()].filter((s) => s.type === 'inbound-rtp');
+      return (
+        inbound.some((s) => s.kind === 'audio' && s.packetsReceived > 0) &&
+        (!video || inbound.some((s) => s.kind === 'video' && s.framesDecoded > 0))
       );
     }, 'bidirectional RTP');
     const stats = await peer.getStats();
@@ -126,10 +173,12 @@ async function relayMedia(video: boolean) {
 }
 async function run() {
   output.textContent =
-    'Independent queued controls + actual TURN/WebRTC (' + (tcp ? 'TCP' : 'UDP/TCP') + ')\n';
+    'Independent queued controls + actual TURN/WebRTC (' +
+    (tcp ? 'TCP' : 'UDP/TCP') +
+    ')\n' +
+    `Synthetic media, ${networkDelay}ms one-way queue delay; excludes Signal/HTTP, APNs, CallKit and physical iPhones.\n`;
   document.body.dataset.status = 'running';
-  const a = fixture('Synthetic A'),
-    b = fixture('Synthetic B');
+  const timings: { mode: string; media: string; answerToRTP: number }[] = [];
   let busy = false,
     failure: unknown;
   const timer = setInterval(() => {
@@ -144,18 +193,48 @@ async function run() {
       .finally(() => {
         busy = false;
       });
-  }, 25);
-  try {
-    a.trusted.add(b.identity.key);
-    b.trusted.add(a.identity.key);
+  }, 5);
+  async function cleanup(a: ReturnType<typeof fixture>, b: ReturnType<typeof fixture>) {
+    a.mesh.stop();
+    b.mesh.stop();
+    receivers.delete(a.identity.key);
+    receivers.delete(b.identity.key);
+    queue.length = 0;
+    for (const frame of frames.splice(0)) clearInterval(frame);
+    for (const context of audio.splice(0)) await context.close();
     check(
-      !a.mesh.online(b.identity.key) && !b.mesh.online(a.identity.key),
-      'no message data channel or signaling socket',
+      peers.every((peer) => peer.connectionState === 'closed'),
+      'all media peers closed',
     );
-    for (const media of ['voice', 'video'] as const) {
+    peers.length = 0;
+  }
+  async function scenario(
+    media: 'voice' | 'video',
+    mode: 'early' | 'postaccept-baseline' | 'legacy-callee' | 'delayed-capture',
+  ) {
+    const a = fixture('Synthetic A', mode === 'postaccept-baseline' ? 'legacy-caller' : 'current');
+    const b = fixture('Synthetic B', mode === 'legacy-callee' ? 'legacy-callee' : 'current');
+    try {
+      a.trusted.add(b.identity.key);
+      b.trusted.add(a.identity.key);
+      const capturesBefore = captures;
+      check(!a.mesh.online(b.identity.key) && !b.mesh.online(a.identity.key), 'no message channel');
       await a.calls.start(b.identity.key, media);
       await until(() => b.calls.snapshot()?.status === 'incoming', media + ' ringing');
-      check(b.calls.snapshot()?.local === null, media + ' no capture before accept');
+      if (mode !== 'postaccept-baseline')
+        await until(() => b.receiver.receivedOffers > 0, 'early signed offer reached recipient');
+      else await delay(250);
+      check(
+        b.calls.snapshot()?.local === null &&
+          b.peerCount() === 0 &&
+          captures === capturesBefore + 1,
+        `${mode} ${media}: no callee capture or media peer before acceptance`,
+      );
+      if (mode === 'legacy-callee')
+        check(b.receiver.droppedEarlyOffers > 0, 'legacy receiver discarded early offer');
+      if (mode === 'postaccept-baseline')
+        check(b.receiver.receivedOffers === 0, 'postaccept baseline did not publish early');
+      if (mode === 'delayed-capture') nextCaptureDelay = 400;
       const answeredAt = performance.now();
       await b.calls.accept();
       await until(
@@ -163,9 +242,9 @@ async function run() {
         media + ' connected',
       );
       await relayMedia(media === 'video');
-      check(true, media + ' bidirectional RTP received');
-      output.textContent +=
-        'TIMING ' + media + ' answer-to-RTP ' + Math.round(performance.now() - answeredAt) + 'ms\n';
+      const answerToRTP = Math.round(performance.now() - answeredAt);
+      timings.push({ mode, media, answerToRTP });
+      output.textContent += `TIMING ${mode} ${media} answer-to-RTP ${answerToRTP}ms\n`;
       a.calls.mute();
       check(
         a.calls
@@ -176,29 +255,45 @@ async function run() {
       );
       await a.calls.end();
       await until(() => b.calls.snapshot()?.status === 'ended', media + ' hangup');
-      check(true, media + ' hangup reaches recipient');
+      check(true, mode + ' ' + media + ' hangup reaches recipient');
+    } finally {
+      await cleanup(a, b);
     }
-    await a.calls.start(b.identity.key, 'voice');
-    await until(() => b.calls.snapshot()?.status === 'incoming', 'decline ringing');
-    await b.calls.end();
-    await until(() => a.calls.snapshot()?.status === 'ended', 'decline propagated');
-    check(true, 'decline reaches caller');
-    denyCapture = true;
-    let denied = false;
+  }
+  try {
+    for (let repeat = 0; repeat < repeats; repeat++)
+      for (const media of ['voice', 'video'] as const)
+        for (const mode of ['postaccept-baseline', 'early'] as const) await scenario(media, mode);
+    for (const media of ['voice', 'video'] as const) {
+      await scenario(media, 'legacy-callee');
+      await scenario(media, 'delayed-capture');
+    }
+    const a = fixture('Synthetic decline A'),
+      b = fixture('Synthetic decline B');
     try {
+      a.trusted.add(b.identity.key);
+      b.trusted.add(a.identity.key);
       await a.calls.start(b.identity.key, 'voice');
-    } catch {
-      denied = true;
+      await until(() => b.calls.snapshot()?.status === 'incoming', 'decline ringing');
+      await b.calls.end();
+      await until(() => a.calls.snapshot()?.status === 'ended', 'decline propagated');
+      check(true, 'decline reaches caller');
+      denyCapture = true;
+      let denied = false;
+      try {
+        await a.calls.start(b.identity.key, 'voice');
+      } catch {
+        denied = true;
+      }
+      check(
+        denied && a.calls.snapshot()?.status === 'failed',
+        'permission denial fails without capture',
+      );
+    } finally {
+      await cleanup(a, b);
     }
-    check(
-      denied && a.calls.snapshot()?.status === 'failed',
-      'permission denial fails without capture',
-    );
     check(!failure, 'queued control and signed SDP delivery without processing failures');
-    check(
-      peers.every((peer) => peer.connectionState === 'closed'),
-      'all media peers closed',
-    );
+    output.textContent += 'MEASUREMENTS ' + JSON.stringify(timings) + '\n';
     output.textContent += 'COMPLETE\n';
     document.body.dataset.status = 'passed';
   } catch (error) {
@@ -207,8 +302,8 @@ async function run() {
   } finally {
     clearInterval(timer);
     queue.length = 0;
-    a.mesh.stop();
-    b.mesh.stop();
+    for (const receiver of receivers.values()) receiver.mesh.stop();
+    receivers.clear();
     for (const frame of frames) clearInterval(frame);
     for (const context of audio) await context.close();
   }

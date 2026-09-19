@@ -368,6 +368,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    timing("ANSWER_ACTION")
     answeredCalls.insert(action.callUUID)
     do { try prepareAudio(); event(["type":"answer", "id":action.callUUID.uuidString.lowercased()]); action.fulfill() }
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }

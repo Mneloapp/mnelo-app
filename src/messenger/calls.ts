@@ -441,6 +441,7 @@ export class DeviceCalls {
   }
   private async acceptGroup(call: DeviceCall & { group: GroupCall }) {
     this.update({ ...call, status: 'connecting' });
+    this.stage('ANSWER_ACCEPTED');
     try {
       if (!(await this.acceptsGroup(call.group))) throw new Error('CALL_UNAVAILABLE');
       if (this.value?.id !== call.id || !this.active()) return;
@@ -569,12 +570,15 @@ export class DeviceCalls {
       if (this.value?.id !== id || !this.active()) return;
       // Gather the caller's already-authorized media while the invite is being
       // persisted/delivered. A quick answer must not wait for a second cold
-      // setup after that network round trip. The offer is still published only
-      // after acceptance; the recipient opens no media before answering.
+      // setup after that network round trip. Once the invite is persisted, the
+      // recipient can cache the offer without opening media before answering.
       if (this.signaling)
         void this.mesh.prepareOutgoingMedia?.(peer, id, stream).catch(() => undefined);
       await this.send(peer, { type: 'call', id, action: 'invite', media });
-      if (this.value?.id === id && this.active()) this.expire();
+      if (this.value?.id === id && this.active()) {
+        this.expire();
+        if (this.signaling) void this.mesh.publishPreparedMedia?.(peer, id).catch(() => undefined);
+      }
     } catch (error) {
       if (this.value?.id === id) await this.end(true);
       throw error;
@@ -633,12 +637,14 @@ export class DeviceCalls {
     this.controls.forEach((listener) => listener(control));
     if (control.action === 'accept' && !call.incoming && call.status === 'ringing' && call.local) {
       this.update({ ...call, status: 'connecting' });
+      this.stage('REMOTE_ACCEPT_RECEIVED');
       this.stage('MEDIA_OFFER');
       // The authenticated inbox must remain available for a remote hangup and
       // messages while TURN credentials or the native offer are still pending.
       // PeerMesh checks this call again before allocating/publishing its media.
       void this.mesh
         .startMedia(peer, call.id, call.local)
+        .then(() => this.mesh.resumeCallMedia?.(peer, call.id))
         .catch(async () => {
           if (this.value?.id === call.id) await this.end(true);
         })
@@ -651,6 +657,18 @@ export class DeviceCalls {
     if (!call || call.status !== 'incoming') return;
     if (call.group) return this.acceptGroup({ ...call, group: call.group });
     this.update({ ...call, status: 'connecting' });
+    this.stage('ANSWER_ACCEPTED');
+    // The user has answered. Persist acceptance while native capture starts,
+    // instead of adding capture time to the signaling round trip. An offer
+    // arriving in the meantime stays cached until local capture is ready.
+    const accepted = this.send(call.peer, {
+      type: 'call',
+      id: call.id,
+      action: 'accept',
+      media: call.media,
+    }).catch(async () => {
+      if (this.value?.id === call.id && this.active()) await this.end(true).catch(() => undefined);
+    });
     try {
       this.stage('CAPTURE_INCOMING');
       const stream = await captureCall(call.media === 'video');
@@ -660,13 +678,10 @@ export class DeviceCalls {
         return;
       }
       this.update({ ...this.value, local: stream });
+      this.stage('CAPTURE_INCOMING_READY');
       this.stage('WAITING_FOR_MEDIA_OFFER');
-      await this.send(call.peer, {
-        type: 'call',
-        id: call.id,
-        action: 'accept',
-        media: call.media,
-      });
+      await this.mesh.resumeCallMedia?.(call.peer, call.id);
+      await accepted;
     } catch {
       if (this.value?.id === call.id) await this.end(true);
     }
@@ -767,6 +782,7 @@ export class DeviceCalls {
   ) {
     const call = this.value;
     if (!call || !this.active()) return;
+    connectionTiming(failed ? 'CALL_FAILED' : 'CALL_ENDED');
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.stopCapturedScreen();
@@ -859,6 +875,7 @@ export class DeviceCalls {
     if (stream) await switchCallCamera(stream);
   }
   stop() {
+    if (this.active()) connectionTiming('CALL_STOPPED');
     this.stopCapturedScreen();
     this.clearGroupTimers();
     this.groupReady.clear();

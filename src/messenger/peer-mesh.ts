@@ -75,6 +75,7 @@ export class PeerMesh implements PeerTransport {
       state?: RTCDataChannel;
       stopGathering?: () => void;
       stopStats?: () => void;
+      publication?: Promise<void>;
     }
   >();
   private socket: WebSocket | null = null;
@@ -83,6 +84,9 @@ export class PeerMesh implements PeerTransport {
   private pendingLinks = new Map<string, string>();
   private pendingMedia = new Map<string, string>();
   private callSignalTasks = new Map<string, { id: string; pending: Signal | null }>();
+  // Only one direct call can await consent/capture. Keep at most its latest
+  // authenticated cumulative SDP; never allocate recipient media to cache it.
+  private deferredCallSignal: Signal | null = null;
   private seenSignals = new Map<string, number>();
   private ready = false;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -770,7 +774,18 @@ export class PeerMesh implements PeerTransport {
     peer: RTCPeerConnection,
     type: Signal['type'],
   ) {
-    if (this.mediaLinks.get(remote)?.id !== id || !peer.localDescription?.sdp) return;
+    if (!(await this.engine.acceptsPeer(remote))) return;
+    const link = this.mediaLinks.get(remote);
+    const call = this.calls?.snapshot();
+    if (
+      this.stopped ||
+      link?.id !== id ||
+      link.peer !== peer ||
+      call?.id !== id ||
+      ['ended', 'failed'].includes(call.status) ||
+      !peer.localDescription?.sdp
+    )
+      return;
     const envelope = signSignal(this.own.secret, {
       protocol: 'mnelo-dtls-v1',
       from: this.own.key,
@@ -793,7 +808,57 @@ export class PeerMesh implements PeerTransport {
     const link = this.mediaLinks.get(remote)!;
     clearTimeout(link.deadline);
     link.deadline = setTimeout(() => void this.calls?.failed(remote, id), 30_000);
-    this.publishMediaInBackground(remote, id, peer, 'offer');
+    this.publishMediaInBackground(remote, id, peer, 'offer', true);
+  }
+  async publishPreparedMedia(remote: string, id: string) {
+    const prepared = this.preparedMedia.get(remote);
+    if (prepared?.id !== id) return;
+    const peer = await prepared.ready;
+    const accepted = await this.engine.acceptsPeer(remote);
+    const call = this.calls?.snapshot();
+    if (
+      this.stopped ||
+      !accepted ||
+      !call ||
+      call.group ||
+      call.incoming ||
+      call.id !== id ||
+      call.peer !== remote ||
+      !['ringing', 'connecting'].includes(call.status) ||
+      this.mediaLinks.get(remote)?.peer !== peer
+    )
+      return;
+    // The caller has already persisted its invite. The recipient can retain
+    // this description while ringing without capture, playback or a media peer.
+    this.publishMediaInBackground(remote, id, peer, 'offer', false, true);
+  }
+  async resumeCallMedia(remote: string, id: string) {
+    if (!(await this.engine.acceptsPeer(remote))) return;
+    const signal = this.deferredCallSignal;
+    const call = this.calls?.snapshot();
+    if (
+      this.stopped ||
+      !signal ||
+      signal.from !== remote ||
+      signal.session !== id ||
+      !call ||
+      call.group ||
+      call.peer !== remote ||
+      call.id !== id
+    )
+      return;
+    if (signal.expires <= Date.now() || ['ended', 'failed'].includes(call.status)) {
+      this.deferredCallSignal = null;
+      return;
+    }
+    if (
+      signal.type === 'offer'
+        ? !this.calls?.allowedOffer(remote, id)
+        : !this.calls?.allowedAnswer(remote, id)
+    )
+      return;
+    this.deferredCallSignal = null;
+    this.enqueueCallSignal(remote, signal);
   }
   async prepareOutgoingMedia(remote: string, id: string, stream: MediaStream) {
     if (
@@ -834,6 +899,9 @@ export class PeerMesh implements PeerTransport {
       throw new Error('CALL_SIGNAL_INVALID');
     const call = this.calls?.snapshot();
     if (!call || call.id !== signal.session || ['ended', 'failed'].includes(call.status)) return;
+    this.enqueueCallSignal(sender, signal);
+  }
+  private enqueueCallSignal(sender: string, signal: Signal) {
     const current = this.callSignalTasks.get(sender);
     if (current?.id === signal.session) {
       // Signed SDP updates contain the accumulated candidates. Keep only the
@@ -861,15 +929,74 @@ export class PeerMesh implements PeerTransport {
     id: string,
     peer: RTCPeerConnection,
     type: Signal['type'],
+    resend = false,
+    opportunistic = false,
   ) {
+    const link = this.mediaLinks.get(remote);
+    if (!link || link.id !== id || link.peer !== peer) return;
+    if (link.publication && !resend) return;
+    // Reuse a single gather/subscription even if acceptance races the early
+    // publication. Older recipients discard pre-answer SDP, so resend the
+    // current offer after acceptance once the initial publication finishes.
+    const publication = link.publication;
+    const operation = publication
+      ? publication.then(
+          () => this.sendMediaDescription(remote, id, peer, type),
+          () => {
+            if (this.mediaLinks.get(remote) !== link) return;
+            if (link.publication && link.publication !== publication) return link.publication;
+            // Acceptance can race a failing early publication. Retry it once
+            // through the ordinary path instead of inheriting its rejection.
+            return (link.publication = this.publishMedia(remote, id, peer, type));
+          },
+        )
+      : (link.publication = this.publishMedia(remote, id, peer, type));
     // TURN gathering may wait for an unreachable transport. It must not hold
     // the serial Signal inbox open and block receipts, hangup or fallback SDP.
-    void this.publishMedia(remote, id, peer, type).catch(() => {
-      if (this.mediaLinks.get(remote)?.peer === peer)
-        void this.calls?.failed(remote, id).catch(() => undefined);
+    void operation.catch(() => {
+      if (this.mediaLinks.get(remote) !== link) return;
+      if (!publication && link.publication === operation) delete link.publication;
+      // Early publication is an optimization. Even if acceptance races its
+      // failure, the startMedia path owns retry/failure handling from then on.
+      if (opportunistic) return;
+      // Acceptance republishes for older recipients. Once this same peer has
+      // answered the early offer, a failed redundant resend must not end media.
+      if (
+        resend &&
+        type === 'offer' &&
+        (peer.remoteDescription?.type === 'answer' || peer.connectionState === 'connected')
+      )
+        return;
+      void this.calls?.failed(remote, id).catch(() => undefined);
     });
   }
   private async mediaSignal(signal: Signal) {
+    const call = this.calls?.snapshot();
+    if (
+      this.stopped ||
+      !call ||
+      call.id !== signal.session ||
+      signal.expires <= Date.now() ||
+      ['ended', 'failed'].includes(call.status)
+    )
+      return;
+    if (
+      !call.group &&
+      call.peer === signal.from &&
+      ((signal.type === 'offer' &&
+        call.incoming &&
+        (call.status === 'incoming' || (call.status === 'connecting' && !call.local))) ||
+        (signal.type === 'answer' && !call.incoming && call.status === 'ringing'))
+    ) {
+      this.deferredCallSignal = signal;
+      return;
+    }
+    if (
+      this.deferredCallSignal?.from === signal.from &&
+      this.deferredCallSignal.session === signal.session &&
+      this.deferredCallSignal.type === signal.type
+    )
+      this.deferredCallSignal = null;
     const existing = this.mediaLinks.get(signal.from);
     if (existing?.id === signal.session && existing.peer.remoteDescription?.type === signal.type) {
       await addCallCandidates(existing.peer, signal.sdp);
@@ -974,6 +1101,8 @@ export class PeerMesh implements PeerTransport {
     return next;
   }
   endMedia(remote: string, id: string) {
+    if (this.deferredCallSignal?.from === remote && this.deferredCallSignal.session === id)
+      this.deferredCallSignal = null;
     if (this.callSignalTasks.get(remote)?.id === id) this.callSignalTasks.delete(remote);
     if (this.preparedMedia.get(remote)?.id === id) this.preparedMedia.delete(remote);
     if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);
@@ -991,6 +1120,7 @@ export class PeerMesh implements PeerTransport {
     this.pendingMedia.clear();
     this.preparedMedia.clear();
     this.callSignalTasks.clear();
+    this.deferredCallSignal = null;
     this.ready = false;
     if (this.retry) clearTimeout(this.retry);
     if (this.poll) clearInterval(this.poll);

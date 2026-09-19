@@ -1,5 +1,14 @@
 # iOS 0.1.0 (41): release configuration and communication latency
 
+Post-release update: **0.1.0 (41) is available in both existing TestFlight
+groups**. Signed archive/export verification, exact-source CI and the live
+server deployment passed. One paired iPhone was updated in place, launched
+successfully and negotiated authenticated delivery-sync. Both-phone voice/video
+acceptance remains pending. A final review also found an older intermittent
+`0xdead10cc` suspension crash; build 41 does not claim to fix it. See the final
+September 19 entries in [BUILD_LOG](BUILD_LOG.md) for evidence and remaining
+acceptance work. The preparation checkpoint below is retained as release history.
+
 September 19, 2026 preparation checkpoint. Source checks pass and the Release
 archive is building. Apple upload, tester availability and final two-phone
 acceptance are not yet verified.

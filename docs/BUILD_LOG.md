@@ -1053,3 +1053,106 @@ server deployment has not yet been recorded. Both phones require fresh in-place
 cold-launch, notification and voice/video acceptance; no new physical timing
 result or completed TestFlight-41 rollout is claimed.
 Both phones are currently disconnected, so a fresh physical run remains pending.
+
+## September 19, 2026 — Build 41 signed artifact and server verification
+
+The signed Release archive completed successfully with no caller-supplied Expo
+variables; generated prebuild configuration reached the app and both JavaScript
+extensions. App Store distribution export passed all four bundle versions and
+identities, signatures, production APNs/debug entitlements, shared vault/keychain,
+permissions, retained feature markers and source/endpoints. Every embedded
+framework, library and product was checked for unavailable Testing-framework
+imports. Packaged and decoded-Hermes secret scans reported zero findings.
+
+Private source `d3df1ddadf1daabbb290b29e27730342f8e1610d` matches public source
+`8853478608aa26bd13311aa54b3cbdfe1f6ad112`, immutable tag `ios-0.1.0-41`.
+Exact-source [CI 35447221875](https://github.com/Mneloapp/mnelo-app/actions/runs/35447221875)
+passed, including all 698 tests, Doctor 21/21, dependency compatibility, the
+high-severity audit gate, mobile exports and secret scans. Moderate dependency
+findings remain as recorded in the dependency review. Exported IPA: 121,085,518
+bytes, SHA-256 `546da91ed4ba6c4dd3f051113738f4f6c07313d8cf388743e432a53bfb713a5f`.
+
+The reviewed server release `d3df1ddadf1daabbb290b29e27730342f8e1610d` replaced
+`0fc9ed96f2b83bb5b32a9122a9114c6cd412bd5d`. The update verified all four identities,
+keys and configuration were retained; delivery flags, Caddy and tester admission
+were unchanged. No SMS was sent. Hosted HTTPS and WSS authentication, rejection
+and quota checks pass. UDP/TCP TURN allocation and bidirectional relay probes
+also passed before this code-only update.
+
+Build 41 was installed in place on Ani's paired iPhone and launched successfully.
+Fresh on-device diagnostics show authenticated delivery status, key publication
+and four successful delivery-sync exchanges (171–255 ms each). This confirms
+startup and the deployed capability, not real call/video or notification-tap
+acceptance. The earlier report of disconnected phones reflected a failed device
+lookup; later inventory recovered both, and George's phone was then locked and
+subsequently unavailable at the install attempt. No successful update or launch
+on that phone is claimed. The two-phone media test remains pending.
+
+The command-line export could not access the existing cloud signing account;
+Xcode Organizer exported the package successfully with the existing automatic
+cloud-managed distribution identity. Build/version management and internal-only
+distribution were disabled. The verified build-41 archive is now uploading to
+Apple; processing and both-group availability are still pending this checkpoint.
+Prior builds, including build 37 and its immutable source, remain preserved.
+
+## September 19, 2026 — Build 41 available to both TestFlight groups
+
+Xcode Organizer confirms build **0.1.0 (41), Uploaded to Apple**. App Store
+Connect completed processing for `590eab1e-a358-4a42-9dd4-1a9575a175e5`. The
+existing encryption answers and 548-character test instructions were saved.
+Both groups independently show **Testing — Expires in 90 days**: Mnelo
+Development (internal, one tester) and Mnelo Preview (external, two testers).
+Automatic tester notification is enabled. No tester/group scope was expanded
+and no earlier build was expired. The four known nonblocking vendor dSYM
+warnings remain for React, ReactNativeDependencies, WebRTC and hermesvm.
+
+A final Organizer review found two build-40 `RUNNINGBOARD 0xdead10cc` reports;
+the same suspension-with-file-lock signature appears in three older build-36/37
+reports. None identifies the locked file or a SQLite/Vault frame. The shared
+SQLCipher database is a concrete candidate because transactions and prepared
+reads cross asynchronous JavaScript/native boundaries without a native
+suspension assertion. This is an evidence-backed hypothesis, not proven
+connection ownership or a completed fix. A transaction-only background token
+would miss cursors and cannot safely release the original connection on expiry.
+No speculative database replacement or data reset was added to build 41.
+Redacted evidence: `artifacts/build40-crash-review.json`.
+
+TestFlight notes explicitly retain the background/foreground and lock/unlock
+regression test. The owner was asked to update both phones and test voice/video,
+consecutive messages and suspension. Fresh two-phone media acceptance and
+physical reproduction of the old suspension crash remain pending. The release
+fixes verified startup/configuration and protocol queue defects; it is not a
+claim that every runtime defect has been eliminated. All release evidence is
+retained in `artifacts/build41-evidence.json` and the associated logs.
+
+## September 19, 2026 — Build 42 answer-to-media optimization
+
+Direct calls publish a signed offer after invite persistence and cache it on the
+ringing recipient without creating a recipient media peer or capturing its
+microphone/camera. Explicit acceptance overlaps capture and acceptance delivery;
+captured media can use the cached offer immediately. Early answers wait for the
+authenticated accept control. A postaccept offer resend preserves build-41
+compatibility; a late failure of a redundant resend cannot kill already-answered
+media. Expiry, trust, identity, cancellation and required-resend failures remain
+guarded. Native/JavaScript answer markers and bounded media observations now
+support more precise diagnosis of the remaining physical delay.
+
+Final source checks pass **722 tests** (542 Jest/100 suites, 3 server, 177
+device/protocol), typecheck/lint/format and source guards. Mobile exports and
+source/history/bundle secret scans pass. A final actual TURN/WebRTC browser run
+passes 32 calls with audio received on both sides in all cases and decoded video
+on both sides for video calls. With an 80 ms one-way synthetic signaling queue,
+median voice/video timings improve from 1,096/1,096 ms to 941/996 ms with UDP/TCP,
+and from 1,155/1,135 ms to 983/991 ms with TCP only. This isolates early-offer
+publication against the current controller with it disabled, not the entire old
+binary or native iPhone behavior. Details: [BUILD_42](BUILD_42.md).
+
+The signed archive and regression checks pass, including service configuration,
+all four bundles, signatures and absence of Testing-framework imports. Public
+source publication, App Store distribution export and TestFlight availability
+are pending at this checkpoint. No backend deployment is required. The owner
+does not currently have two phones available; the retrieved George build-41
+trace contains no call, so no fresh physical answer-to-audio/video timing is
+claimed. Build 37 and all other prior releases remain retained. The previously
+documented intermittent suspension crash remains unresolved and outside this
+bounded call change.

@@ -15,6 +15,23 @@ def run(*args):
     return subprocess.check_output(args, stderr=subprocess.PIPE)
 
 
+def verify_siri_vocabulary(app):
+    # Apple ingests localized vocabulary from the containing iOS app, not the
+    # Intents extension. A valid signed extension alone missed ITMS-90626.
+    for locale in ['en', 'ka']:
+        path = app / (locale + '.lproj') / 'AppIntentVocabulary.plist'
+        assert path.is_file(), 'SIRI_VOCABULARY_MISSING_' + locale
+        phrases = plist(path).get('IntentPhrases')
+        assert isinstance(phrases, list), 'SIRI_INTENT_PHRASES_MISSING_' + locale
+        supported = [entry for entry in phrases if isinstance(entry, dict)
+                     and entry.get('IntentName') == 'INSendMessageIntent']
+        assert len(supported) == 1, 'SIRI_SEND_MESSAGE_PHRASES_MISSING_' + locale
+        examples = supported[0].get('IntentExamples')
+        assert (isinstance(examples, list) and len(examples) > 0
+                and all(isinstance(value, str) and value.strip() for value in examples)), \
+            'SIRI_INTENT_EXAMPLES_MISSING_' + locale
+
+
 def verify(app, build, distribution):
     expected = {
         app: 'com.mnelo.messenger',
@@ -78,6 +95,7 @@ def verify(app, build, distribution):
         'PlugIns/MneloIntents.appex/MneloIntents.js',
     ]:
         assert endpoints[0] in (app / relative).read_bytes(), 'EXTENSION_SERVICE_ENDPOINT_MISSING'
+    verify_siri_vocabulary(app)
     run('node', 'scripts/check-ios-permissions.mjs', str(app))
     return {
         'build': build,
@@ -86,6 +104,7 @@ def verify(app, build, distribution):
         'serviceEndpoints': 'PASS',
         'sourceOffer': 'PASS',
         'testingFrameworkAbsent': 'PASS',
+        'siriVocabulary': 'PASS',
         'distributionEntitlementsChecked': distribution,
         'hermesSHA256': hashlib.sha256(main).hexdigest(),
     }

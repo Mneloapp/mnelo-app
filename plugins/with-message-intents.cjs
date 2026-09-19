@@ -8,6 +8,7 @@ const {
 const fs = require('node:fs');
 const path = require('node:path');
 const plist = require('@expo/plist').default;
+const { writeIntentVocabulary, configureIntentVocabulary } = require('./intent-vocabulary.cjs');
 const targetName = 'MneloIntents';
 const bundleId = 'com.mnelo.messenger.intents';
 module.exports = function withMessageIntents(config) {
@@ -29,6 +30,7 @@ module.exports = function withMessageIntents(config) {
   config = withDangerousMod(config, [
     'ios',
     async (mod) => {
+      writeIntentVocabulary(mod.modRequest.platformProjectRoot);
       const directory = path.join(mod.modRequest.platformProjectRoot, targetName);
       fs.mkdirSync(directory, { recursive: true });
       fs.writeFileSync(
@@ -97,6 +99,7 @@ module.exports = function withMessageIntents(config) {
   ]);
   return withXcodeProject(config, (mod) => {
     const project = mod.modResults;
+    configureIntentVocabulary(project);
     project.hash.project.objects.PBXTargetDependency ??= {};
     project.hash.project.objects.PBXContainerItemProxy ??= {};
     let entry = Object.entries(project.pbxNativeTargetSection()).find(

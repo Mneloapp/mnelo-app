@@ -1,8 +1,15 @@
 import { AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { showForegroundDeviceAlert } from '@/messenger/device-alerts.native';
+import {
+  showForegroundDeviceAlert,
+  showDeviceAlert,
+  presentedAlertIds,
+  dismissDeviceAlert,
+} from '@/messenger/device-alerts.native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => {}),
   getPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
   scheduleNotificationAsync: jest.fn(async () => 'id'),
   IosAuthorizationStatus: { PROVISIONAL: 3 },
@@ -14,6 +21,81 @@ const notification = (identifier: string, data: unknown = {}) => ({
 beforeEach(() => {
   AppState.currentState = 'active';
   jest.mocked(Notifications.getPermissionsAsync).mockResolvedValue({ granted: true } as never);
+  jest.mocked(Notifications.getPresentedNotificationsAsync).mockReset().mockResolvedValue([]);
+});
+
+const remotePush = (id: string, kind = 'message') =>
+  ({
+    date: 1,
+    request: {
+      identifier: `apple-${id}`,
+      content: { data: null },
+      trigger: { type: 'push', payload: { mnelo: { v: 1, kind, id } } },
+    },
+  }) as unknown as Notifications.Notification;
+
+test.each(['active', 'background'] as const)(
+  'opening from the app icon in %s does not replay an OS-delivered push',
+  async (state) => {
+    AppState.currentState = state;
+    const id = `already-shown-${state}`;
+    jest.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([remotePush(id)]);
+    if (state === 'active')
+      await showForegroundDeviceAlert(id, 'message', 'Preview', 'Contact', () => true);
+    else await showDeviceAlert(id, 'message', 'Preview', 'Contact');
+    expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  },
+);
+
+test('cleanup recognizes APNs IDs and remembers display when cleanup precedes inbox replay', async () => {
+  const id = 'cleanup-before-replay';
+  jest.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([remotePush(id)]);
+  expect(await presentedAlertIds()).toEqual([id]);
+  await dismissDeviceAlert(id);
+  expect(Notifications.dismissNotificationAsync).toHaveBeenCalledWith(`apple-${id}`);
+  jest.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([]);
+  await showForegroundDeviceAlert(id, 'message', 'Preview', 'Contact', () => true);
+  expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  await showForegroundDeviceAlert(
+    'new-unrelated-message',
+    'message',
+    'Preview',
+    'Contact',
+    () => true,
+  );
+  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+});
+
+test('a hidden foreground push cannot suppress the verified banner for a new message', async () => {
+  const id = 'hidden-live-push';
+  expect((await handler.handleNotification(remotePush(id))).shouldShowBanner).toBe(false);
+  await showForegroundDeviceAlert(id, 'message', 'Preview', 'Contact', () => true);
+  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+});
+
+test('an earlier incoming-call alert does not hide its distinct missed-call result', async () => {
+  const id = 'missed-after-ringing';
+  jest
+    .mocked(Notifications.getPresentedNotificationsAsync)
+    .mockResolvedValue([remotePush(id, 'call')]);
+  await showDeviceAlert(id, 'missed-call', 'Missed call', 'Contact');
+  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+});
+
+test('navigation while enumerating delivered notifications cancels a foreground banner', async () => {
+  let current = true;
+  jest.mocked(Notifications.getPresentedNotificationsAsync).mockImplementationOnce(async () => {
+    current = false;
+    return [];
+  });
+  await showForegroundDeviceAlert(
+    'navigated-during-read',
+    'message',
+    'Preview',
+    'Contact',
+    () => current,
+  );
+  expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
 });
 
 test('unverified remote wakes and delayed background local alerts stay silent in foreground/inactive transitions', async () => {

@@ -346,8 +346,10 @@ export class PeerMesh implements PeerTransport {
     this.pendingLinks.set(remote, session);
     let peer: RTCPeerConnection;
     try {
-      const configuration = await this.configuration();
-      const accepted = await this.engine.acceptsPeer(remote);
+      const [configuration, accepted] = await Promise.all([
+        this.configuration(),
+        this.engine.acceptsPeer(remote),
+      ]);
       if (this.stopped || !accepted || this.pendingLinks.get(remote) !== session) return null;
       peer = this.factory(configuration);
     } catch {
@@ -655,8 +657,10 @@ export class PeerMesh implements PeerTransport {
     this.calls?.stage('MEDIA_CONFIGURATION');
     let peer: RTCPeerConnection;
     try {
-      const configuration = await this.configuration();
-      const accepted = await this.engine.acceptsPeer(remote);
+      const [configuration, accepted] = await Promise.all([
+        this.configuration(),
+        this.engine.acceptsPeer(remote),
+      ]);
       const call = this.calls?.snapshot();
       if (
         this.stopped ||

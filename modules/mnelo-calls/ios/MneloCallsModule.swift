@@ -22,6 +22,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var outgoingCalls: Set<UUID> = []
   private var answeredCalls: Set<UUID> = []
   private var connectedCalls: Set<UUID> = []
+  private let answerCompletion = MneloAnswerCompletion()
   private var ringbackID: UUID?
   private var ringbackPlayer: AVAudioPlayer?
   private var audioActive = false
@@ -333,12 +334,15 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
       if error != nil { Task { @MainActor in self.finish(id, reason: .failed); self.event(["type":"end", "id":id.uuidString.lowercased(), "code":"NATIVE_TRANSACTION_FAILED"]) } }
     }
   }
-  func connected(_ id: UUID) {
+  func connected(_ id: UUID, at timestamp: Double) {
     guard live.contains(id) else { return }
+    timing("NATIVE_MEDIA_CONNECTED")
+    let date = timestamp.isFinite && timestamp > 0 ? Date(timeIntervalSince1970: timestamp / 1000) : Date()
     connectedCalls.insert(id)
+    answerCompletion.connected(id, at: date)
     ringback(id, enabled: false)
     deadlines.removeValue(forKey: id)?.invalidate()
-    if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
+    if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: date) }
   }
   func finish(_ id: UUID, reason: CXCallEndedReason = .remoteEnded) {
     replySelector.finish(id)
@@ -349,6 +353,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     ended[id] = Date().addingTimeInterval(120)
     outgoingCalls.remove(id)
     answeredCalls.remove(id)
+    answerCompletion.end(id)
     let wasLive = live.remove(id) != nil
     if live.isEmpty { preparingAudio = false }
     guard wasLive else { return }
@@ -432,7 +437,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }()
   func providerDidReset(_ provider: CXProvider) {
     replySelector.clear()
-    for id in live { terminalEvent(id, reason: "local") }
+    for id in live { terminalEvent(id, reason: "local"); answerCompletion.end(id) }
     MneloScreenShare.shared.stop()
     live.removeAll()
     answeredCalls.removeAll()
@@ -451,10 +456,17 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    guard live.contains(action.callUUID) else { action.fail(); return }
     replySelector.end(action.callUUID)
     timing("ANSWER_ACTION")
     answeredCalls.insert(action.callUUID)
-    do { try prepareAudio(); event(["type":"answer", "id":action.callUUID.uuidString.lowercased()]); action.fulfill() }
+    do {
+      try prepareAudio()
+      answerCompletion.answer(action.callUUID,
+        fulfill: { date in self.timing("ANSWER_COMPLETED"); action.fulfill(withDateConnected: date) },
+        fail: { if !action.isComplete { action.fail() } })
+      event(["type":"answer", "id":action.callUUID.uuidString.lowercased()])
+    }
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
@@ -468,7 +480,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func provider(_ provider: CXProvider, timedOutPerforming action: CXAction) {
     if let call = action as? CXCallAction { finish(call.callUUID, reason: .failed); event(["type":"end", "id":call.callUUID.uuidString.lowercased(), "code":"NATIVE_ACTION_TIMEOUT"]) }
-    action.fail()
+    if !action.isComplete { action.fail() }
   }
   func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
     timing("AUDIO_ACTIVATED")
@@ -553,7 +565,7 @@ public class MneloCallsModule: Module {
     }
     AsyncFunction("answer") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.answer(id) } } }
     AsyncFunction("outgoing") { (value: String, video: Bool) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.outgoing(id, video: video) } } }
-    AsyncFunction("connected") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.connected(id) } } }
+    AsyncFunction("connected") { (value: String, timestamp: Double) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.connected(id, at: timestamp) } } }
     AsyncFunction("ringback") { (value: String, enabled: Bool) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.ringback(id, enabled: enabled) } } }
     AsyncFunction("end") { (value: String) async in await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.finish(id) } } }
   }

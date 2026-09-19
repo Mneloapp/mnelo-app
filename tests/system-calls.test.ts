@@ -104,6 +104,7 @@ function fixture(
       incoming,
       media,
       status,
+      ...(status === 'active' ? { connectedAt: 1234567890000 } : {}),
       ringingConfirmed,
       local: {},
       ...(peer ? { peer } : {}),
@@ -256,7 +257,7 @@ test('cold incoming and early native answer wait for the authenticated peer invi
     expect(native.answer).not.toHaveBeenCalled();
     f.update('active');
     await tick();
-    expect(native.connected).toHaveBeenCalledWith(id);
+    expect(native.connected).toHaveBeenCalledWith(id, 1234567890000);
   } finally {
     f.stop();
   }

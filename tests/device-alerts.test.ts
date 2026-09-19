@@ -9,6 +9,8 @@ import {
 } from '@/messenger/device-alerts.native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
+  getPresentedNotificationsAsync: jest.fn(async () => []),
+  dismissNotificationAsync: jest.fn(async () => {}),
   addNotificationResponseReceivedListener: jest.fn((listener) => {
     mockResponseHandler = listener;
     return { remove: jest.fn() };

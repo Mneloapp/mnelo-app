@@ -1,4 +1,6 @@
 export const phoneEn = {
+  cardCall: 'Call',
+  cardSaved: 'Saved',
   contactNames: 'Allow access to contacts',
   saveToPhone: 'Save to phone Contacts',
   savedToPhone: 'Saved in Contacts',
@@ -89,6 +91,8 @@ export const phoneEn = {
     'Your private identity is created on this device. Next, verify your mobile number to make it easier for people to find you.',
 } as const;
 export const phoneKa: Record<keyof typeof phoneEn, string> = {
+  cardCall: 'დარეკვა',
+  cardSaved: 'შენახულია',
   contactNames: 'კონტაქტებზე წვდომის დაშვება',
   saveToPhone: 'ტელეფონის კონტაქტებში შენახვა',
   savedToPhone: 'კონტაქტებში შენახულია',

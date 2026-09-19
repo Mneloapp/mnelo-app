@@ -7,6 +7,13 @@ const channelId = 'mnelo-private-alerts';
 const callReplyKind = 'call-reply';
 const defaultAction = Notifications.DEFAULT_ACTION_IDENTIFIER ?? 'default';
 const foregroundAlerts = new Map<string, { expires: number; current?: () => boolean }>();
+// Remember OS-presented events across notification cleanup and inbox replay.
+// A received-but-hidden foreground push is deliberately not evidence of display.
+const presentedEvents = new Set<string>();
+function rememberPresented(id: string, kind: AlertKind) {
+  presentedEvents.add(`${kind}:${id}`);
+  if (presentedEvents.size > 512) presentedEvents.delete(presentedEvents.values().next().value!);
+}
 const hiddenAlert = {
   shouldPlaySound: false,
   shouldSetBadge: false,
@@ -81,6 +88,34 @@ function objectData(value: unknown): Record<string, unknown> | null {
     return null;
   }
 }
+function alertEvent(request: Notifications.NotificationRequest) {
+  const data = objectData(request.content.data);
+  const trigger = objectData(request.trigger);
+  const payload = trigger?.type === 'push' ? objectData(trigger.payload) : null;
+  const remote = objectData(data?.mnelo) ?? objectData(payload?.mnelo);
+  if (typeof remote?.id === 'string' && remote.id.length > 0 && remote.id.length <= 128) {
+    if (remote.kind === 'message') return { id: remote.id, kind: 'message' as const };
+    if (remote.kind === 'call') return { id: remote.id, kind: 'incoming-call' as const };
+  }
+  if (objectData(data?.mneloCall)?.kind === callReplyKind) return null;
+  const kind = alertKind(data);
+  if (request.identifier.startsWith(prefix) && kind)
+    return { id: request.identifier.slice(prefix.length), kind };
+  return null;
+}
+async function presentedNotifications() {
+  const notifications = await Notifications.getPresentedNotificationsAsync();
+  for (const notification of notifications) {
+    const event = alertEvent(notification.request);
+    if (event) rememberPresented(event.id, event.kind);
+  }
+  return notifications;
+}
+async function alreadyPresented(id: string, kind: AlertKind) {
+  const key = `${kind}:${id}`;
+  if (!presentedEvents.has(key)) await presentedNotifications();
+  return presentedEvents.has(key);
+}
 Notifications.setNotificationHandler?.({
   handleNotification: async (notification) => {
     const local = foregroundAlerts.get(notification.request?.identifier);
@@ -92,6 +127,10 @@ Notifications.setNotificationHandler?.({
       // in foreground; a generic APNs wake must not produce a second banner.
       const visible =
         local.expires > Date.now() && AppState.currentState === 'active' && current?.();
+      if (visible) {
+        const event = alertEvent(notification.request);
+        if (event) rememberPresented(event.id, event.kind);
+      }
       return visible
         ? {
             shouldPlaySound: true,
@@ -163,6 +202,7 @@ export async function enableAlertsByDefault(isCurrent: () => boolean) {
 }
 export async function showDeviceAlert(id: string, kind: AlertKind, body: string, title = 'Mnelo') {
   if (!(await alertPermission()).allowed) return;
+  if (await alreadyPresented(id, kind)) return;
   await ensureChannel();
   // Local title/body follow the user's OS preview settings. Routing data remains
   // an opaque kind; no plaintext is transmitted to the push provider.
@@ -182,7 +222,7 @@ export async function showForegroundDeviceAlert(
   const current = () => AppState.currentState === 'active' && isCurrent();
   if (!current() || !(await alertPermission()).allowed) return;
   await ensureChannel();
-  if (!current()) return;
+  if (!current() || (await alreadyPresented(id, kind)) || !current()) return;
   const now = Date.now();
   for (const [key, value] of foregroundAlerts)
     if (value.expires <= now) foregroundAlerts.delete(key);
@@ -204,13 +244,26 @@ export async function showForegroundDeviceAlert(
   }
 }
 export async function dismissDeviceAlert(id: string) {
-  await Notifications.dismissNotificationAsync(prefix + id);
+  const notifications = await presentedNotifications();
+  const identifiers = new Set([
+    prefix + id,
+    ...notifications
+      .filter((notification) => alertEvent(notification.request)?.id === id)
+      .map((notification) => notification.request.identifier),
+  ]);
+  await Promise.all(
+    [...identifiers].map((identifier) => Notifications.dismissNotificationAsync(identifier)),
+  );
 }
 export async function presentedAlertIds() {
-  return (await Notifications.getPresentedNotificationsAsync())
-    .map((n) => n.request.identifier)
-    .filter((id) => id.startsWith(prefix))
-    .map((id) => id.slice(prefix.length));
+  return [
+    ...new Set(
+      (await presentedNotifications()).flatMap((notification) => {
+        const event = alertEvent(notification.request);
+        return event ? [event.id] : [];
+      }),
+    ),
+  ];
 }
 export async function setDeviceBadge(count: number) {
   await Notifications.setBadgeCountAsync(count);
@@ -218,25 +271,11 @@ export async function setDeviceBadge(count: number) {
 export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string) => void) {
   const consume = (response: Notifications.NotificationResponse) => {
     if (response.actionIdentifier !== defaultAction) return;
-    const request = response.notification.request;
-    const data = objectData(request.content.data);
-    // Expo 57 exposes direct APNs userInfo under trigger.payload. content.data
-    // only unwraps Expo's `body` envelope, which our private APNs does not use.
-    const trigger = objectData(request.trigger);
-    const payload = trigger?.type === 'push' ? objectData(trigger.payload) : null;
-    const remote = objectData(data?.mnelo) ?? objectData(payload?.mnelo);
-    if (remote?.kind === 'message' && typeof remote.id === 'string') {
-      listener('message', remote.id);
-      return;
+    const event = alertEvent(response.notification.request);
+    if (event) {
+      rememberPresented(event.id, event.kind);
+      listener(event.kind, event.id);
     }
-    if (remote?.kind === 'call' && typeof remote.id === 'string') {
-      listener('incoming-call', remote.id);
-      return;
-    }
-    if (objectData(data?.mneloCall)?.kind === callReplyKind) return;
-    if (!response.notification.request.identifier.startsWith(prefix)) return;
-    const kind = alertKind(data);
-    if (kind) listener(kind, response.notification.request.identifier.slice(prefix.length));
   };
   return addResponseListener(consume);
 }

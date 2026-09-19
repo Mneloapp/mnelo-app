@@ -19,7 +19,7 @@ type NativeCalls = NativeModule<{ changed: () => void }> & {
   identify?(id: string, name: string, phone: string, video: boolean): Promise<void>;
   cacheCaller?(hint: string, name: string, phone: string): Promise<void>;
   answer(id: string): Promise<void>;
-  connected(id: string): Promise<void>;
+  connected(id: string, connectedAt?: number): Promise<void>;
   ringback?(id: string, enabled: boolean): Promise<void>;
   end(id: string): Promise<void>;
   speaker(enabled: boolean): Promise<void>;
@@ -278,7 +278,8 @@ export function observeSystemCalls(
     }
     if (call.status === 'active' && connected !== call.id) {
       connected = call.id;
-      await bridge.connected(call.id);
+      if (Platform.OS === 'ios') await bridge.connected(call.id, call.connectedAt ?? Date.now());
+      else await bridge.connected(call.id);
     }
   }
   async function synchronize() {

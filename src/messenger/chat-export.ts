@@ -45,6 +45,35 @@ export function exportAttachmentPath(row: Pick<ExportMessage, 'sequence' | 'mime
   if (!Number.isSafeInteger(row.sequence) || row.sequence < 1)
     throw new Error('EXPORT_PATH_INVALID');
   const media = /^(image|video|audio)\//.test(row.mime ?? '');
+  const extensions: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/heic': 'heic',
+    'image/heif': 'heif',
+    'image/avif': 'avif',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'video/webm': 'webm',
+    'video/3gpp': '3gp',
+    'audio/mpeg': 'mp3',
+    'audio/mp4': 'm4a',
+    'audio/x-m4a': 'm4a',
+    'audio/aac': 'aac',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+  };
+  const extension = extensions[row.mime ?? ''];
+  if (media && extension) {
+    const label = row.mime!.startsWith('image/')
+      ? 'Photo'
+      : row.mime!.startsWith('video/')
+        ? 'Video'
+        : 'Audio';
+    return `Media/${label}-${String(row.sequence).padStart(6, '0')}.${extension}`;
+  }
   return `${media ? 'Media' : 'Documents'}/${row.sequence}-${basename(row.name ?? 'attachment')}`;
 }
 const relativeURL = (path: string) => path.split('/').map(encodeURIComponent).join('/');
@@ -191,10 +220,11 @@ export async function createChatExport(
           html += `<p>${escapeExportHTML(richText(await engine.media(row.attachment)))}</p>`;
         if (available) {
           const href = escapeExportHTML(relativeURL(path));
-          html += `<p><a href="${href}" download>${escapeExportHTML(row.name ?? 'Attachment')}</a></p>`;
+          const filename = path.slice(path.lastIndexOf('/') + 1);
+          html += `<p><a href="${href}" download="${escapeExportHTML(filename)}">${escapeExportHTML(filename)}</a></p>`;
           // Only passive media types are previewed. HTML/SVG/documents remain download links.
           if (/^image\/(jpeg|png|gif|webp)$/u.test(row.mime ?? ''))
-            html += `<img src="${href}" alt="${escapeExportHTML(row.name ?? 'Photo')}" loading="lazy">`;
+            html += `<img src="${href}" alt="${escapeExportHTML(filename)}" loading="lazy">`;
           else if (/^video\/(mp4|webm|quicktime)$/u.test(row.mime ?? ''))
             html += `<video controls preload="none" src="${href}"></video>`;
           else if (/^audio\/(mpeg|mp4|aac|ogg|wav|x-m4a)$/u.test(row.mime ?? ''))

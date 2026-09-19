@@ -55,6 +55,43 @@ with zipfile.ZipFile(sys.argv[1]) as z:
 const decoded = (files: Record<string, string>, path: string) =>
   Buffer.from(files[path]!, 'base64').toString('utf8');
 
+test('repeated generic photo and video names export with unique numbered names, MIME extensions and matching HTML downloads', async () => {
+  const f = await fixture();
+  try {
+    for (const mime of ['image/jpeg', 'image/jpeg', 'video/mp4', 'video/quicktime'])
+      await f.engine.send(f.chat, '', {
+        kind: mime.startsWith('image/') ? 'image' : 'file',
+        media: {
+          name: mime.startsWith('image/') ? 'photo' : 'video',
+          mime,
+          bytes: 'dGVzdA==',
+          duration: null,
+        },
+        deferDelivery: true,
+      });
+    const chunks: Uint8Array[] = [];
+    await createChatExport(f.engine, f.view, f.chat, {
+      write: (chunk) => {
+        chunks.push(chunk.slice());
+      },
+    });
+    const files = extract(chunks),
+      html = decoded(files, 'Chat.html');
+    for (const name of [
+      'Photo-000001.jpg',
+      'Photo-000002.jpg',
+      'Video-000003.mp4',
+      'Video-000004.mov',
+    ]) {
+      assert.equal(decoded(files, `Media/${name}`), 'test');
+      assert.ok(html.includes(`href="Media/${name}" download="${name}">${name}</a>`));
+      assert.ok(html.includes(`src="Media/${name}"`));
+    }
+  } finally {
+    await f.close();
+  }
+});
+
 test('unchanged native dictionary rows export despite different property enumeration on every pass', async () => {
   const f = await fixture();
   try {
@@ -91,7 +128,7 @@ test('unchanged native dictionary rows export despite different property enumera
     const files = extract(chunks);
     assert.ok(decoded(files, 'Chat.html').includes('უცვლელი ტექსტი'));
     assert.ok(decoded(files, 'Links/index.html').includes('https://example.org/place'));
-    assert.equal(decoded(files, 'Media/2-photo.png'), 'photo');
+    assert.equal(decoded(files, 'Media/Photo-000002.png'), 'photo');
   } finally {
     await f.close();
   }

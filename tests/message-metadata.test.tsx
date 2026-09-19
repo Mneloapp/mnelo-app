@@ -1,8 +1,51 @@
 import { MessageBubble } from '@/messenger/components/MessageBubble';
 import { AppText } from '@/components/AppText';
 import { formatTime } from '@/i18n/format';
-import { render, screen } from '@testing-library/react-native';
-import { DeliveryLeaf } from '@/messenger/components/MessageMetadata';
+import { act, render, screen } from '@testing-library/react-native';
+import {
+  Animated,
+  PanResponder,
+  type PanResponderGestureState,
+  type GestureResponderEvent,
+} from 'react-native';
+import { DeliveryLeaf, MessageTimeReveal } from '@/messenger/components/MessageMetadata';
+
+test('left swipe opens own-message info while right swipe replies and vertical/short gestures do neither', async () => {
+  const create = jest.spyOn(PanResponder, 'create');
+  const spring = jest
+    .spyOn(Animated, 'spring')
+    .mockReturnValue({ start: jest.fn(), stop: jest.fn(), reset: jest.fn() });
+  const reply = jest.fn(),
+    info = jest.fn();
+  const view = await render(
+    <MessageTimeReveal onReply={reply} onInfo={info}>
+      <AppText>Message</AppText>
+    </MessageTimeReveal>,
+  );
+  const options = create.mock.calls.at(-1)![0];
+  const event = {} as GestureResponderEvent;
+  const gesture = (dx: number, dy = 0) => ({ dx, dy }) as PanResponderGestureState;
+  expect(options.onMoveShouldSetPanResponder!(event, gesture(-70))).toBe(true);
+  expect(options.onMoveShouldSetPanResponder!(event, gesture(70))).toBe(true);
+  expect(options.onMoveShouldSetPanResponder!(event, gesture(-10, 70))).toBe(false);
+  await act(() => options.onPanResponderRelease!(event, gesture(-70)));
+  expect(info).toHaveBeenCalledTimes(1);
+  expect(reply).not.toHaveBeenCalled();
+  await act(() => options.onPanResponderRelease!(event, gesture(70)));
+  expect(reply).toHaveBeenCalledTimes(1);
+  await act(() => options.onPanResponderRelease!(event, gesture(-2)));
+  expect(info).toHaveBeenCalledTimes(1);
+  await view.rerender(
+    <MessageTimeReveal onReply={reply}>
+      <AppText>Incoming</AppText>
+    </MessageTimeReveal>,
+  );
+  expect(create.mock.calls.at(-1)![0].onMoveShouldSetPanResponder!(event, gesture(-70))).toBe(
+    false,
+  );
+  create.mockRestore();
+  spring.mockRestore();
+});
 test('no delivery leaf before acknowledgment or on received messages; accessible delivered/read states differ', async () => {
   const view = await render(<DeliveryLeaf status="pending" />);
   expect(screen.queryByRole('image')).toBeNull();

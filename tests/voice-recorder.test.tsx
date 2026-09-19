@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { AppState } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { RecordingStatus } from 'expo-audio';
 import { VoiceRecorder } from '@/features/chats/VoiceRecorder';
 let mockFinished: (event: RecordingStatus) => void;
@@ -30,6 +31,9 @@ jest.mock('expo-audio', () => ({
 jest.mock('expo-router', () => ({ useIsFocused: () => true }));
 jest.mock('@/features/chats/media-files', () => ({ discardCachedMedia: jest.fn() }));
 jest.mock('@/features/chats/AudioPlayback', () => ({ AudioPlayback: () => null }));
+beforeEach(() => {
+  Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'active' });
+});
 test('stopping retains duration when Android resets native state, and cancel clears the preview', async () => {
   const onReady = jest.fn();
   await render(<VoiceRecorder onReady={onReady} />);
@@ -85,4 +89,29 @@ test('inline recorder starts from the microphone action, retains preview, and de
   await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
   expect(onReady).toHaveBeenLastCalledWith(null);
   expect(onCancel).toHaveBeenCalledTimes(1);
+});
+
+test('native preparation completing after backgrounding never starts a recording', async () => {
+  mockState = { isRecording: false, durationMillis: 0 };
+  const audio = jest.requireMock('expo-audio');
+  audio.AudioModule = {
+    requestRecordingPermissionsAsync: jest.fn(async () => ({ granted: true })),
+  };
+  let prepared!: () => void;
+  const record = jest.fn();
+  const prepareToRecordAsync = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        prepared = resolve;
+      }),
+  );
+  Object.assign(mockRecorder, { prepareToRecordAsync, record });
+  await render(<VoiceRecorder autoStart onReady={jest.fn()} />);
+  await waitFor(() => expect(prepareToRecordAsync).toHaveBeenCalledTimes(1));
+  Object.defineProperty(AppState, 'currentState', { configurable: true, value: 'background' });
+  await act(() => prepared());
+  expect(record).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(audio.setAudioModeAsync).toHaveBeenLastCalledWith({ allowsRecording: false }),
+  );
 });

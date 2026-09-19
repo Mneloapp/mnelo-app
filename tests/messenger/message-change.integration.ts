@@ -178,3 +178,86 @@ test('custom reactions are remembered across reads, bounded, and selected first 
     await f.close();
   }
 });
+
+test('one reaction per person replaces/toggles in direct and group chats and survives replay', async () => {
+  for (const group of [false, true]) {
+    const f = await fixture(group);
+    try {
+      const { id, packet } = await f.send();
+      await f.b.engine.receive(f.a.identity.key, packet);
+      if (group) await f.c.engine.receive(f.a.identity.key, packet);
+      for (const emoji of ['❤️', '👍', '😂']) {
+        await f.a.engine.react(id, emoji);
+        assert.deepEqual(
+          (await f.a.engine.reactions(id)).map((row) => row.emoji),
+          [emoji],
+        );
+      }
+      const controls = (
+        await f.a.storage.db.all<{ packet: string; peer: string }>(
+          "SELECT packet,peer FROM control_outbox WHERE json_extract(packet,'$.type')='reaction' ORDER BY rowid",
+        )
+      )
+        .filter((row) => row.peer === f.b.identity.key)
+        .map((row) => JSON.parse(row.packet) as Packet);
+      for (const packet of [...controls].reverse())
+        await f.b.engine.receive(f.a.identity.key, packet);
+      for (const packet of controls) await f.b.engine.receive(f.a.identity.key, packet);
+      assert.deepEqual(
+        (await f.b.engine.reactions(id)).map((row) => row.emoji),
+        ['😂'],
+      );
+      await f.b.engine.react(id, '🔥');
+      assert.equal((await f.b.engine.reactions(id)).length, 2); // one from each person
+      await f.b.engine.react(id, '👏');
+      assert.deepEqual(
+        (await f.b.engine.reactions(id)).map((row) => row.emoji).sort(),
+        ['👏', '😂'].sort(),
+      );
+      await f.b.engine.react(id, '👏');
+      assert.deepEqual(
+        (await f.b.engine.reactions(id)).map((row) => row.emoji),
+        ['😂'],
+      );
+      if (group) {
+        await f.b.engine.receive(f.c.identity.key, {
+          type: 'reaction',
+          id,
+          emoji: '💚',
+          active: true,
+          revision: 1,
+        });
+        assert.deepEqual(
+          new Set((await f.b.engine.reactions(id)).map((row) => row.peer)),
+          new Set([f.a.identity.key, f.c.identity.key]),
+        );
+      }
+    } finally {
+      await f.close();
+    }
+  }
+});
+
+test('legacy multiple reactions show one latest choice and the next local change clears the old choices', async () => {
+  const f = await fixture();
+  try {
+    const { id } = await f.send();
+    for (const emoji of ['❤️', '👍', '😂'])
+      await f.a.storage.db.run('INSERT INTO reactions VALUES(?,?,?)', id, f.a.identity.key, emoji);
+    assert.deepEqual(
+      (await f.a.engine.reactions(id)).map((row) => row.emoji),
+      ['😂'],
+    );
+    await f.a.engine.react(id, '👍');
+    assert.deepEqual(
+      (await f.a.engine.reactions(id)).map((row) => row.emoji),
+      ['👍'],
+    );
+    assert.equal(
+      (await f.a.storage.db.all('SELECT emoji FROM reactions WHERE message_id=?', id)).length,
+      1,
+    );
+  } finally {
+    await f.close();
+  }
+});

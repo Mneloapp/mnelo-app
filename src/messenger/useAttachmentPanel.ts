@@ -20,7 +20,8 @@ export function useAttachmentPanel(bottomInset = 0) {
   const keyboardHeight = useRef(0);
   const mode = useRef<'closed' | 'panel' | 'keyboard'>('closed');
   const managedKeyboard = Platform.OS === 'ios';
-  const panelHeight = useRef(Math.max(224, Math.min(320, windowHeight * 0.42)));
+  const minimumPanelHeight = 212 + bottomInset;
+  const panelHeight = useRef(Math.max(minimumPanelHeight, Math.min(320, windowHeight * 0.42)));
   const resize = useCallback(
     (height: number, event?: KeyboardEvent) => {
       if (height === reserved.current) return;
@@ -33,13 +34,15 @@ export function useAttachmentPanel(bottomInset = 0) {
     [reducedMotion],
   );
   useEffect(() => {
-    panelHeight.current =
-      lastKeyboardHeight.current || Math.max(224, Math.min(320, windowHeight * 0.42));
+    panelHeight.current = Math.max(
+      minimumPanelHeight,
+      lastKeyboardHeight.current || Math.min(320, windowHeight * 0.42),
+    );
     const updateKeyboard = (height: number, event?: KeyboardEvent) => {
       keyboardHeight.current = height;
       if (height > 0) {
         lastKeyboardHeight.current = height;
-        panelHeight.current = height;
+        panelHeight.current = Math.max(minimumPanelHeight, height);
       }
       if (mode.current === 'panel') {
         // Android's window already shrinks for the system keyboard.
@@ -77,7 +80,7 @@ export function useAttachmentPanel(bottomInset = 0) {
       );
     }
     return () => subscriptions.forEach((subscription) => subscription.remove());
-  }, [bottomInset, managedKeyboard, windowHeight, resize]);
+  }, [bottomInset, minimumPanelHeight, managedKeyboard, windowHeight, resize]);
   function focusInput() {
     mode.current = 'keyboard';
     if (Platform.OS === 'web') {
@@ -106,7 +109,7 @@ export function useAttachmentPanel(bottomInset = 0) {
       const metrics = Keyboard.metrics();
       if (metrics?.height) {
         lastKeyboardHeight.current = metrics.height;
-        panelHeight.current = metrics.height;
+        panelHeight.current = Math.max(minimumPanelHeight, metrics.height);
       }
       setVisible(true);
       resize(managedKeyboard || !Keyboard.isVisible() ? panelHeight.current : 0);

@@ -15,6 +15,7 @@ const keys = [
   'NSLocationWhenInUseUsageDescription',
   'NSMotionUsageDescription',
   'NSCalendarsUsageDescription',
+  'NSSiriUsageDescription',
 ];
 function plist(path) {
   return JSON.parse(
@@ -100,5 +101,5 @@ if (process.argv[2]) {
   );
 }
 console.log(
-  'iOS purpose strings: 7 keys and EN/KA translations PASS; no always/background location; archived apps include the QR provider. This does not prove Apple processing or physical scanning/permission QA.',
+  'iOS purpose strings: 8 keys and EN/KA translations PASS; no always/background location; archived apps include the QR provider. This does not prove Apple processing or physical scanning/permission QA.',
 );

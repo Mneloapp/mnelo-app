@@ -34,6 +34,7 @@ function Navigator() {
           <Stack.Screen name="(compose)" options={{ presentation: 'card' }} />
           <Stack.Screen name="phone" />
           <Stack.Screen name="chat/[id]" />
+          <Stack.Screen name="message-info/[id]" />
           <Stack.Screen name="group/[id]" />
           <Stack.Screen name="call/[id]" />
           <Stack.Screen name="edit-profile" />

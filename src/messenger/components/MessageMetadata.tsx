@@ -49,19 +49,25 @@ export function DeliveryLeaf({
 export function MessageTimeReveal({
   children,
   onReply,
-}: PropsWithChildren<{ onReply?: (() => void) | undefined }>) {
+  onInfo,
+}: PropsWithChildren<{ onReply?: (() => void) | undefined; onInfo?: (() => void) | undefined }>) {
   const [offset] = useState(() => new Animated.Value(0));
   const distance = theme.layout.messageTimeReveal;
   const responder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_event, gesture) =>
-          Boolean(onReply && gesture.dx > theme.spacing.sm) &&
-          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
+          Boolean(
+            (onReply && gesture.dx > theme.spacing.sm) ||
+            (onInfo && gesture.dx < -theme.spacing.sm),
+          ) && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.5,
         onPanResponderMove: (_event, gesture) =>
-          offset.setValue(Math.max(0, Math.min(onReply ? distance : 0, gesture.dx))),
+          offset.setValue(
+            Math.max(onInfo ? -distance : 0, Math.min(onReply ? distance : 0, gesture.dx)),
+          ),
         onPanResponderRelease: (_event, gesture) => {
           if (gesture.dx > distance * 0.65) onReply?.();
+          if (gesture.dx < -distance * 0.65) onInfo?.();
           Animated.spring(offset, {
             toValue: 0,
             useNativeDriver: true,
@@ -70,7 +76,7 @@ export function MessageTimeReveal({
         },
         onPanResponderTerminate: () => offset.setValue(0),
       }),
-    [distance, offset, onReply],
+    [distance, offset, onReply, onInfo],
   );
   return (
     <View style={styles.row}>

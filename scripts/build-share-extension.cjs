@@ -36,6 +36,7 @@ function buildShareExtension(root, destination, entry = 'entry.ts') {
   for (const [source, name] of [
     ['modules/mnelo-signal/ios/MneloSignalCore.swift', 'MneloSignalCore.swift'],
     ['modules/mnelo-vault/ios/MneloSharedVault.swift', 'MneloSharedVault.swift'],
+    ['modules/mnelo-calls/ios/MneloCallReplySelector.swift', 'MneloCallReplySelector.swift'],
     ['node_modules/expo-sqlite/vendor/sqlcipher/sqlite3.c', 'sqlite3.c'],
     ['node_modules/expo-sqlite/vendor/sqlcipher/sqlite3.h', 'sqlite3.h'],
   ])
@@ -45,6 +46,8 @@ module.exports = {
   buildShareExtension,
   buildNotificationExtension: (root, destination) =>
     buildShareExtension(root, destination, 'notification-entry.ts'),
+  buildIntentExtension: (root, destination) =>
+    buildShareExtension(root, destination, 'intent-entry.ts'),
 };
 if (require.main === module)
   buildShareExtension(process.cwd(), process.argv[2] ?? 'artifacts/MneloShare.js');

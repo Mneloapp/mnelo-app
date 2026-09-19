@@ -28,7 +28,8 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var defaultSpeaker = false
   private var explicitSpeaker: Bool?
   private var routeObserver: NSObjectProtocol?
-  private var timingEvents: [[String: Any]] = []
+  private var preparingAudio = false
+  private var timingEvents = MneloConnectionTimings()
   private var timingFlush: Timer?
   private let timingQueue = DispatchQueue(label: "com.mnelo.connection-timing", qos: .utility)
   private var reporting: [UUID: [() -> Void]] = [:]
@@ -38,6 +39,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private let endJournalKey = "MneloPendingCallEndsV1"
   private let accountKey = "MneloCallAccountV1"
   private var account: String?
+  private let replySelector = MneloCallReplySelector()
   private var pendingEnds: [[String: Any]] = []
   private var endDeliveryTask = UIBackgroundTaskIdentifier.invalid
   private var endDeliveryDeadline: Timer?
@@ -52,6 +54,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     provider = CXProvider(configuration: config)
     super.init()
     account = UserDefaults.standard.string(forKey: accountKey)
+    replySelector.configureAccount(account)
     pendingEnds = UserDefaults.standard.array(forKey: endJournalKey) as? [[String: Any]] ?? []
     prunePendingEnds()
     for value in pendingEnds {
@@ -70,22 +73,20 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   // Bounded local USB diagnostics. No conversation identifiers, content,
   // addresses, credentials or server upload. Caches are excluded from backup.
   func timing(_ code: String, duration: Double = 0) {
-    guard code.range(of: "^[A-Z_]{1,48}$", options: .regularExpression) != nil, duration.isFinite else { return }
     let now = Date().timeIntervalSince1970 * 1000
-    timingEvents = timingEvents.filter { ($0["at"] as? Double ?? 0) > now - 900000 }
-    timingEvents.append(["stage":code, "at":now, "duration":max(0, min(60000, duration))])
-    if timingEvents.count > 200 { timingEvents.removeFirst(timingEvents.count - 200) }
+    guard timingEvents.append(code, duration: duration, now: now) else { return }
     guard timingFlush == nil else { return }
     timingFlush = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
       Task { @MainActor in
         self.timingFlush = nil
-        guard let data = try? JSONSerialization.data(withJSONObject: self.timingEvents),
+        guard let data = try? JSONSerialization.data(withJSONObject: self.timingEvents.events),
               let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
         let url = directory.appendingPathComponent("MneloConnectionTimings.json")
         self.timingQueue.async { try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication]) }
       }
     }
   }
+  func canPlayVoice() -> Bool { live.isEmpty && !audioActive && !preparingAudio }
   func contains(_ id: UUID) -> Bool { live.contains(id) }
   func start() {
     guard registry == nil else { return }
@@ -111,6 +112,13 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     UserDefaults.standard.set(pendingEnds, forKey: endJournalKey)
   }
   func configureAccount(_ value: String) {
+    if value.isEmpty {
+      account = nil
+      UserDefaults.standard.removeObject(forKey: accountKey)
+      replySelector.configureAccount(nil)
+      pendingEnds.removeAll(); prunePendingEnds(); releaseEndDelivery()
+      return
+    }
     guard value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { return }
     if account != value {
       if account != nil {
@@ -122,6 +130,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
       pendingEnds.removeAll()
     }
     account = value
+    replySelector.configureAccount(value)
     UserDefaults.standard.set(value, forKey: accountKey)
     prunePendingEnds()
   }
@@ -145,6 +154,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
   }
   private func terminalEvent(_ id: UUID, reason: String) {
+    replySelector.end(id, declined: reason == "decline")
     holdEndDelivery()
     prunePendingEnds()
     if let account, !pendingEnds.contains(where: { $0["id"] as? String == id.uuidString.lowercased() }) {
@@ -233,8 +243,9 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     if live.contains(id) { completion(); return }
     let allowed = usable && ended[id] == nil && live.isEmpty
     reporting[id] = [completion]
-    if allowed { live.insert(id); defaultSpeaker = video; explicitSpeaker = nil }
+    if allowed { MneloVoicePlayback.shared.stop(restoreAudio: false); live.insert(id); defaultSpeaker = video; explicitSpeaker = nil }
     let cached = callerHint.flatMap { cachedCaller($0) }
+    if allowed { replySelector.begin(id, account: account, callerHint: callerHint, handle: cached?.phone ?? "") }
     let displayName = cached?.name ?? "Mnelo"
     let update = CXCallUpdate()
     update.remoteHandle = CXHandle(
@@ -252,6 +263,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
           self.arm(id)
           self.event(["type": "incoming", "id": id.uuidString.lowercased(), "video": video])
         } else {
+          self.replySelector.end(id)
           self.live.remove(id)
           if error == nil { self.provider.reportCall(with: id, endedAt: Date(), reason: .failed) }
           self.event(["type": "end", "id": id.uuidString.lowercased(), "code":"NATIVE_INCOMING_FAILED"])
@@ -283,6 +295,8 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func outgoing(_ id: UUID, video: Bool) {
     guard !live.contains(id), live.isEmpty else { return }
+    replySelector.clear()
+    MneloVoicePlayback.shared.stop(restoreAudio: false)
     live.insert(id)
     defaultSpeaker = video
     explicitSpeaker = nil
@@ -296,6 +310,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func identify(_ id: UUID, name: String, phone: String, video: Bool) {
     guard live.contains(id), !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    if !outgoingCalls.contains(id) { replySelector.identify(id, handle: phone) }
     let update = CXCallUpdate()
     update.localizedCallerName = String(name.prefix(160))
     update.remoteHandle = CXHandle(type: phone.hasPrefix("+") ? .phoneNumber : .generic,
@@ -305,6 +320,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   }
   func answer(_ id: UUID) {
     guard live.contains(id), !answeredCalls.contains(id) else { return }
+    replySelector.end(id)
     answeredCalls.insert(id)
     controller.request(CXTransaction(action: CXAnswerCallAction(call: id))) { error in
       if error != nil { Task { @MainActor in self.finish(id, reason: .failed); self.event(["type":"end", "id":id.uuidString.lowercased(), "code":"NATIVE_TRANSACTION_FAILED"]) } }
@@ -318,6 +334,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     if outgoingCalls.contains(id) { provider.reportOutgoingCall(with: id, connectedAt: Date()) }
   }
   func finish(_ id: UUID, reason: CXCallEndedReason = .remoteEnded) {
+    replySelector.finish(id)
     ringback(id, enabled: false)
     removeCallReplyNotification(id)
     connectedCalls.remove(id)
@@ -325,11 +342,14 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     ended[id] = Date().addingTimeInterval(120)
     outgoingCalls.remove(id)
     answeredCalls.remove(id)
-    guard live.remove(id) != nil else { return }
+    let wasLive = live.remove(id) != nil
+    if live.isEmpty { preparingAudio = false }
+    guard wasLive else { return }
     if live.isEmpty { explicitSpeaker = nil; defaultSpeaker = false }
     provider.reportCall(with: id, endedAt: Date(), reason: reason)
   }
   private func prepareAudio() throws {
+    let started = ProcessInfo.processInfo.systemUptime
     // CallKit and WebRTC must use the same configuration. Otherwise an answer
     // replaces the video speaker preference with voiceChat's receiver route.
     let config = RTCAudioSessionConfiguration.webRTC()
@@ -341,10 +361,13 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     rtc.lockForConfiguration()
     defer { rtc.unlockForConfiguration() }
     try rtc.setConfiguration(config)
+    timing("AUDIO_PREPARE_FINISHED", duration: (ProcessInfo.processInfo.systemUptime - started) * 1000)
   }
   func prepareCallAudio(_ speaker: Bool) throws {
+    MneloVoicePlayback.shared.stop(restoreAudio: false)
+    preparingAudio = true
     defaultSpeaker = explicitSpeaker ?? speaker
-    try prepareAudio()
+    do { try prepareAudio() } catch { preparingAudio = false; throw error }
   }
   func speaker(_ enabled: Bool) throws {
     defaultSpeaker = enabled
@@ -401,6 +424,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     return data
   }()
   func providerDidReset(_ provider: CXProvider) {
+    replySelector.clear()
     for id in live { terminalEvent(id, reason: "local") }
     MneloScreenShare.shared.stop()
     live.removeAll()
@@ -409,6 +433,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     connectedCalls.removeAll()
     ringbackID = nil
     audioActive = false
+    preparingAudio = false
     explicitSpeaker = nil
     updateRingback()
     deadlines.values.forEach { $0.invalidate() }; deadlines.removeAll()
@@ -419,6 +444,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
+    replySelector.end(action.callUUID)
     timing("ANSWER_ACTION")
     answeredCalls.insert(action.callUUID)
     do { try prepareAudio(); event(["type":"answer", "id":action.callUUID.uuidString.lowercased()]); action.fulfill() }
@@ -468,13 +494,24 @@ public class MneloCallsSubscriber: ExpoAppDelegateSubscriber {
 }
 public class MneloCallsModule: Module {
   private var observer: NSObjectProtocol?
+  private var voiceObserver: NSObjectProtocol?
   public func definition() -> ModuleDefinition {
     Name("MneloCalls")
-    Events("changed")
+    Events("changed", "voicePlaybackStopped")
     OnStartObserving {
+      self.voiceObserver = NotificationCenter.default.addObserver(forName: mneloVoicePlaybackStopped, object: nil, queue: .main) { [weak self] note in
+        if let token = note.userInfo?["token"] as? String { self?.sendEvent("voicePlaybackStopped", ["token": token]) }
+      }
       self.observer = NotificationCenter.default.addObserver(forName: wakeChanged, object: nil, queue: .main) { [weak self] _ in self?.sendEvent("changed", [:]) }
     }
-    OnStopObserving { if let observer = self.observer { NotificationCenter.default.removeObserver(observer) }; self.observer = nil }
+    OnStopObserving {
+      if let observer = self.observer { NotificationCenter.default.removeObserver(observer) }; self.observer = nil
+      if let observer = self.voiceObserver { NotificationCenter.default.removeObserver(observer) }; self.voiceObserver = nil
+    }
+    AsyncFunction("beginVoicePlayback") { (token: String) async throws -> Bool in
+      try await MainActor.run { try MneloVoicePlayback.shared.begin(token) { MneloCallManager.shared.canPlayVoice() } }
+    }
+    AsyncFunction("endVoicePlayback") { (token: String) async in await MainActor.run { MneloVoicePlayback.shared.end(token) } }
     AsyncFunction("prepareScreenShare") { (value: String) async throws -> String in
       try await MainActor.run {
         guard let id = UUID(uuidString: value) else { throw NSError(domain: "Mnelo", code: 1) }

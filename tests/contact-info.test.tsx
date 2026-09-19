@@ -6,6 +6,7 @@ import { ContactProfileScreen } from '@/messenger/screens/ContactProfileScreen';
 import { Page } from '@/components/ui';
 import { Contact, getPermissionsAsync } from 'expo-contacts';
 import { phonebookChanged } from '@/messenger/phonebook-events';
+import { exportChat } from '@/messenger/export-chat';
 
 const mockPeer = 'b'.repeat(64);
 let mockBlocked = false;
@@ -39,7 +40,9 @@ jest.mock('@react-native-community/netinfo', () =>
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), back: jest.fn(), dismissTo: jest.fn(), canGoBack: () => true },
   useLocalSearchParams: () => ({ key: mockPeer }),
+  useIsFocused: () => true,
 }));
+jest.mock('@/messenger/export-chat', () => ({ exportChat: jest.fn(async () => {}) }));
 jest.mock('@/messenger/DeviceProvider', () => ({
   useDevice: () => ({
     engine: mockEngine,
@@ -155,4 +158,44 @@ test('Contact info saves to phone Contacts only on tap and reacts to a later del
   await act(async () => phonebookChanged());
   await screen.findByRole('button', { name: 'Save to phone Contacts' });
   expect(Contact.create).toHaveBeenCalledTimes(1);
+});
+
+test('an existing phone contact never flashes a Save action while the native scan is pending', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ status: 'granted', granted: true } as never);
+  let complete!: (rows: never) => void;
+  const pending = new Promise<never>((resolve) => (complete = resolve));
+  jest.mocked(Contact.getAllDetails).mockReturnValue(pending);
+  await show();
+  await waitFor(() => expect(Contact.getAllDetails).toHaveBeenCalled());
+  expect(screen.getByText('My phonebook name')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Save to phone Contacts' })).toBeNull();
+  await act(() =>
+    complete([{ fullName: 'My phonebook name', phones: [{ number: '+12025550102' }] }] as never),
+  );
+  expect(screen.queryByRole('button', { name: 'Save to phone Contacts' })).toBeNull();
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('a failed phonebook scan is unknown, and a later successful absence check enables Save', async () => {
+  jest.mocked(getPermissionsAsync).mockResolvedValue({ status: 'granted', granted: true } as never);
+  jest.mocked(Contact.getAllDetails).mockRejectedValue(new Error('Contacts unavailable'));
+  await show();
+  await waitFor(() => expect(Contact.getAllDetails).toHaveBeenCalled());
+  expect(screen.queryByRole('button', { name: 'Save to phone Contacts' })).toBeNull();
+  jest.mocked(Contact.getAllDetails).mockResolvedValue([]);
+  await act(() => phonebookChanged());
+  await screen.findByRole('button', { name: 'Save to phone Contacts' });
+  expect(Contact.create).not.toHaveBeenCalled();
+});
+
+test('contact info exports this conversation only after the explicit Export chat action', async () => {
+  await show();
+  expect(exportChat).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Export chat' }));
+  expect(exportChat).toHaveBeenCalledWith(
+    mockEngine,
+    expect.any(Object),
+    'direct-chat',
+    expect.objectContaining({ isCurrent: expect.any(Function) }),
+  );
 });

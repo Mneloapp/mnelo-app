@@ -11,8 +11,9 @@ const mockPlayer = {
 const mockSource = jest.fn();
 let mockBackground: ((state: AppStateStatus) => void) | undefined;
 jest.mock('expo-audio', () => ({
-  useAudioPlayer: (source: unknown) => {
-    mockSource(source);
+  setAudioModeAsync: jest.fn(async () => {}),
+  useAudioPlayer: (source: unknown, options: unknown) => {
+    mockSource(source, options);
     return mockPlayer;
   },
   useAudioPlayerStatus: () => ({
@@ -34,13 +35,16 @@ afterEach(() => jest.restoreAllMocks());
 test('voice bubble mount never starts a download; play obtains fresh private access', async () => {
   const resolveUri = jest.fn(async () => 'https://development.invalid/fresh');
   await render(<AudioPlayback uri="https://development.invalid/expired" resolveUri={resolveUri} />);
-  expect(mockSource).toHaveBeenCalledWith(null);
+  expect(mockSource).toHaveBeenCalledWith(null, { keepAudioSessionActive: false });
   expect(mockPlayer.replace).not.toHaveBeenCalled();
   expect(resolveUri).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Play' }));
   expect(resolveUri).toHaveBeenCalledTimes(1);
   expect(mockPlayer.replace).toHaveBeenCalledWith('https://development.invalid/fresh');
   expect(mockPlayer.play).toHaveBeenCalledTimes(1);
+  expect(jest.requireMock('expo-audio').setAudioModeAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ playsInSilentMode: true, allowsRecording: false }),
+  );
 });
 test('a late URL cannot begin playback after backgrounding', async () => {
   let resolve!: (url: string) => void;

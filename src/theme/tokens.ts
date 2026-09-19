@@ -1,11 +1,11 @@
 export const theme = {
   colors: {
-    background: '#F7F8F5',
-    surface: '#FFFFFF',
-    surfaceSoft: '#FAFBF8',
+    background: '#FFFFFF',
+    surface: '#F3F4F2',
+    surfaceSoft: '#F7F8F6',
     textPrimary: '#1A1A1A',
     textSecondary: '#626974',
-    // Secondary text retains contrast on the gray canvas and soft surfaces.
+    // Secondary text retains contrast on the white canvas and gray surfaces.
     textSecondaryOnSoft: '#626974',
     black: '#111111',
     accent: '#D7FF3F',
@@ -22,6 +22,7 @@ export const theme = {
     messageOutgoing: '#F0F6DB',
     callBackground: '#111111',
     callSurface: '#2A2A2A',
+    callSelectedSurface: '#FFFFFF',
     callText: '#FFFFFF',
     callSecondary: '#B8BBC1',
     callError: '#FFADA9',

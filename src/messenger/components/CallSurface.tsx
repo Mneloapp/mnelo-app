@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: theme.colors.callBackground,
   },
-  selected: { backgroundColor: theme.colors.surface },
+  selected: { backgroundColor: theme.colors.callSelectedSurface },
   end: { backgroundColor: theme.colors.endCall },
   accept: { backgroundColor: theme.colors.accent },
   hangup: { transform: [{ rotate: '135deg' }] },

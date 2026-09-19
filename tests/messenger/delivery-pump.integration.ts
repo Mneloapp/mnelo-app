@@ -58,6 +58,117 @@ function device(now = Date.now) {
   return { root, journal, sql };
 }
 
+test('call controls overtake a receipt backlog at the next completed HTTP boundary and preserve call FIFO and receipt fairness', async () => {
+  async function run(callPriority: number) {
+    let clock = Date.now();
+    const a = device(() => clock),
+      b = device(() => clock);
+    const delivery = new DeliveryService(
+      new DeliveryStore(new DatabaseSync(':memory:'), {
+        registered: () => true,
+        canContact: () => true,
+      }),
+      new SignalDirectory(new DatabaseSync(':memory:')),
+    );
+    const receipts: string[] = Array.from({ length: 20 }, () => randomUUID());
+    const calls: string[] = Array.from({ length: 9 }, () => randomUUID());
+    const order: string[] = [];
+    const uploadedAt = new Map<string, number>();
+    let acceptedAt = 0;
+    const pump = new DeliveryPump(
+      {
+        execute: async (command) => {
+          clock += 160; // One signed challenge+command exchange, 80ms per request.
+          const result = delivery.execute(a.root.key, command);
+          if (
+            command.action === 'delivery-submit' ||
+            (command.action === 'delivery-sync' && command.envelope)
+          ) {
+            const id = command.envelope!.id;
+            order.push(id);
+            uploadedAt.set(id, clock);
+            if (id === receipts[0]) {
+              acceptedAt = clock;
+              for (const call of calls)
+                await a.journal.enqueue(
+                  b.root.key,
+                  call,
+                  `CALL_${call}`,
+                  clock,
+                  undefined,
+                  undefined,
+                  callPriority,
+                );
+            }
+          }
+          return { delivery: result };
+        },
+      },
+      a.journal,
+      async () => ({}),
+      () => {},
+      () => clock,
+      { outgoingOnly: true },
+    );
+    try {
+      await a.journal.initialize();
+      const keys = await b.journal.initialize();
+      delivery.directory.publish(b.root.key, keys, b.journal.binding(keys));
+      pump.start();
+      await pump.tick();
+      for (const receipt of receipts)
+        await a.journal.enqueue(
+          b.root.key,
+          receipt,
+          `RECEIPT_${receipt}`,
+          clock,
+          undefined,
+          undefined,
+          2,
+        );
+      for (let cycle = 0; cycle < 10 && order.length < receipts.length + calls.length; cycle++)
+        await pump.tick();
+      assert.equal(order.length, receipts.length + calls.length);
+      assert.equal(
+        new Set(order).size,
+        order.length,
+        'nested preemption never uploads the same ratchet event twice',
+      );
+      assert.deepEqual(
+        order.filter((id) => calls.includes(id)),
+        calls,
+        'call accept/SDP/candidates remain FIFO',
+      );
+      if (callPriority === 3) {
+        assert.deepEqual(order.slice(0, 6), [receipts[0], ...calls.slice(0, 4), receipts[1]]);
+        assert.ok(
+          order.indexOf(receipts[2]!) < order.indexOf(calls[8]!),
+          'a long candidate burst keeps receipts moving',
+        );
+      }
+      return {
+        position: order.indexOf(calls[0]!) + 1,
+        latency: uploadedAt.get(calls[0]!)! - acceptedAt,
+      };
+    } finally {
+      pump.stop();
+      delivery.close();
+      a.sql.close();
+      b.sql.close();
+    }
+  }
+  const previousLane = await run(2),
+    callLane = await run(3);
+  assert.equal(previousLane.position, 21);
+  assert.equal(callLane.position, 2);
+  assert.equal(callLane.latency, 160);
+  assert.equal(previousLane.latency, 3200);
+  console.log(
+    'CALL_BACKLOG_MODEL',
+    JSON.stringify({ receipts: 20, signedExchangeMs: 160, previousLane, callLane }),
+  );
+});
+
 test('accepting a call during an ongoing bulk upload sends its encrypted control before the remaining batch', async () => {
   const a = device(),
     b = device();

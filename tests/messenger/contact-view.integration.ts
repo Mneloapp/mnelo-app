@@ -79,3 +79,42 @@ test('phonebook names override existing aliases in search, headers, members and 
     await engine.close();
   }
 });
+
+test('legacy shared contact previews and replies resolve a local phone without rewriting stored history', async () => {
+  const { db, sql } = deliveryDatabase();
+  const engine = new DeviceMessenger(db, randomBytes, randomUUID);
+  await engine.initialize();
+  await engine.createIdentity('Development owner');
+  const peer = createKeys(randomBytes).key;
+  const shared = createKeys(randomBytes).key;
+  try {
+    const chat = await engine.trustPhoneContact({
+      key: peer,
+      phone: '+12025550102',
+      name: 'Recipient',
+    });
+    await engine.trustPhoneContact({ key: shared, phone: '+12025550103', name: 'Shared person' });
+    const body = `Legacy name\nmnelo1:${shared}`;
+    const id = await engine.send(chat, body, { kind: 'contact' });
+    const view = new ContactView(engine, new Map([[shared, 'Saved contact']]));
+    assert.equal(
+      (await view.chatPage()).rows.find((row) => row.id === chat)?.preview,
+      'Saved contact\n+12025550103',
+    );
+    assert.equal((await view.replyPreview(chat, id))?.body, 'Saved contact\n+12025550103');
+    assert.equal(sql.prepare('SELECT body FROM messages WHERE id=?').get(id)?.body, body);
+    assert.equal(
+      (await engine.contacts()).find((contact) => contact.key === shared)?.name,
+      'Shared person',
+    );
+    const unknownBody = `Unknown person\nmnelo1:${'f'.repeat(64)}`;
+    const unknown = await engine.send(chat, unknownBody, { kind: 'contact' });
+    assert.equal(
+      (await view.chatPage()).rows.find((row) => row.id === chat)?.preview,
+      'Unknown person',
+    );
+    assert.equal((await view.replyPreview(chat, unknown))?.body, 'Unknown person');
+  } finally {
+    await engine.close();
+  }
+});

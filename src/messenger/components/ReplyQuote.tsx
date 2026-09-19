@@ -31,9 +31,11 @@ export function ReplyQuote({
         ? t('messenger.photo')
         : quote?.kind === 'voice'
           ? t('messenger.voice')
-          : quote?.kind === 'file'
-            ? t('messenger.file')
-            : t('messenger.quoteUnavailable'));
+          : quote?.kind === 'contact'
+            ? t('messenger.contact')
+            : quote?.kind === 'file'
+              ? t('messenger.file')
+              : t('messenger.quoteUnavailable'));
   const content = (
     <View style={styles.quote}>
       <AppText variant="label" numberOfLines={1}>

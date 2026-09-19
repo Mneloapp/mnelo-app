@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AppState, Linking, Platform, View } from 'react-native';
 import {
   useAudioRecorder,
@@ -13,6 +13,7 @@ import { AppText } from '@/components/AppText';
 import { Button, ui } from '@/components/ui';
 import { useAction } from '@/hooks/useAction';
 import { AudioPlayback } from './AudioPlayback';
+import { beginVoiceRecording } from './voice-session';
 import { discardCachedMedia, type SelectedMedia } from './media-files';
 import { VoiceRecordingPanel } from './VoiceRecordingPanel';
 import { MAX_VOICE_SAMPLES, VOICE_METER_INTERVAL, voiceLevel } from './voice-waveform';
@@ -35,6 +36,17 @@ export function VoiceRecorder({
   const [interrupted, setInterrupted] = useState(false);
   const [recordedMillis, setRecordedMillis] = useState(0);
   const lastDuration = useRef(0);
+  const releaseRecording = useRef<(() => void) | null>(null);
+  async function resetRecordingAudio() {
+    const release = releaseRecording.current;
+    releaseRecording.current = null;
+    if (!release) return;
+    try {
+      await setAudioModeAsync({ allowsRecording: false });
+    } finally {
+      release();
+    }
+  }
   const cancelling = useRef(false);
   const mounted = useRef(true);
   const samples = useRef<number[]>([]);
@@ -64,7 +76,7 @@ export function VoiceRecorder({
         onReady(null);
       }
       if (event.isFinished) {
-        void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+        void resetRecordingAudio().catch(() => undefined);
         if (cancelling.current) {
           if (event.url) discardCachedMedia(event.url);
           return;
@@ -99,6 +111,10 @@ export function VoiceRecorder({
   }, [status.isRecording, status.durationMillis, status.metering]);
   const a = useAction();
   const focused = useIsFocused();
+  const latestFocus = useRef(focused);
+  useLayoutEffect(() => {
+    latestFocus.current = focused;
+  }, [focused]);
   useEffect(() => {
     if (status.isRecording && !focused) void recorder.stop().catch(() => setInterrupted(true));
   }, [recorder, status.isRecording, focused]);
@@ -109,7 +125,7 @@ export function VoiceRecorder({
     });
     return () => {
       sub.remove();
-      void setAudioModeAsync({ allowsRecording: false }).catch(() => undefined);
+      void resetRecordingAudio().catch(() => undefined);
     };
   }, [recorder]);
   async function startRecording() {
@@ -128,17 +144,27 @@ export function VoiceRecorder({
     lastSampleTime.current = -1;
     setLevels([]);
     setPreviewWaveform([]);
-    await setAudioModeAsync({
-      allowsRecording: true,
-      playsInSilentMode: true,
-      shouldPlayInBackground: false,
-    });
-    await recorder.prepareToRecordAsync();
-    if (!mounted.current) {
-      await setAudioModeAsync({ allowsRecording: false });
-      return;
+    releaseRecording.current = await beginVoiceRecording();
+    try {
+      if (!mounted.current || !latestFocus.current || AppState.currentState !== 'active') {
+        await resetRecordingAudio();
+        return;
+      }
+      await setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: false,
+      });
+      await recorder.prepareToRecordAsync();
+      if (!mounted.current || !latestFocus.current || AppState.currentState !== 'active') {
+        await resetRecordingAudio();
+        return;
+      }
+      recorder.record({ forDuration: 600 });
+    } catch (error) {
+      await resetRecordingAudio();
+      throw error;
     }
-    recorder.record({ forDuration: 600 });
   }
   const startRef = useRef(startRecording);
   useEffect(() => {
@@ -198,7 +224,7 @@ export function VoiceRecorder({
             setLevels([]);
             setPreviewWaveform([]);
             onReady(null);
-            await setAudioModeAsync({ allowsRecording: false });
+            await resetRecordingAudio();
             onCancel?.();
           })
         }

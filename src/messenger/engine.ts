@@ -1,7 +1,7 @@
 import { wakeCapability } from './wake-protocol';
 import { receiveMessageChange, applyMessageChange, type MessageChange } from './message-change';
 import { isReactionEmoji, quickReactions } from './reaction-emoji';
-import { readRichMedia, voteEmoji } from './rich-message';
+import { readRichMedia, richMime, voteEmoji } from './rich-message';
 import { z } from 'zod';
 import {
   contactSchema,
@@ -34,6 +34,13 @@ import type { DeliveryAtomic } from './delivery/journal';
 import { groupProfile, readGroupProfile, type GroupProfile } from './group-profile';
 import { readPhotoPage, readSharedContent, type ContentTab } from './shared-content';
 import { phonebookBindings, readCachedAliases, type PhonebookCacheScope } from './phonebook-cache';
+import { readExportPage, readExportSnapshot, type ExportCursor } from './chat-export-source';
+import {
+  readMessageInfo,
+  observeMessageDelivery,
+  observeMessageRead,
+  snapshotMessageRecipients,
+} from './message-info';
 
 export type ChatFilter = 'all' | 'unread' | 'direct' | 'group';
 export type ChatCursor = { activity: number; id: string };
@@ -967,9 +974,23 @@ export class DeviceMessenger {
       null
     );
   }
+  async exportSnapshot(chat: string) {
+    await this.tail;
+    this.own();
+    return readExportSnapshot(this.db, chat);
+  }
+  async exportPage(chat: string, through: number, cursor?: ExportCursor) {
+    await this.tail;
+    this.own();
+    return readExportPage(this.db, chat, through, cursor);
+  }
   async sharedContent(chat: string, tab: ContentTab, before = Number.MAX_SAFE_INTEGER) {
     await this.tail;
     return readSharedContent(this.db, chat, tab, before);
+  }
+  async messageInfo(chat: string, id: string) {
+    await this.tail;
+    return readMessageInfo(this.db, this.own().key, chat, id);
   }
   async photoPage(chat: string, cursor: number, direction: 'before' | 'after') {
     await this.tail;
@@ -977,10 +998,31 @@ export class DeviceMessenger {
   }
   async reactions(id: string) {
     await this.tail;
-    return this.db.all<{ peer: string; emoji: string }>(
-      'SELECT peer,emoji FROM reactions WHERE message_id=?',
+    const rows = await this.db.all<{ peer: string; emoji: string }>(
+      'SELECT peer,emoji FROM reactions WHERE message_id=? ORDER BY rowid DESC',
       id,
     );
+    if (rows.length < 2) return rows;
+    const poll = await this.hasPollVotes(id);
+    const seen = new Set<string>();
+    // Older releases allowed several reactions from one person. Keep their
+    // latest visible choice without discarding protocol tombstones or votes.
+    return rows.filter((row) => {
+      if (poll && voteEmoji.some((emoji) => emoji === row.emoji)) return true;
+      if (seen.has(row.peer)) return false;
+      seen.add(row.peer);
+      return true;
+    });
+  }
+  private async hasPollVotes(id: string) {
+    const media = (
+      await this.db.all<Media>(
+        'SELECT f.name,f.mime,f.bytes,f.duration FROM messages m JOIN media f ON f.id=m.media_id WHERE m.id=? AND f.mime=?',
+        id,
+        richMime,
+      )
+    )[0];
+    return readRichMedia(media)?.type === 'poll';
   }
   async replyPreview(chat: string, id: string) {
     await this.tail;
@@ -1044,6 +1086,7 @@ export class DeviceMessenger {
           packet.id,
           peer.public_key,
         );
+      await snapshotMessageRecipients(this.db, 'message', packet.id);
     });
     this.conversationActivity({ type: 'message', chat, outgoing: true });
     this.changed();
@@ -1266,6 +1309,7 @@ export class DeviceMessenger {
           key,
         );
     }
+    await snapshotMessageRecipients(this.db, 'chat', id);
     await this.db.run(
       'DELETE FROM deliveries WHERE message_id IN (SELECT id FROM messages WHERE chat_id=?) AND peer NOT IN (SELECT public_key FROM members WHERE chat_id=?)',
       id,
@@ -1278,6 +1322,7 @@ export class DeviceMessenger {
       if (chat?.kind !== 'group' || chat.owner === this.own().key)
         throw new Error('GROUP_OWNER_REQUIRED');
       await this.db.run('UPDATE chats SET left_group=1 WHERE id=?', id);
+      await snapshotMessageRecipients(this.db, 'chat', id);
       await this.db.run(
         'DELETE FROM deliveries WHERE message_id IN (SELECT id FROM messages WHERE chat_id=?)',
         id,
@@ -1349,23 +1394,27 @@ export class DeviceMessenger {
             if (
               !(
                 await this.db.all(
-                  'SELECT m.id FROM messages m JOIN deliveries d ON d.message_id=m.id WHERE m.id=? AND m.chat_id=? AND m.sender=? AND d.peer=?',
+                  `SELECT m.id FROM messages m WHERE m.id=? AND m.chat_id=? AND m.sender=? AND
+                    (EXISTS(SELECT 1 FROM deliveries d WHERE d.message_id=m.id AND d.peer=?) OR EXISTS(SELECT 1 FROM message_receipt_info r WHERE r.message_id=m.id AND r.peer=?))`,
                   id,
                   packet.chat,
                   own,
+                  peer,
                   peer,
                 )
               ).length
             )
               throw new Error('READ_FORBIDDEN');
           }
-          for (const id of packet.ids)
+          for (const id of packet.ids) {
+            await observeMessageRead(this.db, own, peer, id, this.now());
             await this.db.run(
               'UPDATE deliveries SET acknowledged=1,read_at=COALESCE(read_at,?) WHERE message_id=? AND peer=?',
               this.now(),
               id,
               peer,
             );
+          }
           return;
         }
         if (packet.type === 'read') {
@@ -1378,6 +1427,14 @@ export class DeviceMessenger {
             )
           )[0];
           if (!row) throw new Error('READ_FORBIDDEN');
+          const readMessages = await this.db.all<{ id: string }>(
+            `SELECT id FROM messages WHERE chat_id=? AND sender=? AND sequence${this.deliveryVersion === 2 ? '=' : '<='}?`,
+            packet.chat,
+            own,
+            row.sequence,
+          );
+          for (const message of readMessages)
+            await observeMessageRead(this.db, own, peer, message.id, this.now());
           await this.db.run(
             `UPDATE deliveries SET acknowledged=1,read_at=COALESCE(read_at,?) WHERE peer=? AND message_id IN (SELECT id FROM messages WHERE chat_id=? AND sequence${this.deliveryVersion === 2 ? '=' : '<='}?)`,
             this.now(),
@@ -1388,6 +1445,7 @@ export class DeviceMessenger {
           return;
         }
         if (packet.type === 'ack') {
+          await observeMessageDelivery(this.db, own, peer, packet.id, this.now());
           await this.db.run(
             'UPDATE deliveries SET acknowledged=1 WHERE message_id=? AND peer=?',
             packet.id,
@@ -1644,16 +1702,25 @@ export class DeviceMessenger {
     )[0];
     if (!row) throw new Error('MESSAGE_MISSING');
     await this.transaction(async () => {
-      const current =
-        (
-          await this.db.all(
-            'SELECT emoji FROM reactions WHERE message_id=? AND peer=? AND emoji=?',
-            id,
-            own,
-            emoji,
-          )
-        ).length > 0;
-      await this.writeReaction(id, row.chat_id, own, emoji, !current);
+      const poll = await this.hasPollVotes(id);
+      const isVote = (value: string) => poll && voteEmoji.some((option) => option === value);
+      const existing = await this.db.all<{ emoji: string }>(
+        'SELECT emoji FROM reactions WHERE message_id=? AND peer=? ORDER BY rowid DESC',
+        id,
+        own,
+      );
+      const selected = existing.filter((value) => !isVote(value.emoji));
+      const current = isVote(emoji)
+        ? existing.some((value) => value.emoji === emoji)
+        : selected[0]?.emoji === emoji;
+      if (isVote(emoji)) await this.writeReaction(id, row.chat_id, own, emoji, !current);
+      else {
+        // Explicit per-emoji removals retain wire compatibility and make a
+        // delayed/replayed old add harmless on both old and new recipients.
+        for (const previous of selected)
+          await this.writeReaction(id, row.chat_id, own, previous.emoji, false);
+        if (!current) await this.writeReaction(id, row.chat_id, own, emoji, true);
+      }
       if (!current && isReactionEmoji(emoji)) {
         const previousUse = (
           await this.db.all<{ latest: number }>(
@@ -2078,6 +2145,7 @@ export class DeviceMessenger {
     if (!('contact_numbers' in archive.tables)) archive.tables.contact_numbers = [];
     if (!('message_changes' in archive.tables)) archive.tables.message_changes = [];
     if (!('recent_reactions' in archive.tables)) archive.tables.recent_reactions = [];
+    if (!('message_receipt_info' in archive.tables)) archive.tables.message_receipt_info = [];
     if (
       Object.keys(archive.tables).length !== backupTables.length ||
       backupTables.some((table) => !archive.tables[table])
@@ -2189,6 +2257,7 @@ const backupTables = [
   'media',
   'messages',
   'deliveries',
+  'message_receipt_info',
   'reactions',
   'group_deliveries',
   'forgotten_messages',

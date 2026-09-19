@@ -9,16 +9,19 @@ import { theme } from '@/theme/tokens';
 import { useDevice } from '../DeviceProvider';
 import { safeWebsite, type LocalProfile } from '../local-profile';
 import { avatarUri } from '../profile-avatar';
+import { fallbackAvatarColor } from '../avatar-color';
 import { useLocalAction } from '../screens/shared';
 
 export const PeerAvatar = memo(function PeerAvatar({
   peer,
   name,
   size,
+  colorfulFallback = false,
 }: {
   peer: string;
   name: string;
   size?: 'small' | 'large' | 'call';
+  colorfulFallback?: boolean;
 }) {
   const { engine } = useDevice();
   const query = useQuery({
@@ -27,7 +30,14 @@ export const PeerAvatar = memo(function PeerAvatar({
     networkMode: 'always',
     staleTime: Infinity,
   });
-  return <Avatar name={name} uri={avatarUri(query.data?.avatar ?? '')} size={size ?? 'normal'} />;
+  return (
+    <Avatar
+      name={name}
+      uri={avatarUri(query.data?.avatar ?? '')}
+      size={size ?? 'normal'}
+      fallbackRingColor={colorfulFallback ? fallbackAvatarColor('peer:' + peer) : undefined}
+    />
+  );
 });
 export function ContactCard({
   name,

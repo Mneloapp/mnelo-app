@@ -199,8 +199,10 @@ CREATE TABLE IF NOT EXISTS members (chat_id TEXT NOT NULL REFERENCES chats(id) O
 CREATE TABLE IF NOT EXISTS media (id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, bytes TEXT NOT NULL, duration REAL);
 CREATE TABLE IF NOT EXISTS messages (sequence INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT NOT NULL UNIQUE, chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE, sender TEXT NOT NULL, kind TEXT NOT NULL, body TEXT NOT NULL, sent_at INTEGER NOT NULL, received_at INTEGER NOT NULL, reply_to TEXT, media_id TEXT REFERENCES media(id), is_read INTEGER NOT NULL DEFAULT 0 CHECK(is_read IN (0,1)));
 CREATE INDEX IF NOT EXISTS message_cursor ON messages(chat_id, sequence DESC);
+CREATE INDEX IF NOT EXISTS message_export_cursor ON messages(chat_id, sent_at, sequence);
 CREATE INDEX IF NOT EXISTS call_cursor ON messages(sequence DESC) WHERE kind='call';
 CREATE TABLE IF NOT EXISTS deliveries (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, peer TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN (0,1)), held INTEGER NOT NULL DEFAULT 0 CHECK(held IN (0,1)), read_at INTEGER, PRIMARY KEY(message_id,peer));
+CREATE TABLE IF NOT EXISTS message_receipt_info (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, peer TEXT NOT NULL, acknowledged INTEGER NOT NULL DEFAULT 0 CHECK(acknowledged IN (0,1)), delivered_at INTEGER, read_at INTEGER, PRIMARY KEY(message_id,peer));
 CREATE TABLE IF NOT EXISTS reactions (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE, peer TEXT NOT NULL, emoji TEXT NOT NULL, PRIMARY KEY(message_id,peer,emoji));
 CREATE TABLE IF NOT EXISTS reaction_versions (message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,peer TEXT NOT NULL,emoji TEXT NOT NULL,revision INTEGER NOT NULL,PRIMARY KEY(message_id,peer,emoji));
 CREATE TABLE IF NOT EXISTS group_deliveries (chat_id TEXT NOT NULL REFERENCES chats(id) ON DELETE CASCADE, peer TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(chat_id,peer));

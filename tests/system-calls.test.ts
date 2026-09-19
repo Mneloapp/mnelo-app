@@ -127,6 +127,40 @@ beforeEach(() => {
     .mockResolvedValue({ type: 'ios', data: 'b'.repeat(64) });
 });
 
+test('native hangup is delivered while an answered video call still waits for capture', async () => {
+  const initialState = AppState.currentState;
+  AppState.currentState = 'active';
+  const f = fixture();
+  let finishCapture!: () => void;
+  const capture = new Promise<void>((resolve) => (finishCapture = resolve));
+  f.calls.accept.mockImplementationOnce(async () => {
+    f.update('connecting', 'video');
+    await capture;
+  });
+  try {
+    f.update('incoming', 'video');
+    await tick();
+    native.drain.mockResolvedValueOnce([{ type: 'answer', id }]);
+    native.changed();
+    await tick();
+    expect(f.calls.accept).toHaveBeenCalledTimes(1);
+    native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'local' }]);
+    native.changed();
+    await tick();
+    expect(f.calls.endFromSystem).toHaveBeenCalledWith(id, 'local', false);
+    expect(native.acknowledgeEnd).toHaveBeenCalledWith(id, 'a'.repeat(64));
+    expect(f.calls.snapshot()?.status).toBe('ended');
+    finishCapture();
+    await tick();
+    expect(f.calls.accept).toHaveBeenCalledTimes(1);
+    expect(native.connected).not.toHaveBeenCalled();
+  } finally {
+    finishCapture();
+    f.stop();
+    AppState.currentState = initialState;
+  }
+});
+
 test('APNs echoes on token reads stop after registration, while a rotated token registers once', async () => {
   let token = { type: 'ios', data: 'b'.repeat(64) };
   notifications.getDevicePushTokenAsync.mockImplementation(async () => {

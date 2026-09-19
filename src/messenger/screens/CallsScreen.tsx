@@ -14,6 +14,7 @@ import { useDevice } from '../DeviceProvider';
 import { useVisibleRead } from '../useVisibleRead';
 import { CallHistoryRow } from '../components/CallHistoryRow';
 import { HistoryLoading } from '../components/HistoryLoading';
+import { fallbackAvatarColor } from '../avatar-color';
 import { CallActions, CurrentCall, type CallTarget } from './CallActions';
 
 export function CallsScreen() {
@@ -82,9 +83,13 @@ export function CallsScreen() {
             call={item}
             avatar={
               item.group ? (
-                <Avatar name={item.name} group />
+                <Avatar
+                  name={item.name}
+                  group
+                  fallbackRingColor={fallbackAvatarColor('group:' + item.chatId)}
+                />
               ) : (
-                <PeerAvatar peer={item.peer} name={item.name} />
+                <PeerAvatar peer={item.peer} name={item.name} colorfulFallback />
               )
             }
             onPress={() => {

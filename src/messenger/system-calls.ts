@@ -18,3 +18,4 @@ export async function prepareSystemCallAudio(_speaker: boolean) {
   return false;
 }
 export async function cacheSystemCallContact(_peer: string, _name: string, _phone = '') {}
+export async function clearSystemCallAccount() {}

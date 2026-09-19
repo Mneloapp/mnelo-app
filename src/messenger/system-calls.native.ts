@@ -262,7 +262,11 @@ export function observeSystemCalls(
       // stays queued until the user opens/unlocks the app; voice can start there.
       if (call.media === 'video' && AppState.currentState !== 'active') return;
       answers.delete(call.id);
-      await calls.accept();
+      // Acceptance changes the call state synchronously, then waits for native
+      // capture and negotiation. Keep draining CallKit while that work runs so
+      // a hangup, mute or audio-route event never waits for a slow camera.
+      void calls.accept().catch(() => undefined);
+      return;
     }
     if (
       call.incoming &&
@@ -414,4 +418,8 @@ export async function prepareSystemCallAudio(speaker: boolean) {
   if (Platform.OS !== 'ios' || !native?.prepareCallAudio) return false;
   await native.prepareCallAudio(speaker);
   return true;
+}
+
+export async function clearSystemCallAccount() {
+  await native?.configureAccount?.('');
 }

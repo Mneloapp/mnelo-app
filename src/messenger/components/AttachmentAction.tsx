@@ -27,7 +27,7 @@ export function AttachmentAction({
       style={styles.action}
     >
       <View style={styles.icon}>
-        <AppIcon name={icon} color={color} />
+        <AppIcon name={icon} color={color} size={30} />
       </View>
       <AppText
         variant="caption"
@@ -47,14 +47,14 @@ const styles = StyleSheet.create({
     height: '50%',
     paddingHorizontal: 4,
     paddingVertical: 2,
-    gap: 4,
+    gap: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
   label: { alignSelf: 'stretch', minHeight: 32, fontSize: 12, lineHeight: 16 },
   icon: {
-    width: 40,
-    height: 40,
+    width: 54,
+    height: 54,
     borderRadius: theme.radii.pill,
     backgroundColor: theme.colors.surface,
     alignItems: 'center',

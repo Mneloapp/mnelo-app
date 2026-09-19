@@ -15,6 +15,7 @@ import type { ContactInvitation } from '../contact-link';
 import { SheetAction } from '@/components/SheetAction';
 import { PhonebookAccess } from '../components/PhonebookAccess';
 import { SavePhoneContact } from '../components/SavePhoneContact';
+import { ExportChatAction } from '../components/ExportChatAction';
 import {
   ContactHero,
   ContactAction,
@@ -209,6 +210,7 @@ export function ContactProfileScreen() {
               </AppText>
             )}
           </InfoGroup>
+          {chatId && <ExportChatAction chatId={chatId} />}
           <ChatPrivacyActions
             busy={action.busy || !chatId}
             blocked={contact.blocked}

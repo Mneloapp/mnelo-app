@@ -43,7 +43,7 @@ export function ChatPhoto({
   error: string | null;
   square?: boolean;
   source?: PhotoSource;
-  size?: { width: number; height: number };
+  size?: { width: number | '100%'; height: number | '100%' };
   onDimensions?: (size: { width: number; height: number }) => void;
   overlay?: ReactNode;
   accessibilityLabel?: string | undefined;

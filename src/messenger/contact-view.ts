@@ -1,5 +1,6 @@
 import type { DeviceMessenger, ChatCursor, ChatFilter } from './engine';
 import type { Chat } from './model';
+import { sharedContactText } from './contact-share';
 
 // Read-only presentation. Address-book aliases never enter protocol packets,
 // profile updates, group membership data or the persistent contact identity.
@@ -28,7 +29,19 @@ export class ContactView {
   }
   async chatPage(filter: ChatFilter = 'all', search = '', before?: ChatCursor) {
     const names = await this.displayNames();
-    return this.engine.chatPage(filter, search, before, (chat) => this.title(chat, names));
+    const page = await this.engine.chatPage(filter, search, before, (chat) =>
+      this.title(chat, names),
+    );
+    if (!page.rows.some((chat) => chat.previewKind === 'contact')) return page;
+    const contacts = await this.contacts();
+    return {
+      ...page,
+      rows: page.rows.map((chat) =>
+        chat.previewKind === 'contact'
+          ? { ...chat, preview: sharedContactText(chat.preview, contacts) }
+          : chat,
+      ),
+    };
   }
   async chats() {
     return (await this.chatPage()).rows;
@@ -49,7 +62,14 @@ export class ContactView {
       this.engine.replyPreview(chat, id),
       this.displayNames(),
     ]);
-    return preview ? { ...preview, name: names.get(preview.sender) ?? preview.name } : null;
+    if (!preview) return null;
+    return {
+      ...preview,
+      name: names.get(preview.sender) ?? preview.name,
+      ...(preview.kind === 'contact'
+        ? { body: sharedContactText(preview.body, await this.contacts()) }
+        : {}),
+    };
   }
   async callHistory(before?: number) {
     const [calls, names] = await Promise.all([
@@ -60,5 +80,20 @@ export class ContactView {
       ...c,
       name: c.group ? c.name : (names.get(c.peer) ?? c.name),
     }));
+  }
+  async messageInfo(chat: string, id: string) {
+    const [info, names] = await Promise.all([
+      this.engine.messageInfo(chat, id),
+      this.displayNames(),
+    ]);
+    return info
+      ? {
+          ...info,
+          recipients: info.recipients.map((recipient) => ({
+            ...recipient,
+            name: names.get(recipient.peer) ?? recipient.name,
+          })),
+        }
+      : null;
   }
 }

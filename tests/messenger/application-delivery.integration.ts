@@ -232,7 +232,11 @@ test('real app histories receive first-contact text and media with sender offlin
     const ringing = (await appB.journal.pending()).find(
       (row) => JSON.parse(row.body).packet.id === callId,
     );
-    assert.equal(ringing?.priority, 2, 'ringing confirmation bypasses ordinary uploads');
+    assert.equal(
+      ringing?.priority,
+      3,
+      'ringing confirmation bypasses receipts and ordinary uploads',
+    );
     appB.pump.start();
     await appB.pump.tick();
     await appA.pump.tick();

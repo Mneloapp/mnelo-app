@@ -20,6 +20,10 @@ export function mediaErrorMessage(cause: unknown) {
     MEDIA_PICKER_FAILED: 'mediaPickerFailed',
     MEDIA_READ_FAILED: 'mediaReadFailed',
     CAMERA_PERMISSION_REQUIRED: 'cameraPermission',
+    CONTACT_PHONE_UNAVAILABLE: 'contactPhoneUnavailable',
+    EXPORT_TOO_LARGE: 'exportTooLarge',
+    EXPORT_UNAVAILABLE: 'exportUnavailable',
+    EXPORT_CHANGED: 'exportChanged',
   } as const;
   return { key: keys[code as keyof typeof keys] ?? ('genericError' as const), values: {} };
 }

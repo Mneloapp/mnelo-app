@@ -17,7 +17,7 @@ module.exports = function withSourceExpoCamera(config) {
     // pinned source declaration in each extension target for clean prebuilds.
     const libSignalPod =
       "  pod 'LibSignalClient', :git => 'https://github.com/signalapp/libsignal.git', :tag => 'v0.102.2'";
-    for (const targetName of ['MneloNotifications', 'expo-sharing-extension']) {
+    for (const targetName of ['MneloIntents', 'MneloNotifications', 'expo-sharing-extension']) {
       const marker = `# @mnelo-extension-libsignal-${targetName}`;
       if (!mod.modResults.contents.includes(marker)) {
         const targetHeader = `target '${targetName}' do\n`;
@@ -34,11 +34,11 @@ module.exports = function withSourceExpoCamera(config) {
     const marker = '# @mnelo-source-expo-camera-nonmodular';
     if (!mod.modResults.contents.includes(marker)) {
       mod.modResults.contents = mod.modResults.contents.replace(
-        /post_install do \|installer\|\n([\s\S]*?)\n  end\nend\n\ntarget 'MneloNotifications'/,
+        /post_install do \|installer\|\n([\s\S]*?)\n  end\nend\n\ntarget 'Mnelo(?:Intents|Notifications)'/,
         (block) =>
           block.replace(
-            /\n  end\nend\n\ntarget 'MneloNotifications'/,
-            `\n    ${marker}\n    installer.pods_project.targets.each do |target|\n      target.build_configurations.each do |build_config|\n        build_config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\n      end\n    end\n  end\nend\n\ntarget 'MneloNotifications'`,
+            /\n  end\nend\n\n(target 'Mnelo(?:Intents|Notifications)')/,
+            `\n    ${marker}\n    installer.pods_project.targets.each do |target|\n      target.build_configurations.each do |build_config|\n        build_config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'\n      end\n    end\n  end\nend\n\n$1`,
           ),
       );
     }

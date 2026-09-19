@@ -1,5 +1,5 @@
 import { formatTime, formatDate } from '@/i18n/format';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
   Keyboard,
@@ -9,7 +9,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -52,11 +52,15 @@ import { ChatVideo } from '../components/ChatVideo';
 import { mediaPreviewSize, visualMediaKind, type MediaDimensions } from '../media-preview';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationMessage } from '../components/LocationMessage';
+import { LocationComposer } from '../components/LocationComposer';
+import { choosePlace, coordinateBody, nativePlacePickerAvailable } from '../location-picker';
 import { ReplyQuote } from '../components/ReplyQuote';
 import { createMenuGesture, menuTouchPoint, type MenuTouch, type MenuPoint } from '../menu-gesture';
 import { MessageActions, type MessageAnchor } from '../components/MessageActions';
 import { PhotoAlbum } from '../components/PhotoAlbum';
 import { photoAlbums, timelineContains } from '../photo-albums';
+import { forwardSharedContact, presentSharedContact } from '../contact-share';
+import { ContactShareChoices } from '../components/ContactShareChoices';
 
 function MessageMedia({
   message,
@@ -159,6 +163,7 @@ export function ChatMessageBubble({
   message,
   onSelect,
   onReply,
+  onInfo,
   onQuote,
   highlighted = false,
   menuOpen,
@@ -166,6 +171,7 @@ export function ChatMessageBubble({
   message: LocalMessage;
   onSelect: (anchor?: MessageAnchor) => void;
   onReply: () => void;
+  onInfo?: (() => void) | undefined;
   onQuote?: (id: string) => void;
   highlighted?: boolean;
   menuOpen: boolean;
@@ -199,7 +205,10 @@ export function ChatMessageBubble({
     bubble.measureInWindow((x, y, width, height) => onSelect({ x, y, width, height }));
   }
   return (
-    <MessageTimeReveal onReply={menuOpen ? undefined : onReply}>
+    <MessageTimeReveal
+      onReply={menuOpen ? undefined : onReply}
+      onInfo={menuOpen ? undefined : onInfo}
+    >
       <MessageBubble
         own={own}
         highlighted={highlighted}
@@ -207,7 +216,7 @@ export function ChatMessageBubble({
         bubbleRef={bubbleRef}
         onLongPress={select}
         accessibilityLabel={
-          (message.body || t('common.more')) +
+          (message.body || t(message.kind === 'contact' ? 'messenger.contact' : 'common.more')) +
           '. ' +
           formatTime(new Date(message.sentAt).toISOString()) +
           (own ? '. ' + t(`messenger.${message.status}`) : '')
@@ -236,7 +245,8 @@ export function ChatMessageBubble({
             />
           </View>
         )}
-        {!visual && ((message.body.length > 0 && !card) || message.replyTo) ? (
+        {!visual &&
+        (((message.body.length > 0 || message.kind === 'contact') && !card) || message.replyTo) ? (
           <View style={styles.messageBody}>
             {message.replyTo && (
               <ReplyQuote
@@ -245,7 +255,11 @@ export function ChatMessageBubble({
                 onPress={onQuote ? () => onQuote(message.replyTo!) : undefined}
               />
             )}
-            {message.body.length > 0 && !card && <AppText>{message.body}</AppText>}
+            {!card && (
+              <AppText>
+                {message.body || (message.kind === 'contact' ? t('messenger.contact') : '')}
+              </AppText>
+            )}
           </View>
         ) : null}
         {card ? (
@@ -279,6 +293,22 @@ export function ChatScreen() {
   const reduceMotion = useReducedMotion();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { engine, identity, mesh, calls, deliveryState, view } = useDevice();
+  // Permission sheets/native map searches may outlive their originating chat.
+  // Never commit their result after navigation, account change or unmount.
+  const locationOrigin = useRef<object | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      const origin = { engine, chat: id };
+      locationOrigin.current = origin;
+      return () => {
+        if (locationOrigin.current === origin) locationOrigin.current = null;
+      };
+    }, [engine, id]),
+  );
+  function showMessageInfo(message: LocalMessage) {
+    Keyboard.dismiss();
+    router.push({ pathname: '/message-info/[id]', params: { id: message.id, chat: id } });
+  }
   const { t } = useTranslation();
   const action = useLocalAction();
   const [forward, setForward] = useState<LocalMessage | null>(null);
@@ -317,6 +347,7 @@ export function ChatScreen() {
     networkMode: 'always',
   });
   const [cardComposer, setCardComposer] = useState<'poll' | 'event' | null>(null);
+  const [locationComposer, setLocationComposer] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voice, setVoice] = useState<SelectedMedia | null>(null);
   const chat = useQuery({
@@ -336,7 +367,9 @@ export function ChatScreen() {
     getNextPageParam: (page) => (page.length === 40 ? page.at(-1)?.sequence : undefined),
     networkMode: 'always',
   });
-  const rows = messages.data?.pages.flat() ?? [];
+  const rows = (messages.data?.pages.flat() ?? []).map((message) =>
+    presentSharedContact(message, contacts.data ?? []),
+  );
   const timeline = photoAlbums(rows);
   const { listRef, sent: didSend } = useSentMessageScroll(id, rows);
   const quoteScroll = useQuotedMessageScroll(
@@ -569,6 +602,7 @@ export function ChatScreen() {
               ) : item.photos ? (
                 <PhotoAlbum
                   photos={item.photos}
+                  onInfo={item.sender === identity?.key ? showMessageInfo : undefined}
                   highlighted={timelineContains(item, quoteScroll.highlighted)}
                   menuOpen={Boolean(selected)}
                   onSelect={(message, anchor) => {
@@ -589,6 +623,7 @@ export function ChatScreen() {
               ) : (
                 <ChatMessageBubble
                   message={item}
+                  onInfo={item.sender === identity?.key ? () => showMessageInfo(item) : undefined}
                   highlighted={quoteScroll.highlighted === item.id}
                   onQuote={(id) => {
                     Keyboard.dismiss();
@@ -774,11 +809,21 @@ export function ChatScreen() {
                       const media = forward.attachment
                         ? await engine.media(forward.attachment)
                         : null;
-                      await engine.send(chat.id, forward.body, {
-                        kind: forward.kind as
-                          'text' | 'file' | 'image' | 'voice' | 'location' | 'contact',
-                        ...(media ? { media } : {}),
-                      });
+                      await engine.send(
+                        chat.id,
+                        forward.kind === 'contact'
+                          ? forwardSharedContact(
+                              rows.find((message) => message.id === forward.id)?.body ??
+                                forward.body,
+                              contacts.data ?? [],
+                            )
+                          : forward.body,
+                        {
+                          kind: forward.kind as
+                            'text' | 'file' | 'image' | 'voice' | 'location' | 'contact',
+                          ...(media ? { media } : {}),
+                        },
+                      );
                       setForward(null);
                     })
                   }
@@ -790,24 +835,16 @@ export function ChatScreen() {
             title={t('messenger.contact')}
             onClose={() => setContactPicker(false)}
           >
-            {contacts.data
-              ?.filter((contact) => !contact.blocked)
-              .map((contact) => (
-                <Button
-                  key={contact.key}
-                  variant="secondary"
-                  label={contact.name}
-                  busy={action.busy}
-                  onPress={() =>
-                    void action.run(async () => {
-                      await sendCurrent(contact.name + '\nmnelo1:' + contact.key, {
-                        kind: 'contact',
-                      });
-                      setContactPicker(false);
-                    })
-                  }
-                />
-              ))}
+            <ContactShareChoices
+              contacts={contacts.data ?? []}
+              busy={action.busy}
+              onShare={(body) =>
+                void action.run(async () => {
+                  await sendCurrent(body, { kind: 'contact' });
+                  setContactPicker(false);
+                })
+              }
+            />
           </ActionSheet>
           <View
             testID="chat-input-dock"
@@ -842,19 +879,30 @@ export function ChatScreen() {
                     color="#008B68"
                     label={t('messenger.attachmentLocation')}
                     busy={action.busy}
-                    onPress={() =>
+                    onPress={() => {
+                      attachmentPanel.close();
+                      if (!nativePlacePickerAvailable()) {
+                        setLocationComposer(true);
+                        return;
+                      }
                       void action.run(async () => {
-                        const permission = await Location.requestForegroundPermissionsAsync();
-                        if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
-                        const point = await Location.getCurrentPositionAsync({
-                          accuracy: Location.Accuracy.Balanced,
+                        const origin = locationOrigin.current;
+                        const point = await choosePlace({
+                          title: t('messenger.attachmentLocation'),
+                          cancel: t('common.cancel'),
+                          send: t('common.send'),
+                          search: t('messenger.locationSearch'),
+                          map: t('messenger.locationMap'),
+                          hint: t('messenger.locationHint'),
+                          selected: t('messenger.locationSelected'),
+                          searching: t('messenger.locationSearching'),
+                          noResults: t('messenger.locationNoResults'),
+                          choose: t('messenger.locationChoose'),
                         });
-                        await sendCurrent(`${point.coords.latitude},${point.coords.longitude}`, {
-                          kind: 'location',
-                        });
-                        attachmentPanel.close();
-                      })
-                    }
+                        if (point && origin && origin === locationOrigin.current)
+                          await sendCurrent(coordinateBody(point), { kind: 'location' });
+                      });
+                    }}
                   />
                   <AttachmentAction
                     icon="user"
@@ -892,10 +940,43 @@ export function ChatScreen() {
                       setCardComposer('event');
                     }}
                   />
+                  <AttachmentAction
+                    icon="navigation"
+                    color="#008B68"
+                    label={t('messenger.attachmentMyLocation')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => {
+                        const origin = locationOrigin.current;
+                        const permission = await Location.requestForegroundPermissionsAsync();
+                        if (!origin || origin !== locationOrigin.current) return;
+                        if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
+                        const point = await Location.getCurrentPositionAsync({
+                          accuracy: Location.Accuracy.Balanced,
+                        });
+                        if (origin !== locationOrigin.current) return;
+                        await sendCurrent(coordinateBody(point.coords), { kind: 'location' });
+                        attachmentPanel.close();
+                      })
+                    }
+                  />
                 </View>
               </View>
             )}
           </View>
+          {locationComposer && (
+            <LocationComposer
+              close={() => setLocationComposer(false)}
+              busy={action.busy}
+              error={action.error}
+              send={(body) =>
+                void action.run(async () => {
+                  await sendCurrent(body, { kind: 'location' });
+                  setLocationComposer(false);
+                })
+              }
+            />
+          )}
           {cardComposer && (
             <RichCardComposer
               kind={cardComposer}
@@ -920,6 +1001,11 @@ export function ChatScreen() {
           reduceMotion={reduceMotion}
           message={selected}
           own={selected.sender === identity?.key}
+          showInfo={
+            selected.sender === identity?.key && selected.kind !== 'call'
+              ? () => showMessageInfo(selected)
+              : undefined
+          }
           anchor={selectedAnchor}
           busy={action.busy}
           close={() => {

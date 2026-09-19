@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -15,14 +15,12 @@ import type { MessageAnchor } from './MessageActions';
 
 function AlbumPhoto({
   message,
-  width,
-  height,
+  wide,
   remaining,
   onSelect,
 }: {
   message: LocalMessage;
-  width: number;
-  height: number;
+  wide: boolean;
   remaining: number;
   onSelect: (message: LocalMessage, anchor?: MessageAnchor) => void;
 }) {
@@ -40,7 +38,7 @@ function AlbumPhoto({
     networkMode: 'always',
   });
   return (
-    <View ref={ref} collapsable={false} style={{ width, height }}>
+    <View ref={ref} collapsable={false} style={[styles.cell, wide && styles.wideCell]}>
       {media.data ? (
         <ChatPhoto
           uri={`data:${media.data.mime};base64,${media.data.bytes}`}
@@ -52,7 +50,7 @@ function AlbumPhoto({
             sentAt: message.sentAt,
             attachment: message.attachment!,
           }}
-          size={{ width, height }}
+          size={{ width: '100%', height: '100%' }}
           busy={false}
           error={null}
           share={() => {}}
@@ -95,21 +93,31 @@ export function PhotoAlbum({
   menuOpen,
   onSelect,
   onReply,
+  onInfo,
 }: {
   photos: LocalMessage[];
   highlighted: boolean;
   menuOpen: boolean;
   onSelect: (message: LocalMessage, anchor?: MessageAnchor) => void;
   onReply: (message: LocalMessage) => void;
+  onInfo?: ((message: LocalMessage) => void) | undefined;
 }) {
   const { identity } = useDevice();
   const { width: viewport } = useWindowDimensions();
   const width = Math.min(340, (viewport - 32) * 0.86);
-  const [measuredWidth, setMeasuredWidth] = useState(width);
-  const cell = Math.max(0, (measuredWidth - 2) / 2);
+  const visible = photos.slice(0, 4);
+  // Explicit rows let Yoga divide the available width. Wrapping two measured
+  // half-widths can put every tile on its own row after pixel rounding on iOS.
+  const rows =
+    visible.length === 3
+      ? [visible.slice(0, 1), visible.slice(1)]
+      : [visible.slice(0, 2), visible.slice(2)].filter((row) => row.length);
   const latest = photos[photos.length - 1]!;
   return (
-    <MessageTimeReveal onReply={menuOpen ? undefined : () => onReply(latest)}>
+    <MessageTimeReveal
+      onReply={menuOpen ? undefined : () => onReply(latest)}
+      onInfo={!menuOpen && onInfo ? () => onInfo(latest) : undefined}
+    >
       <MessageBubble
         own={latest.sender === identity?.key}
         media
@@ -120,20 +128,19 @@ export function PhotoAlbum({
         highlighted={highlighted}
         containerStyle={{ width }}
       >
-        <View
-          style={styles.grid}
-          testID="photo-album"
-          onLayout={(event) => setMeasuredWidth(event.nativeEvent.layout.width)}
-        >
-          {photos.slice(0, 4).map((message, index) => (
-            <AlbumPhoto
-              key={message.id}
-              message={message}
-              width={photos.length === 3 && index === 0 ? measuredWidth : cell}
-              height={cell}
-              remaining={index === 3 && photos.length > 4 ? photos.length - 3 : 0}
-              onSelect={onSelect}
-            />
+        <View style={styles.grid} testID="photo-album">
+          {rows.map((row) => (
+            <View key={row[0]!.id} style={styles.gridRow}>
+              {row.map((message) => (
+                <AlbumPhoto
+                  key={message.id}
+                  message={message}
+                  wide={row.length === 1}
+                  remaining={message === visible[3] && photos.length > 4 ? photos.length - 3 : 0}
+                  onSelect={onSelect}
+                />
+              ))}
+            </View>
           ))}
         </View>
       </MessageBubble>
@@ -141,7 +148,10 @@ export function PhotoAlbum({
   );
 }
 const styles = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2 },
+  grid: { gap: 2 },
+  gridRow: { flexDirection: 'row', gap: 2 },
+  cell: { flex: 1, minWidth: 0, aspectRatio: 1, overflow: 'hidden' },
+  wideCell: { aspectRatio: 2 },
   more: {
     position: 'absolute',
     top: 0,

@@ -1,0 +1,46 @@
+--- a/VideoCaptureController.m
++++ b/VideoCaptureController.m
+@@ -161,6 +161,34 @@
+ - (void)applyConstraints:(NSDictionary *)constraints error:(NSError **)outError {
+     BOOL hasChanged = NO;
+ 
++    // Mnelo: applyConstraints must honor a camera change without replacing the
++    // media track. Resolve first so an unavailable camera leaves capture intact.
++    NSString *deviceId = constraints[@"deviceId"];
++    NSString *facingMode = constraints[@"facingMode"];
++    AVCaptureDevice *requestedDevice = nil;
++    BOOL requestedCamera = NO;
++    if ([deviceId isKindOfClass:[NSString class]] && deviceId.length > 0) {
++        requestedCamera = YES;
++        requestedDevice = [AVCaptureDevice deviceWithUniqueID:deviceId];
++    } else if ([facingMode isKindOfClass:[NSString class]] &&
++               ([facingMode isEqualToString:@"user"] || [facingMode isEqualToString:@"environment"])) {
++        requestedCamera = YES;
++        AVCaptureDevicePosition position = [facingMode isEqualToString:@"user"]
++            ? AVCaptureDevicePositionFront : AVCaptureDevicePositionBack;
++        requestedDevice = [self findDeviceForPosition:position];
++        if (requestedDevice.position != position) requestedDevice = nil;
++    }
++    if (requestedCamera && !requestedDevice) {
++        if (outError) *outError = [NSError errorWithDomain:@"VideoCaptureController" code:1
++            userInfo:@{NSLocalizedDescriptionKey: @"Requested camera is unavailable"}];
++        return;
++    }
++    if (requestedDevice && ![self.deviceId isEqualToString:requestedDevice.uniqueID]) {
++        self.deviceId = requestedDevice.uniqueID;
++        self.usingFrontCamera = requestedDevice.position == AVCaptureDevicePositionFront;
++        hasChanged = YES;
++    }
++
+     int width = [constraints[@"width"] intValue];
+     int height = [constraints[@"height"] intValue];
+     int frameRate = [constraints[@"frameRate"] intValue];
+@@ -193,7 +221,7 @@
+         @"groupId" : @"",
+         @"height" : @(dimensions.height),
+         @"width" : @(dimensions.width),
+-        @"frameRate" : @(30),
++        @"frameRate" : @(self.frameRate),
+         @"facingMode" : self.usingFrontCamera ? @"user" : @"environment"
+     }];
+ 

@@ -46,6 +46,7 @@ export function MessageActions({
   quickEmojis = quickReactions,
   edit,
   removeEverywhere,
+  showInfo,
 }: {
   message: LocalMessage;
   inline?: boolean;
@@ -64,6 +65,7 @@ export function MessageActions({
   quickEmojis?: readonly string[] | undefined;
   edit?: () => void;
   removeEverywhere?: () => void;
+  showInfo?: (() => void) | undefined;
 }) {
   const { t } = useTranslation();
   const { height, width } = useWindowDimensions();
@@ -172,7 +174,8 @@ export function MessageActions({
         dismiss(copy);
         break;
       case 'info':
-        setInfo((value) => !value);
+        if (showInfo) dismiss(showInfo);
+        else setInfo((value) => !value);
         break;
       case 'edit-2':
         dismiss(edit);
@@ -257,16 +260,19 @@ export function MessageActions({
           ]}
         />
         <Pressable
+          testID="message-actions-backdrop"
           style={StyleSheet.absoluteFill}
           accessibilityRole="button"
           accessibilityLabel={t('compose.close')}
           onPress={() => dismiss()}
         />
         <KeyboardAvoidingView
+          pointerEvents="box-none"
           style={[styles.position, { top: insets.top + top, maxHeight: available - top + 12 }]}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <Animated.View
+            pointerEvents="box-none"
             style={{
               opacity: contentHeight ? 1 : 0,
               transform: [{ translateY: translation }],
@@ -282,6 +288,12 @@ export function MessageActions({
               showsVerticalScrollIndicator={false}
               onContentSizeChange={(_, size) => setContentHeight(size)}
             >
+              <Pressable
+                testID="message-actions-content-backdrop"
+                style={StyleSheet.absoluteFill}
+                accessible={false}
+                onPress={() => dismiss()}
+              />
               {!call && !deleted && !picker && (
                 <Animated.View
                   style={[
@@ -335,7 +347,7 @@ export function MessageActions({
               )}
               {!picker && (
                 <View
-                  pointerEvents="none"
+                  pointerEvents="box-only"
                   style={[
                     styles.preview,
                     { width: Math.min(anchor?.width ?? width - 32, width - 32) },

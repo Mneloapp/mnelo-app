@@ -360,11 +360,13 @@ export function Avatar({
   uri,
   group = false,
   size = 'normal',
+  fallbackRingColor,
 }: {
   name: string;
   group?: boolean;
   uri?: string | undefined;
   size?: 'small' | 'normal' | 'large' | 'profile' | 'call';
+  fallbackRingColor?: string | undefined;
 }) {
   const dark = useCallAppearance();
   return (
@@ -378,6 +380,7 @@ export function Avatar({
         size === 'profile' && ui.avatarProfile,
         size === 'call' && ui.avatarCall,
         dark && ui.callSurface,
+        !uri && fallbackRingColor && { borderWidth: 3, borderColor: fallbackRingColor },
       ]}
     >
       {uri ? (

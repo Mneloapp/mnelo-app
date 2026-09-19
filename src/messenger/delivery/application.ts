@@ -110,7 +110,7 @@ export class ApplicationDelivery {
     this.pump = new DeliveryPump(
       client,
       this.journal,
-      (sender, body, context) => this.receive(sender, body, context),
+      (sender, body, context, yieldToCalls) => this.receive(sender, body, context, yieldToCalls),
       changed,
       now,
       {
@@ -141,15 +141,15 @@ export class ApplicationDelivery {
               await engine.profileShared(peer, shares.revision);
           }
         },
-        beforeSend: async (peer, body) => {
+        beforeSend: async (peer, body, yieldToCalls) => {
           if (!(await engine.acceptsPeer(peer))) return false;
           const value = content.parse(JSON.parse(body));
           return value.attachment
-            ? this.transfer.uploadStep(value.attachment.descriptor.blob.id)
+            ? this.transfer.uploadStep(value.attachment.descriptor.blob.id, yieldToCalls)
             : true;
         },
-        afterCycle: async () => {
-          if (!outgoingOnly) await this.transfer.acknowledge();
+        afterCycle: async (yieldToCalls) => {
+          if (!outgoingOnly) await this.transfer.acknowledge(yieldToCalls);
           await this.media.prune();
         },
       },
@@ -265,18 +265,23 @@ export class ApplicationDelivery {
         : packet.type === 'call' && packet.action === 'invite'
           ? { kind: 'call', id: packet.id, video: packet.media === 'video' }
           : undefined,
-      urgent
-        ? 2
+      urgent || packet.type === 'call' || packet.type === 'call-signal'
+        ? 3
         : packet.type === 'message'
           ? 0
-          : ['call', 'call-signal', 'ack', 'group_ack', 'read', 'read_ids'].includes(packet.type)
+          : ['ack', 'group_ack', 'read', 'read_ids'].includes(packet.type)
             ? 2
             : 1,
     );
     if (wake) this.pump.wake();
     return true;
   }
-  async receive(sender: string, body: string, context: { id: string; createdAt: number }) {
+  async receive(
+    sender: string,
+    body: string,
+    context: { id: string; createdAt: number },
+    yieldToCalls?: () => Promise<void>,
+  ) {
     const value = content.parse(JSON.parse(body));
     const contacts = await this.engine.contacts();
     const known = contacts.find((contact) => contact.key === sender);
@@ -312,7 +317,7 @@ export class ApplicationDelivery {
       if (descriptor.owner !== sender) throw new Error('MEDIA_UNAUTHORIZED');
       await this.media.beginDownload(descriptor);
       if (!(await this.engine.hasReceivedMessage(sender, packet.id))) {
-        if (!(await this.transfer.downloadStep(sender, descriptor))) return false;
+        if (!(await this.transfer.downloadStep(sender, descriptor, yieldToCalls))) return false;
         const bytes = await this.media.plaintext(sender, descriptor.blob.id);
         packet = { ...packet, media: { ...metadata, bytes: bytesToBase64(bytes) } };
       }

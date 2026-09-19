@@ -4,6 +4,8 @@ import Security
 
 final class ShareRuntime {
   private let queue = DispatchQueue(label: "com.mnelo.share.engine")
+  private let cancellation = NSLock()
+  private var closing = false
   private var context: JSContext?
   private var database: ShareDatabase?
   private var items: [ShareAttachment] = []
@@ -12,12 +14,23 @@ final class ShareRuntime {
   private var requests: [Int: ShareNetwork] = [:]
   private var sequence = 0
   private var stopped = false
-  func open(items: [ShareAttachment], bundle: String = "MneloShare", operation: String = "open", argument: String = "", completion: @escaping (Result<Any, Error>) -> Void) {
+  private var isClosing: Bool {
+    cancellation.lock(); defer { cancellation.unlock() }
+    return closing
+  }
+  func open(items: [ShareAttachment], bundle: String = "MneloShare", operation: String = "open", argument: String = "", databaseBusyTimeout: Int32 = 10000, completion: @escaping (Result<Any, Error>) -> Void) {
     queue.async {
       do {
-        guard !self.stopped else { return }
+        self.cancellation.lock(); let closing = self.closing; self.cancellation.unlock()
+        guard !closing, !self.stopped else { throw shareError("SHARE_CANCELLED") }
         self.items = items
-        self.database = try ShareDatabase()
+        let database = try ShareDatabase(busyTimeout: databaseBusyTimeout, cancellationCheck: { [weak self] in self?.isClosing ?? true })
+        self.cancellation.lock()
+        if self.closing {
+          self.cancellation.unlock(); database.close(); throw shareError("SHARE_CANCELLED")
+        }
+        self.database = database
+        self.cancellation.unlock()
         guard let context = JSContext(), let url = Bundle.main.url(forResource: bundle, withExtension: "js") else { throw shareError("SHARE_FAILED") }
         self.context = context
         let bridge: @convention(block) (String, String) -> String = { [weak self] operation, text in
@@ -85,13 +98,21 @@ final class ShareRuntime {
     context.objectForKeyedSubscript("MneloShare")?.call(withArguments: [id, operation, argument])
     if context.exception != nil { pending.removeValue(forKey: id); context.exception = nil; DispatchQueue.main.async { completion(.failure(shareError("SHARE_FAILED"))) } }
   }
-  func close() {
+  func close(completion: (() -> Void)? = nil) {
+    cancellation.lock()
+    closing = true
+    database?.interrupt()
+    cancellation.unlock()
     queue.async {
       self.stopped = true
       self.timers.values.forEach { $0.cancel() }; self.timers.removeAll()
       self.requests.values.forEach { $0.cancel() }; self.requests.removeAll()
-      self.pending.removeAll(); self.database?.close(); self.database = nil
+      self.pending.removeAll()
+      self.cancellation.lock()
+      self.database?.close(); self.database = nil
+      self.cancellation.unlock()
       self.context = nil; self.items.removeAll()
+      if let completion { DispatchQueue.main.async(execute: completion) }
     }
   }
   private func native(_ operation: String, _ text: String) throws -> Any {
@@ -103,7 +124,9 @@ final class ShareRuntime {
       if operation == "exec" { try database.exec(sql); return NSNull() }
       let rows = try database.all(sql, fields["params"] as? [Any] ?? [])
       return operation == "all" ? shareJSON(rows) : NSNull()
-    case "close": database?.close(); database = nil; return NSNull()
+    case "close":
+      cancellation.lock(); database?.close(); database = nil; cancellation.unlock()
+      return NSNull()
     case "language": return Locale.preferredLanguages.first ?? "en"
     case "count": return items.count
     case "item":

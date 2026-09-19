@@ -172,7 +172,8 @@
     "identity:sms:twilio": "tsx scripts/phone-identity.ts --twilio",
     "test:device": "tsx --test tests/messenger/*.integration.ts",
     "hosting:build": "node scripts/build-hosting.mjs",
-    "hosting:check:relay": "tsx scripts/check-hosted-relay.ts"
+    "hosting:check:relay": "tsx scripts/check-hosted-relay.ts",
+    "postinstall": "node scripts/patch-native-webrtc.cjs"
   },
   "private": true,
   "engines": {

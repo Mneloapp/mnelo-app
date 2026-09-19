@@ -21,6 +21,7 @@ def verify(app, build, distribution):
         app / 'PlugIns/expo-sharing-extension.appex': 'com.mnelo.messenger.share',
         app / 'PlugIns/MneloNotifications.appex': 'com.mnelo.messenger.notifications',
         app / 'PlugIns/MneloBroadcast.appex': 'com.mnelo.messenger.broadcast',
+        app / 'PlugIns/MneloIntents.appex': 'com.mnelo.messenger.intents',
     }
     run('codesign', '--verify', '--deep', '--strict', str(app))
     # A transitive vendor framework can load the unavailable test runtime even
@@ -51,10 +52,20 @@ def verify(app, build, distribution):
             assert 'CS6GJ2BMS9.com.mnelo.messenger.shared' in entitlements['keychain-access-groups']
         if identifier == 'com.mnelo.messenger':
             assert 'CS6GJ2BMS9.com.mnelo.messenger' in entitlements['keychain-access-groups']
+            assert entitlements.get('com.apple.developer.siri') is True, 'SIRI_CAPABILITY_MISSING'
+            assert info.get('NSSiriUsageDescription'), 'SIRI_PURPOSE_MISSING'
             if distribution:
                 assert entitlements['aps-environment'] == 'production'
         elif not identifier.endswith('.broadcast'):
             assert info['MneloDeliveryOrigin'] == 'https://identity-dev.mnelo.com'
+        if identifier.endswith('.intents'):
+            extension = info['NSExtension']
+            assert extension['NSExtensionPointIdentifier'] == 'com.apple.intents-service'
+            assert extension['NSExtensionPrincipalClass'].endswith('.MessageIntentHandler')
+            attributes = extension['NSExtensionAttributes']
+            assert attributes['IntentsSupported'] == ['INSendMessageIntent']
+            assert attributes['IntentsRestrictedWhileLocked'] == []
+            assert attributes['IntentsRestrictedWhileProtectedDataUnavailable'] == ['INSendMessageIntent']
 
     endpoints = [b'https://identity-dev.mnelo.com', b'wss://relay-dev.mnelo.com/']
     main = (app / 'main.jsbundle').read_bytes()
@@ -64,6 +75,7 @@ def verify(app, build, distribution):
     for relative in [
         'PlugIns/expo-sharing-extension.appex/MneloShare.js',
         'PlugIns/MneloNotifications.appex/MneloNotification.js',
+        'PlugIns/MneloIntents.appex/MneloIntents.js',
     ]:
         assert endpoints[0] in (app / relative).read_bytes(), 'EXTENSION_SERVICE_ENDPOINT_MISSING'
     run('node', 'scripts/check-ios-permissions.mjs', str(app))

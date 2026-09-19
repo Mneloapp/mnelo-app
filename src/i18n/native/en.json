@@ -8,7 +8,8 @@
     "NSContactsUsageDescription": "Use the names saved in your Contacts and save people you add. Your address book is not uploaded.",
     "NSLocationWhenInUseUsageDescription": "Share your current location with this conversation only when you choose.",
     "NSCalendarsUsageDescription": "Add a Mnelo chat event to your calendar only when you choose to save it. Mnelo does not read your existing events.",
-    "NSMotionUsageDescription": "Mnelo does not use motion or fitness data. You can deny this permission and continue using all messaging and calling features."
+    "NSMotionUsageDescription": "Mnelo does not use motion or fitness data. You can deny this permission and continue using all messaging and calling features.",
+    "NSSiriUsageDescription": "Use Siri and iPhone reply controls to send the message you choose to a recent Mnelo caller. Your address book and message history are not shared with Siri."
   },
   "android": {
     "app_name": "Mnelo"

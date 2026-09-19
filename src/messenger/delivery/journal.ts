@@ -18,7 +18,7 @@ import {
 import type { SignalProvider, SignalState } from './signal';
 
 export type DeliveryAtomic = <T>(operation: (db: LocalDatabase) => Promise<T>) => Promise<T>;
-type Outgoing = {
+export type Outgoing = {
   sequence: number;
   id: string;
   peer: string;
@@ -258,7 +258,7 @@ export class SignalJournal {
       createdAt,
       body,
       notify ? JSON.stringify(wakeEvent.parse(notify)) : null,
-      Math.max(0, Math.min(2, Math.trunc(priority))),
+      Math.max(0, Math.min(3, Math.trunc(priority))),
     );
     return id;
   }
@@ -274,17 +274,18 @@ export class SignalJournal {
       ),
     );
   }
-  async readyOutgoing(tokens?: readonly string[], minPriority = 0) {
+  async readyOutgoing(tokens?: readonly string[], minPriority = 0, maxPriority = 3) {
     if (tokens?.length === 0) return [];
     return this.atomic((db) =>
       db.all<Outgoing>(
         `SELECT o.rowid AS sequence,o.* FROM signal_outbox o
         LEFT JOIN signal_retries r ON r.phase='send' AND r.peer=o.peer AND r.id=o.id
-        WHERE o.uploaded=0 AND (r.next_at IS NULL OR r.next_at<=?) AND o.priority>=?
+        WHERE o.uploaded=0 AND (r.next_at IS NULL OR r.next_at<=?) AND o.priority>=? AND o.priority<=?
         ${tokens ? `AND o.token IN (${tokens.map(() => '?').join(',')})` : ''}
         ORDER BY o.priority DESC,(o.created_at>=?) DESC,o.rowid LIMIT 5`,
         this.now(),
         minPriority,
+        maxPriority,
         ...(tokens ?? []),
         this.now() - 120000,
       ),

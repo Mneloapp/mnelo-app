@@ -46,8 +46,12 @@ open class MneloNotificationService: UNNotificationServiceExtension {
     guard let handler, let content else { return }
     self.handler = nil
     deadline?.cancel(); deadline = nil
-    runtime?.close(); runtime = nil
-    handler(content)
+    let active = runtime
+    runtime = nil
     self.content = nil
+    // Release the encrypted connection before the system may suspend this
+    // extension. The actual close runs off the main queue and completes once.
+    if let active { active.close { handler(content) } }
+    else { handler(content) }
   }
 }

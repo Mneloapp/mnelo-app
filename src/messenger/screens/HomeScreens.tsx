@@ -3,6 +3,7 @@ import { FlatList, View } from 'react-native';
 import type { Chat } from '../model';
 import { readGroupProfile } from '../group-profile';
 import { avatarUri } from '../profile-avatar';
+import { fallbackAvatarColor } from '../avatar-color';
 import { theme } from '@/theme/tokens';
 import { router } from 'expo-router';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -98,13 +99,18 @@ export function ChatsScreen() {
                 ? t('messenger.deletedMessage')
                 : item.previewKind === 'call'
                   ? t(callOutcomeCopy[readCallRecord(item.preview).status])
-                  : item.preview
+                  : item.preview || (item.previewKind === 'contact' ? t('messenger.contact') : '')
             }
             avatar={
               item.kind === 'direct' && item.peer ? (
-                <PeerAvatar peer={item.peer} name={item.title} />
+                <PeerAvatar peer={item.peer} name={item.title} colorfulFallback />
               ) : (
-                <Avatar name={item.title} uri={avatarUri(readGroupProfile(item).avatar)} />
+                <Avatar
+                  name={item.title}
+                  group
+                  uri={avatarUri(readGroupProfile(item).avatar)}
+                  fallbackRingColor={fallbackAvatarColor('group:' + item.id)}
+                />
               )
             }
             onPress={() => router.push({ pathname: '/chat/[id]', params: { id: item.id } })}

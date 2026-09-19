@@ -89,6 +89,39 @@ test('More reactions supports both a larger grid and a joined emoji from the key
   await finishDismiss();
   expect(actions.react).toHaveBeenCalledWith('👩🏽‍💻');
 });
+test('message info dismisses the menu before opening the receipt page', async () => {
+  const info = jest.fn();
+  await render(<MessageActions message={message} own {...actions} showInfo={info} />);
+  await measureActions();
+  await fireEvent.press(screen.getByRole('button', { name: 'Message info' }));
+  await finishDismiss();
+  expect(actions.close).toHaveBeenCalledTimes(1);
+  expect(info).toHaveBeenCalledTimes(1);
+});
+test.each(['message-actions-backdrop', 'message-actions-content-backdrop'])(
+  'tapping blank space through %s dismisses once without a message action',
+  async (backdrop) => {
+    await render(<MessageActions message={message} {...actions} />);
+    await measureActions();
+    await fireEvent.press(screen.getByTestId(backdrop));
+    await finishDismiss();
+    expect(actions.close).toHaveBeenCalledTimes(1);
+    for (const action of ['reply', 'forward', 'copy', 'remove', 'react', 'retry'] as const)
+      expect(actions[action]).not.toHaveBeenCalled();
+  },
+);
+test('the selected preview shields its bounds while reactions still perform their own action', async () => {
+  await render(<MessageActions message={message} {...actions} />);
+  await measureActions();
+  const preview = screen.getByTestId('selected-message-preview');
+  expect(preview.props.pointerEvents).toBe('box-only');
+  await fireEvent.press(preview);
+  expect(actions.close).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: 'React with ❤️' }));
+  await finishDismiss();
+  expect(actions.close).toHaveBeenCalledTimes(1);
+  expect(actions.react).toHaveBeenCalledWith('❤️');
+});
 test.each(['🇬🇪', '👩🏽‍💻', '1️⃣', '👍🏿', '❤️', '🫶', '🏳️‍🌈'])('supports emoji sequence %s', (value) =>
   expect(isReactionEmoji(value)).toBe(true),
 );

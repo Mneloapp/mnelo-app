@@ -7,9 +7,13 @@ import {
 } from '@livekit/react-native-webrtc';
 import { AudioSession } from '@livekit/react-native';
 import { prepareNativeWebRTC } from './native-webrtc';
+import { connectionTiming } from './connection-timing';
 export async function captureCall(video: boolean, group = false): Promise<MediaStream> {
   prepareNativeWebRTC();
+  const audioStarted = Date.now();
   const prepared = await prepareSystemCallAudio(video || group);
+  connectionTiming('CAPTURE_AUDIO_READY', Date.now() - audioStarted);
+  const captureStarted = Date.now();
   const stream = await mediaDevices.getUserMedia({
     audio: true,
     video: video
@@ -21,6 +25,7 @@ export async function captureCall(video: boolean, group = false): Promise<MediaS
         }
       : false,
   });
+  connectionTiming('CAPTURE_STREAM_READY', Date.now() - captureStarted);
   if (!stream.getAudioTracks().length || (video && !stream.getVideoTracks().length)) {
     stream.getTracks().forEach((track) => track.stop());
     throw new Error('CALL_PERMISSION_REQUIRED');
@@ -61,8 +66,14 @@ export async function speakerOutput(enabled: boolean) {
 export async function switchCallCamera(stream: MediaStream) {
   const native = stream as unknown as NativeStream;
   const track = native.getVideoTracks()[0];
-  if (!track) throw new Error('CAMERA_UNAVAILABLE');
-  await track._switchCamera();
+  if (!track || track.remote || track.readyState !== 'live') throw new Error('CAMERA_UNAVAILABLE');
+  const current = track.getSettings();
+  const facingMode = current.facingMode === 'environment' ? 'user' : 'environment';
+  const constraints = { ...track.getConstraints(), facingMode };
+  // An old deviceId would take precedence over the requested facingMode.
+  delete constraints.deviceId;
+  await track.applyConstraints(constraints);
+  if (track.getSettings().facingMode !== facingMode) throw new Error('CAMERA_UNAVAILABLE');
 }
 
 export function callOutputStream(local: MediaStream, screen: MediaStream): MediaStream {

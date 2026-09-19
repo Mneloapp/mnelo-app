@@ -14,6 +14,8 @@ import { usePhoneService } from './phone-shared';
 import { AppText } from '@/components/AppText';
 import { usePreferences } from '@/stores/preferences';
 import { useDevice } from '../DeviceProvider';
+import { clearSystemCallAccount } from '../system-calls';
+import { cleanupChatExports } from '../chat-export-cache';
 import { bytesToHex, openArchive, sealArchive } from '../crypto';
 import { Check, useLocalAction } from './shared';
 import { discardCachedMedia } from '@/features/chats/media-files';
@@ -153,6 +155,8 @@ export function AccountScreen() {
                 }
               }
               await engine.eraseLocalData();
+              cleanupChatExports();
+              await clearSystemCallAccount().catch(() => undefined);
               router.replace('/');
             })
           }

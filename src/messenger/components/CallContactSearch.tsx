@@ -11,6 +11,7 @@ import { observePhonebook } from '../phonebook-events';
 import { usePhoneService, usePhoneAction } from '../screens/phone-shared';
 import { CallActions, type CallTarget } from '../screens/CallActions';
 import { PeerAvatar } from './ContactCard';
+import { fallbackAvatarColor } from '../avatar-color';
 import type { Contact } from '../model';
 
 export function CallContactSearch({
@@ -137,9 +138,12 @@ export function CallContactSearch({
             subtitle={item.phone}
             left={
               item.saved ? (
-                <PeerAvatar peer={item.key} name={item.name} />
+                <PeerAvatar peer={item.key} name={item.name} colorfulFallback />
               ) : (
-                <Avatar name={item.name} />
+                <Avatar
+                  name={item.name}
+                  fallbackRingColor={fallbackAvatarColor('peer:' + item.key)}
+                />
               )
             }
             right={

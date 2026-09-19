@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, act, waitFor } from '@testing-library/react-native';
 import { ContactInvitationScreen } from '@/messenger/screens/ContactProfileScreen';
 import { setInvitation } from '@/messenger/pending-invitation';
+jest.mock('@/messenger/export-chat', () => ({ exportChat: jest.fn(async () => {}) }));
 const mockTrust = jest.fn(async () => 'chat');
 jest.mock('@/messenger/crypto', () => ({ directChatId: () => 'direct-chat' }));
 const mockContacts = jest.fn(async () => []);

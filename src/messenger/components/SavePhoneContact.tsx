@@ -21,16 +21,28 @@ export function SavePhoneContact({
   const { t } = useTranslation();
   const access = usePhonebookAccess();
   const action = usePhoneAction();
-  const [saved, setSaved] = useState(false);
+  // Unknown is not proof that the person is missing from Contacts. Keep only
+  // this optional action hidden while permission and the local scan settle.
+  const [checked, setChecked] = useState<{
+    phone: string;
+    ownNumber: string | undefined;
+    access: typeof access;
+    saved: boolean;
+  } | null>(null);
   useEffect(() => {
     let alive = true;
     let generation = 0;
     const refresh = () => {
       const requested = ++generation;
+      setChecked(null);
+      if (access !== 'available' && access !== 'limited') return;
       void hasPhoneContact(phone, ownNumber)
-        .catch(() => false)
         .then((exists) => {
-          if (alive && requested === generation) setSaved(exists);
+          if (alive && requested === generation)
+            setChecked({ phone, ownNumber, access, saved: exists });
+        })
+        .catch(() => {
+          // A failed scan must not advertise a duplicate-save action.
         });
     };
     refresh();
@@ -44,7 +56,14 @@ export function SavePhoneContact({
       foreground.remove();
     };
   }, [phone, ownNumber, access]);
-  if (access === 'unavailable' || saved) return null;
+  if (
+    !checked ||
+    checked.phone !== phone ||
+    checked.ownNumber !== ownNumber ||
+    checked.access !== access ||
+    checked.saved
+  )
+    return null;
   return (
     <InfoGroup>
       <SheetAction
@@ -53,7 +72,8 @@ export function SavePhoneContact({
         disabled={action.busy}
         onPress={() =>
           void action.run(async () => {
-            setSaved(await addPhoneContact(phone, name, ownNumber));
+            const saved = await addPhoneContact(phone, name, ownNumber);
+            setChecked({ phone, ownNumber, access, saved });
           })
         }
       />

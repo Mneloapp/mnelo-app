@@ -7,6 +7,7 @@ import { AppText } from '@/components/AppText';
 import { useDevice } from '../DeviceProvider';
 import { Check, useLocalAction } from './shared';
 import { ChatPrivacyActions } from '../components/ContactInfo';
+import { ExportChatAction } from '../components/ExportChatAction';
 import { GroupProfileFields } from '../components/GroupProfileFields';
 import { groupProfile, readGroupProfile, type GroupProfile } from '../group-profile';
 import { avatarUri } from '../profile-avatar';
@@ -115,6 +116,7 @@ export function GroupScreen() {
           )}
         </>
       )}
+      {group.data?.kind === 'group' && <ExportChatAction chatId={id} />}
       <ChatPrivacyActions
         busy={action.busy}
         onClear={() => void action.run(() => engine.clearLocalHistory(id))}

@@ -2,24 +2,68 @@ import Foundation
 
 final class ShareDatabase {
   private var handle: OpaquePointer?
+  private let cancellation = NSLock()
+  private var interrupted = false
+  private let busyAttempts: Int32
+  private let cancellationCheck: () -> Bool
   private let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-  init() throws {
+  init(busyTimeout: Int32 = 10000, cancellationCheck: @escaping () -> Bool = { false }) throws {
+    busyAttempts = min(max(busyTimeout, 0), 10000) / 10
+    self.cancellationCheck = cancellationCheck
     let path = try MneloSharedVault.folder().appendingPathComponent("history-v1.db")
     guard FileManager.default.fileExists(atPath: path.path),
       exsqlite3_open_v2(path.path, &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_NOFOLLOW, nil) == SQLITE_OK else { close(); throw shareError("SHARE_OPEN_MNELO_FIRST") }
     do {
       let key = try MneloSharedVault.key()
-      try exec("PRAGMA key = \"x'\(key)'\"; PRAGMA cipher_memory_security = ON; PRAGMA busy_timeout = 10000;")
+      try exec("PRAGMA key = \"x'\(key)'\"; PRAGMA cipher_memory_security = ON;")
+      installCancellation()
       guard !(try all("PRAGMA cipher_version", [])).isEmpty else { throw shareError("SQLCIPHER_REQUIRED") }
       _ = try all("SELECT count(*) FROM sqlite_master", [])
     } catch { close(); throw shareError("SHARE_OPEN_MNELO_FIRST") }
   }
-  func close() { if let handle { exsqlite3_close_v2(handle) }; handle = nil }
+  // The extension must release its original SQLite connection before telling
+  // Siri/its host it has finished. Interrupt may be called from the deadline
+  // queue while a native statement is executing; close itself stays serialized.
+  func interrupt() {
+    cancellation.lock(); defer { cancellation.unlock() }
+    interrupted = true
+    if let handle { exsqlite3_interrupt(handle) }
+  }
+  func close() {
+    cancellation.lock(); defer { cancellation.unlock() }
+    interrupted = true
+    if let handle { exsqlite3_close_v2(handle) }; handle = nil
+  }
+  private func requireActive() throws {
+    if isInterrupted { throw shareError("SHARE_CANCELLED") }
+  }
+  private var isInterrupted: Bool {
+    cancellation.lock(); let local = interrupted; cancellation.unlock()
+    return local || cancellationCheck()
+  }
+  private func installCancellation() {
+    let context = Unmanaged.passUnretained(self).toOpaque()
+    exsqlite3_busy_handler(handle, { context, attempt in
+      guard let context else { return 0 }
+      let database = Unmanaged<ShareDatabase>.fromOpaque(context).takeUnretainedValue()
+      if database.isInterrupted || attempt >= database.busyAttempts { return 0 }
+      // sqlite3_interrupt alone does not stop the default busy timeout. Keep
+      // the ordinary contention budget, but observe host expiration promptly.
+      Thread.sleep(forTimeInterval: 0.01)
+      return database.isInterrupted ? 0 : 1
+    }, context)
+    exsqlite3_progress_handler(handle, 1000, { context in
+      guard let context else { return 1 }
+      return Unmanaged<ShareDatabase>.fromOpaque(context).takeUnretainedValue().isInterrupted ? 1 : 0
+    }, context)
+  }
   deinit { close() }
   func exec(_ sql: String) throws {
+    try requireActive()
     guard let handle, exsqlite3_exec(handle, sql, nil, nil, nil) == SQLITE_OK else { throw shareError("SHARE_DATABASE_BUSY") }
   }
   func all(_ sql: String, _ parameters: [Any]) throws -> [[String: Any]] {
+    try requireActive()
     var statement: OpaquePointer?
     guard let handle, exsqlite3_prepare_v2(handle, sql, -1, &statement, nil) == SQLITE_OK, let statement else { throw shareError("SHARE_DATABASE_BUSY") }
     defer { exsqlite3_finalize(statement) }

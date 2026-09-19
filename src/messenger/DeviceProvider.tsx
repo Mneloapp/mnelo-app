@@ -15,6 +15,7 @@ import { Page, StateView } from '@/components/ui';
 import { WelcomeScreen } from '@/components/WelcomeScreen';
 import { theme } from '@/theme/tokens';
 import { ContactView } from './contact-view';
+import { cleanupChatExports } from './chat-export-cache';
 import { usePhonebookNames } from './usePhonebookNames';
 import { DeviceMessenger } from './engine';
 import { PeerMesh } from './peer-mesh';
@@ -75,6 +76,7 @@ export function DeviceProvider({ children }: PropsWithChildren) {
     deviceEngineRecoverySnapshot,
   );
   useEffect(() => {
+    cleanupChatExports();
     const timer = setTimeout(() => setWelcomeFinished(true), theme.motion.welcomeMinimumMs);
     return () => clearTimeout(timer);
   }, []);

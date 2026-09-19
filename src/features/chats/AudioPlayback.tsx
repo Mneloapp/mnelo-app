@@ -1,5 +1,5 @@
 import { useAction } from '@/hooks/useAction';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { AppState, View, StyleSheet } from 'react-native';
 import { useIsFocused } from 'expo-router';
@@ -9,6 +9,11 @@ import { AppText } from '@/components/AppText';
 import { theme } from '@/theme/tokens';
 import { VoiceWaveform } from './VoiceWaveform';
 import { voiceTime } from './voice-waveform';
+import {
+  beginVoicePlayback,
+  voicePlaybackKeepsSessionActive,
+  type VoicePlaybackLease,
+} from './voice-playback';
 export function AudioPlayback({
   uri,
   resolveUri,
@@ -24,7 +29,15 @@ export function AudioPlayback({
 }) {
   const { t } = useTranslation();
   // Mounting a voice bubble must not download its recording. Resolve private access on Play.
-  const player = useAudioPlayer(null);
+  const player = useAudioPlayer(null, { keepAudioSessionActive: voicePlaybackKeepsSessionActive });
+  const lease = useRef<VoicePlaybackLease | null>(null);
+  const pausePlayer = useCallback(() => {
+    try {
+      player.pause();
+    } catch {
+      /* The native shared player may already be released on unmount. */
+    }
+  }, [player]);
   const action = useAction();
   const active = useRef(false);
   const status = useAudioPlayerStatus(player);
@@ -32,17 +45,29 @@ export function AudioPlayback({
   const duration = status.duration || durationSeconds;
   const progress = duration > 0 ? Math.min(1, Math.max(0, status.currentTime / duration)) : 0;
   useEffect(() => {
+    const stop = () => {
+      pausePlayer();
+      lease.current?.stop();
+      lease.current = null;
+    };
     active.current = focused && !disabled && AppState.currentState === 'active';
-    if (!active.current) player.pause();
+    if (!active.current) stop();
     const sub = AppState.addEventListener('change', (s) => {
       active.current = focused && !disabled && s === 'active';
-      if (!active.current) player.pause();
+      if (!active.current) stop();
     });
     return () => {
       active.current = false;
+      stop();
       sub.remove();
     };
-  }, [player, focused, disabled]);
+  }, [pausePlayer, focused, disabled]);
+  useEffect(() => {
+    if (status.didJustFinish) {
+      lease.current?.stop();
+      lease.current = null;
+    }
+  }, [status.didJustFinish]);
   return (
     <View style={ui.stack}>
       <View style={[styles.player, waveform && styles.compact]}>
@@ -55,7 +80,9 @@ export function AudioPlayback({
           onPress={() =>
             void action.run(async () => {
               if (status.playing) {
-                player.pause();
+                pausePlayer();
+                lease.current?.stop();
+                lease.current = null;
                 return;
               }
               if (!player.isLoaded) {
@@ -69,7 +96,20 @@ export function AudioPlayback({
                 (status.duration > 0 && status.currentTime >= status.duration)
               )
                 await player.seekTo(0);
-              if (active.current) player.play();
+              if (!active.current) return;
+              const route = await beginVoicePlayback(pausePlayer);
+              if (!active.current || !route.active()) {
+                route.stop();
+                return;
+              }
+              lease.current = route;
+              try {
+                player.play();
+              } catch (error) {
+                route.stop();
+                lease.current = null;
+                throw error;
+              }
             })
           }
         />

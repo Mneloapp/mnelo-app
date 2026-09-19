@@ -1,5 +1,5 @@
 import type { PhoneClient } from '../phone-client';
-import type { SignalJournal, RetryCode } from './journal';
+import type { SignalJournal, RetryCode, Outgoing } from './journal';
 import {
   deliveryResponse,
   type DeliveryCommand,
@@ -13,11 +13,12 @@ type Receiver = (
   sender: string,
   body: string,
   context: { id: string; createdAt: number },
+  yieldToCalls: () => Promise<void>,
 ) => Promise<{ receipt?: { id: string; body: string } } | false>;
 export type DeliveryHooks = {
   beforeCycle?: () => Promise<void>;
-  beforeSend?: (peer: string, body: string) => Promise<boolean>;
-  afterCycle?: () => Promise<void>;
+  beforeSend?: (peer: string, body: string, yieldToCalls: () => Promise<void>) => Promise<boolean>;
+  afterCycle?: (yieldToCalls: () => Promise<void>) => Promise<void>;
   outgoingOnly?: boolean;
   outgoingTokens?: () => Promise<readonly string[]>;
 };
@@ -42,6 +43,8 @@ export class DeliveryPump {
   private serverHasMore = false;
   private serverCursor: { acceptedAt: number; sender: string; id: string } | undefined;
   private projectCursor: { createdAt: number; sender: string; id: string } | undefined;
+  private uploadedThisCycle = new Set<string>();
+  private callBurst = 0;
   constructor(
     private readonly client: Pick<PhoneClient, 'execute'>,
     private readonly journal: SignalJournal,
@@ -160,6 +163,8 @@ export class DeliveryPump {
     }
   }
   private async cycle() {
+    this.uploadedThisCycle.clear();
+    this.callBurst = 0;
     if (!this.initialized) {
       try {
         const status = await this.command({
@@ -199,13 +204,14 @@ export class DeliveryPump {
     await this.journal.prune();
     await this.sendOutgoing(tokens);
     this.issue ??= await this.journal.outgoingIssue(tokens);
-    await this.hooks.afterCycle?.();
+    await this.hooks.afterCycle?.(() => this.sendOutgoing(tokens, 3));
     if (this.bufferedInbox.length) this.wakePending = true;
   }
   private async sendOutgoing(tokens?: readonly string[], minPriority = 0) {
     const outgoing = await this.journal.readyOutgoing(tokens, minPriority);
     for (const row of outgoing) {
       if (this.stopped) return;
+      if (this.uploadedThisCycle.has(row.id)) continue;
       // A remote delivery hint interrupts the bulk snapshot at a safe boundary.
       // The next serial cycle fetches it before any more ordinary uploads.
       if (
@@ -215,44 +221,59 @@ export class DeliveryPump {
         !this.hooks.outgoingOnly
       )
         return;
-      // Calls can arrive after readyOutgoing took its snapshot. Preempt between
-      // bulk sends instead of waiting for the entire paced upload batch.
+      // Recheck between receipts too: an answer/SDP may have been enqueued while
+      // the preceding receipt's HTTP request was in flight.
+      if (minPriority < 3 && row.priority < 3) await this.sendOutgoing(tokens, 3);
       if (minPriority < 2 && row.priority < 2) await this.sendOutgoing(tokens, 2);
-      const urgent = row.priority >= 2;
-      const retry = await this.journal.retry('send', row.peer, row.id);
-      if (retry && retry.next_at > this.now()) {
-        this.issue = retry.code;
-        continue;
+      if (this.uploadedThisCycle.has(row.id)) continue;
+      // A candidate burst cannot starve delivery/read acknowledgements. Keep
+      // one ready receipt moving per four successfully uploaded call events.
+      if (row.priority === 3 && this.callBurst >= 4) {
+        const receipt = (await this.journal.readyOutgoing(tokens, 2, 2))[0];
+        if (receipt) await this.sendOne(receipt, tokens);
+        this.callBurst = 0;
       }
-      try {
-        await this.pin(row.peer, urgent);
-        if (this.hooks.beforeSend && !(await this.hooks.beforeSend(row.peer, row.body))) continue;
-        const needBundle = await this.journal.needsBundle(row.peer);
-        const leased = needBundle
-          ? (
-              await this.command(
-                { action: 'delivery-keys', peer: row.peer, request: row.id },
-                urgent,
-              )
-            ).keys
-          : undefined;
-        if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
-        if (leased) {
-          const { oneTime: _oneTime, ...identity } = leased.bundle;
-          await this.journal.pin({ ...identity, owner: row.peer, signature: leased.signature });
-        }
-        const envelope = await this.journal.seal(row.id, leased?.bundle);
-        if (this.stopped) return;
-        const { accepted } = this.syncSupported
-          ? await this.sync(envelope, urgent)
-          : await this.command({ action: 'delivery-submit', envelope }, urgent);
-        if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
-        await this.journal.uploaded(row.id);
-        await this.journal.recovered('send', row.peer, row.id);
-      } catch (error) {
-        this.issue = this.failureCode(error);
-        await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
+      await this.sendOne(row, tokens);
+    }
+  }
+  private async sendOne(row: Outgoing, tokens?: readonly string[]) {
+    if (this.stopped || this.uploadedThisCycle.has(row.id)) return;
+    const urgent = row.priority >= 2;
+    const retry = await this.journal.retry('send', row.peer, row.id);
+    if (retry && retry.next_at > this.now()) {
+      this.issue = retry.code;
+      return;
+    }
+    try {
+      await this.pin(row.peer, urgent);
+      if (
+        this.hooks.beforeSend &&
+        !(await this.hooks.beforeSend(row.peer, row.body, () => this.sendOutgoing(tokens, 3)))
+      )
+        return;
+      const needBundle = await this.journal.needsBundle(row.peer);
+      const leased = needBundle
+        ? (await this.command({ action: 'delivery-keys', peer: row.peer, request: row.id }, urgent))
+            .keys
+        : undefined;
+      if (needBundle && !leased) throw new Error('DELIVERY_PEER_NOT_READY');
+      if (leased) {
+        const { oneTime: _oneTime, ...identity } = leased.bundle;
+        await this.journal.pin({ ...identity, owner: row.peer, signature: leased.signature });
       }
+      const envelope = await this.journal.seal(row.id, leased?.bundle);
+      if (this.stopped) return;
+      const { accepted } = this.syncSupported
+        ? await this.sync(envelope, urgent)
+        : await this.command({ action: 'delivery-submit', envelope }, urgent);
+      if (!accepted) throw new Error('DELIVERY_RESPONSE_INVALID');
+      await this.journal.uploaded(row.id);
+      this.uploadedThisCycle.add(row.id);
+      this.callBurst = row.priority === 3 ? this.callBurst + 1 : 0;
+      await this.journal.recovered('send', row.peer, row.id);
+    } catch (error) {
+      this.issue = this.failureCode(error);
+      await this.journal.failed('send', row.peer, row.id, row.created_at, this.issue);
     }
   }
   private async sync(envelope?: DeliveryEnvelope, urgent = false) {
@@ -373,10 +394,15 @@ export class DeliveryPump {
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
         try {
-          const accepted = await this.receive(row.sender, row.body, {
-            id: row.id,
-            createdAt: row.created_at,
-          });
+          const accepted = await this.receive(
+            row.sender,
+            row.body,
+            {
+              id: row.id,
+              createdAt: row.created_at,
+            },
+            () => this.sendOutgoing(undefined, 3),
+          );
           if (accepted !== false && !this.stopped) {
             await this.journal.applied(row.sender, row.id, accepted.receipt);
             await this.journal.recovered('project', row.sender, row.id);

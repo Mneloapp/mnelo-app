@@ -1255,3 +1255,13 @@ a new engine generation. Native SQLCipher probes and scoped regressions pass;
 full release checks and physical acceptance are tracked in [BUILD_45](BUILD_45.md).
 The release also uses native foreground message banners, lightens the background,
 clears stale missing-quote notices and includes build 44's warm contact-name cache.
+
+Build 45 is now **Testing** with Mnelo Development and Mnelo Preview. The saved
+notes request native decline, immediate repeat call, answer/media/speaker and
+notification navigation testing. Automatic tester notification is enabled. Full
+source checks pass 808 cases plus seven native SQLCipher probes; exact-source
+CI `35459561203` passes. Archive/distribution verification passes, with one
+packaged scanner false positive independently resolved through AST/source review.
+The backend code-only update is healthy with four identities preserved. Apple
+build ID is `954cb5fe-1e7d-48e3-a81d-64b153526265`; physical acceptance is still
+pending. Source, IPA hashes and evidence are recorded in [BUILD_45](BUILD_45.md).

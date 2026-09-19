@@ -72,8 +72,11 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
   let losePut = true,
     loseAck = true,
     puts = 0;
+  const uploadOrder: string[] = [],
+    downloadOrder: string[] = [];
   const flakyUpload: Pick<PhoneClient, 'execute'> = {
     async execute(command) {
+      uploadOrder.push(command.action);
       const result = await ac.execute(command);
       if (command.action === 'delivery-blob-put') {
         puts++;
@@ -87,6 +90,7 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
   };
   const flakyDownload: Pick<PhoneClient, 'execute'> = {
     async execute(command) {
+      downloadOrder.push(command.action);
       const result = await bc.execute(command);
       if (command.action === 'delivery-blob-ack' && loseAck) {
         loseAck = false;
@@ -116,13 +120,42 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
     );
     const upload = new MediaTransfer(flakyUpload, aj);
     await assert.rejects(upload.uploadStep(descriptor.blob.id), /RESPONSE_LOST/);
-    assert.equal(await upload.uploadStep(descriptor.blob.id), false);
+    uploadOrder.length = 0;
+    assert.equal(
+      await upload.uploadStep(descriptor.blob.id, async () => {
+        uploadOrder.push('call-boundary');
+      }),
+      false,
+    );
+    assert.deepEqual(
+      uploadOrder,
+      [
+        'call-boundary',
+        'delivery-blob-begin',
+        'call-boundary',
+        'delivery-blob-put',
+        'call-boundary',
+        'delivery-blob-put',
+      ],
+      'a newly queued answer can run before each next media request, not after the whole step',
+    );
     assert.equal(puts, 3); // A new step sends at most two missing chunks.
     assert.equal(await new MediaTransfer(ac, aj).uploadStep(descriptor.blob.id), true);
     assert.equal((await aj.upload(descriptor.blob.id))?.cipher.length, 0);
     const download = new MediaTransfer(flakyDownload, bj);
     assert.throws(() => download.downloadStep('c'.repeat(64), descriptor), /UNAUTHORIZED/);
-    assert.equal(await download.downloadStep(ar.key, descriptor), false);
+    assert.equal(
+      await download.downloadStep(ar.key, descriptor, async () => {
+        downloadOrder.push('call-boundary');
+      }),
+      false,
+    );
+    assert.deepEqual(downloadOrder, [
+      'call-boundary',
+      'delivery-blob-get',
+      'call-boundary',
+      'delivery-blob-get',
+    ]);
     b.failCommit();
     await assert.rejects(download.downloadStep(ar.key, descriptor), /COMMIT_FAILED/);
     assert.equal(await new MediaTransfer(bc, bj).downloadStep(ar.key, descriptor), true);

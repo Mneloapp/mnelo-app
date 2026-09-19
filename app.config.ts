@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '45',
+    buildNumber: '46',
     privacyManifests: {
       NSPrivacyAccessedAPITypes: [
         {
@@ -171,6 +171,7 @@ const config: ExpoConfig = {
     'expo-font',
     './plugins/with-incoming-share.cjs',
     './plugins/with-notification-preview.cjs',
+    './plugins/with-message-intents.cjs',
     [
       'expo-sharing',
       {

@@ -623,9 +623,12 @@ export function ChatScreen() {
             }
           />
           {quoteScroll.unavailable && (
-            <AppText variant="caption" tone="secondary">
-              {t('messenger.quoteUnavailable')}
-            </AppText>
+            <View style={ui.row}>
+              <AppText variant="caption" tone="secondary" style={ui.flex}>
+                {t('messenger.quoteUnavailable')}
+              </AppText>
+              <IconButton icon="x" label={t('common.cancel')} onPress={quoteScroll.cancel} />
+            </View>
           )}
           {callBack && (
             <CallBackSheet
@@ -708,7 +711,10 @@ export function ChatScreen() {
                   inputRef={messageInput}
                   editable={!editing || !action.busy}
                   value={text}
-                  onChangeText={setText}
+                  onChangeText={(value) => {
+                    quoteScroll.cancel();
+                    setText(value);
+                  }}
                   focusKey={editing?.message.id ?? reply}
                   onFocus={attachmentPanel.focusInput}
                 />
@@ -935,6 +941,8 @@ export function ChatScreen() {
           removeEverywhere={() =>
             void action.run(async () => {
               await engine.deleteForEveryone(selected.id);
+              quoteScroll.cancel();
+              if (reply === selected.id) setReply(undefined);
               setSelected(null);
             })
           }
@@ -971,6 +979,8 @@ export function ChatScreen() {
           remove={() =>
             void action.run(async () => {
               await engine.deleteLocalMessage(selected.id);
+              quoteScroll.cancel();
+              if (reply === selected.id) setReply(undefined);
               setSelected(null);
             })
           }

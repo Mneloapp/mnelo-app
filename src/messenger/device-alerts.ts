@@ -19,6 +19,13 @@ export async function showDeviceAlert(
   _body: string,
   _title?: string,
 ) {}
+export async function showForegroundDeviceAlert(
+  _id: string,
+  _kind: AlertKind,
+  _body: string,
+  _title: string,
+  _isCurrent: () => boolean,
+) {}
 export async function dismissDeviceAlert(_id: string) {}
 export async function presentedAlertIds(): Promise<string[]> {
   return [];

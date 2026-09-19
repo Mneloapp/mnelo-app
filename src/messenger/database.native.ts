@@ -6,15 +6,18 @@ import { getRandomBytes } from 'expo-crypto';
 import { requireNativeModule } from 'expo-modules-core';
 import { bytesToHex } from './crypto';
 import type { LocalDatabase } from './model';
+import { openOwnedDatabase, type OwnedDatabaseBridge } from './database-owned';
 
 const secretName = 'mnelo.device.database-key.v1';
 const databaseName = 'history-v1.db';
 export async function openDeviceDatabase(): Promise<LocalDatabase> {
-  const vault = requireNativeModule<{
-    directory(): Promise<string>;
-    hasDatabase(): boolean;
-    publishShareKey(key: string): Promise<void>;
-  }>('MneloVault');
+  const vault = requireNativeModule<
+    OwnedDatabaseBridge & {
+      directory(): Promise<string>;
+      hasDatabase(): boolean;
+      publishShareKey(key: string): Promise<void>;
+    }
+  >('MneloVault');
   const directory = await vault.directory();
   let key = await SecureStore.getItemAsync(secretName);
   if (!key) {
@@ -32,6 +35,16 @@ export async function openDeviceDatabase(): Promise<LocalDatabase> {
   await SecureStore.setItemAsync(secretName, key, {
     keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
   });
+  if (Platform.OS === 'ios') {
+    const database = await openOwnedDatabase(vault, key);
+    try {
+      await vault.publishShareKey(key);
+    } catch (error) {
+      await database.close();
+      throw error;
+    }
+    return database;
+  }
   const db = await SQLite.openDatabaseAsync(databaseName, { useNewConnection: true }, directory);
   try {
     const version = await db.getFirstAsync<{ cipher_version: string }>('PRAGMA cipher_version');
@@ -41,7 +54,6 @@ export async function openDeviceDatabase(): Promise<LocalDatabase> {
       `PRAGMA key = "x'${key}'"; PRAGMA cipher_memory_security = ON; PRAGMA journal_mode = DELETE; PRAGMA busy_timeout = 10000;`,
     );
     await db.getFirstAsync('SELECT count(*) FROM sqlite_master');
-    if (Platform.OS === 'ios') await vault.publishShareKey(key);
   } catch (error) {
     await db.closeAsync();
     throw error;

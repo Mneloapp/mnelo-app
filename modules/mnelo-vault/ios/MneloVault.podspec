@@ -10,6 +10,7 @@ Pod::Spec.new do |s|
   s.source = { :path => '.' }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
+  s.dependency 'ExpoSQLite'
   s.source_files = '**/*.{h,m,mm,swift}'
   s.swift_version = '5.9'
 end

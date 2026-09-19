@@ -69,6 +69,14 @@ export const deliveryContent = z
       ctx.addIssue({ code: 'custom', message: 'MEDIA_BINDING_INVALID' });
   });
 const content = deliveryContent;
+const applicationEventKey = (packet: ApplicationPacket) =>
+  bytesToHex(
+    sha256(
+      new TextEncoder().encode(
+        JSON.stringify(packet.type === 'message' ? ['message', packet.id] : packet),
+      ),
+    ),
+  );
 
 // Application adapter above the vendor protocol. No crypto keys or plaintext
 // application content are sent to the delivery API outside a Signal envelope.
@@ -80,6 +88,7 @@ export class ApplicationDelivery {
   readonly pump: DeliveryPump;
   private ready: Promise<void> | null = null;
   private stopped = false;
+  private readonly owner: string;
   constructor(
     private readonly engine: DeviceMessenger,
     private readonly client: Pick<PhoneClient, 'execute'>,
@@ -94,6 +103,7 @@ export class ApplicationDelivery {
   ) {
     const own = engine.currentIdentity();
     if (!own) throw new Error('IDENTITY_REQUIRED');
+    this.owner = own.key;
     this.journal = new SignalJournal(engine.deliveryAtomic, signal, own, now);
     this.media = new MediaJournal(engine.deliveryAtomic, own.key, random, uuid, now);
     this.transfer = new MediaTransfer(client, this.media);
@@ -173,6 +183,44 @@ export class ApplicationDelivery {
   async sendDurable(peer: string, input: Packet, event?: { id: string; createdAt: number }) {
     return this.sendApplication(peer, input, event);
   }
+  async waitForCallUpload(peer: string, input: CallControl, timeoutMs = 8000) {
+    const packet = applicationPacket.parse(input);
+    if (packet.type !== 'call' || !['end', 'decline'].includes(packet.action))
+      throw new Error('CALL_TERMINAL_REQUIRED');
+    if (!Number.isFinite(timeoutMs) || timeoutMs < 1 || timeoutMs > 10000)
+      throw new Error('CALL_UPLOAD_TIMEOUT_INVALID');
+    const event = applicationEventKey(packet);
+    // Enqueueing a terminal is crash-safe, but is not proof that the other
+    // device can receive it. Keep the native background assertion until this
+    // exact encrypted event has been accepted by the server. No second pump,
+    // re-encryption, acknowledgement, or deletion occurs on timeout.
+    await new Promise<void>((resolve, reject) => {
+      let finished = false;
+      let pollTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = (error?: unknown) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(deadline);
+        if (pollTimer) clearTimeout(pollTimer);
+        if (error) reject(error);
+        else resolve();
+      };
+      const deadline = setTimeout(() => finish(new Error('CALL_UPLOAD_TIMEOUT')), timeoutMs);
+      const current = () => !this.stopped && this.engine.currentIdentity()?.key === this.owner;
+      const poll = async () => {
+        if (finished) return;
+        if (!current()) throw new Error('DELIVERY_STOPPED');
+        const uploaded = await this.journal.eventUploaded(peer, event);
+        if (finished) return;
+        if (!current()) throw new Error('DELIVERY_STOPPED');
+        if (uploaded === null) throw new Error('CALL_TERMINAL_NOT_QUEUED');
+        if (uploaded) finish();
+        else pollTimer = setTimeout(() => void poll().catch(finish), 100);
+      };
+      this.pump.wake();
+      void poll().catch(finish);
+    });
+  }
   async sendSignal(peer: string, envelope: z.infer<typeof signedSignal>) {
     if (!(await this.sendApplication(peer, { type: 'call-signal', envelope })))
       throw new Error('CALL_UNAVAILABLE');
@@ -192,15 +240,7 @@ export class ApplicationDelivery {
     if (this.stopped || !(await this.engine.acceptsPeer(peer))) return false;
     const packet = applicationPacket.parse(input);
     const createdAt = packet.type === 'message' ? packet.sentAt : (event?.createdAt ?? this.now());
-    const stable =
-      event?.id ??
-      bytesToHex(
-        sha256(
-          new TextEncoder().encode(
-            JSON.stringify(packet.type === 'message' ? ['message', packet.id] : packet),
-          ),
-        ),
-      );
+    const stable = event?.id ?? applicationEventKey(packet);
     // A flush already in flight when a receipt cleans up its file must not
     // generate another object/key for the same application event.
     if (await this.journal.hasEvent(peer, stable)) return true;

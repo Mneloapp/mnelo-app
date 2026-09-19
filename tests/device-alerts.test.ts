@@ -2,10 +2,10 @@ import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 import {
   showDeviceAlert,
+  showForegroundDeviceAlert,
   requestAlerts,
   enableAlertsByDefault,
   observeAlertTaps,
-  observeCallReplies,
 } from '@/messenger/device-alerts.native';
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
@@ -156,7 +156,36 @@ test('a cached cold-launch response and its live replay open only one destinatio
   stop();
 });
 
-test('a call reply is replayed when its consumer registers during cold launch', async () => {
+test('tapping a foreground system banner forwards its opaque message id exactly once', async () => {
+  const id = '65bcc8a6-0717-4f92-ad62-622cdf1475cb';
+  await showForegroundDeviceAlert(id, 'message', 'Private local text', 'Saved contact', () => true);
+  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith({
+    identifier: 'mnelo-local-' + id,
+    content: {
+      title: 'Saved contact',
+      body: 'Private local text',
+      data: { kind: 'message' },
+      sound: 'default',
+    },
+    trigger: null,
+  });
+  const response = {
+    actionIdentifier: 'default',
+    notification: {
+      date: 789,
+      request: { identifier: 'mnelo-local-' + id, content: { data: { kind: 'message' } } },
+    },
+  } as unknown as Notifications.NotificationResponse;
+  const open = jest.fn();
+  const stop = observeAlertTaps(open);
+  mockResponseHandler!(response);
+  mockResponseHandler!(response);
+  expect(open).toHaveBeenCalledTimes(1);
+  expect(open).toHaveBeenCalledWith('message', id);
+  stop();
+});
+
+test('an obsolete custom call-reply notification does not open a message or trigger a reply', () => {
   const response = {
     actionIdentifier: 'MNELO_CALL_REPLY',
     userText: 'I will call you back',
@@ -170,14 +199,10 @@ test('a call reply is replayed when its consumer registers during cold launch', 
       },
     },
   } as unknown as Notifications.NotificationResponse;
-  const first = jest.fn();
-  const stopFirst = observeCallReplies(first);
+  const open = jest.fn();
+  const stop = observeAlertTaps(open);
   mockResponseHandler!(response);
-  const late = jest.fn();
-  const stopLate = observeCallReplies(late);
-  await Promise.resolve();
-  expect(first).toHaveBeenCalledWith('call-id', 'I will call you back');
-  expect(late).toHaveBeenCalledWith('call-id', 'I will call you back');
-  stopLate();
-  stopFirst();
+  mockResponseHandler!({ ...response, actionIdentifier: 'default' });
+  expect(open).not.toHaveBeenCalled();
+  stop();
 });

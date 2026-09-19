@@ -53,7 +53,13 @@ export class DeliveryNotificationWorker {
       await Promise.all(
         jobs.slice(offset, offset + 4).map(async (job) => {
           if (this.stopped) return;
-          if (!this.store.allowed(job.sender, job.recipient)) {
+          // The page can wait behind earlier provider requests. A recipient
+          // that has since consumed the invite owns its call outcome; its ACK
+          // removes this job and must suppress a stale missed-call fallback.
+          if (
+            !this.store.allowed(job.sender, job.recipient) ||
+            !this.store.hasPending(job.recipient, job.sender, job.id)
+          ) {
             this.store.notificationResult(job);
             return;
           }

@@ -31,7 +31,6 @@ export function CallSurface({
   onSpeaker,
   onCamera,
   onSwitchCamera,
-  onReply,
 }: {
   call: DeviceCall | null;
   title: string;
@@ -49,7 +48,6 @@ export function CallSurface({
   onSpeaker: () => void;
   onCamera: () => void;
   onSwitchCamera: () => void;
-  onReply?: () => void;
 }) {
   const { t } = useTranslation();
   const duration = useCallDuration(call);
@@ -192,15 +190,6 @@ export function CallSurface({
             <View style={styles.controls}>
               {incoming ? (
                 <>
-                  {onReply && (
-                    <CallControl
-                      icon="message-circle"
-                      label={t('messenger.callReply')}
-                      caption={t('messenger.callReply')}
-                      disabled={busy || ending}
-                      onPress={onReply}
-                    />
-                  )}
                   <CallControl
                     icon="phone"
                     label={t('messenger.callDecline')}

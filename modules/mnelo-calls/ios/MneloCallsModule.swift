@@ -34,10 +34,13 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var reporting: [UUID: [() -> Void]] = [:]
   private var deadlines: [UUID: Timer] = [:]
   private var ended: [UUID: Date] = [:]
-  private var callNotifications: Set<UUID> = []
   private let callerCacheKey = "MneloCallersV1"
-  private let callReplyCategory = "MNELO_INCOMING_CALL"
-  private let callReplyAction = "MNELO_CALL_REPLY"
+  private let endJournalKey = "MneloPendingCallEndsV1"
+  private let accountKey = "MneloCallAccountV1"
+  private var account: String?
+  private var pendingEnds: [[String: Any]] = []
+  private var endDeliveryTask = UIBackgroundTaskIdentifier.invalid
+  private var endDeliveryDeadline: Timer?
 
   override init() {
     let config = CXProviderConfiguration()
@@ -48,21 +51,15 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     config.includesCallsInRecents = false
     provider = CXProvider(configuration: config)
     super.init()
+    account = UserDefaults.standard.string(forKey: accountKey)
+    pendingEnds = UserDefaults.standard.array(forKey: endJournalKey) as? [[String: Any]] ?? []
+    prunePendingEnds()
+    for value in pendingEnds {
+      if let text = value["id"] as? String, let id = UUID(uuidString: text), let expiry = value["expires"] as? Double {
+        ended[id] = Date(timeIntervalSince1970: expiry)
+      }
+    }
     provider.setDelegate(self, queue: .main)
-    let reply = UNTextInputNotificationAction(
-      identifier: callReplyAction,
-      title: "Reply",
-      options: [],
-      textInputButtonTitle: "Send",
-      textInputPlaceholder: "Message"
-    )
-    let category = UNNotificationCategory(
-      identifier: callReplyCategory,
-      actions: [reply],
-      intentIdentifiers: [],
-      options: []
-    )
-    UNUserNotificationCenter.current().setNotificationCategories([category])
     RTCAudioSession.sharedInstance().useManualAudio = true
     RTCAudioSession.sharedInstance().isAudioEnabled = false
     routeObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -103,7 +100,80 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     events.append(value)
     NotificationCenter.default.post(name: wakeChanged, object: nil)
   }
-  func drain() -> [[String: Any]] { let result = events; events.removeAll(); return result }
+  private func prunePendingEnds() {
+    let now = Date().timeIntervalSince1970
+    pendingEnds = Array(pendingEnds.filter {
+      $0["account"] as? String == account && account != nil &&
+      ($0["expires"] as? Double ?? 0) > now && ($0["expires"] as? Double ?? 0) <= now + 120 &&
+      ($0["id"] as? String).flatMap(UUID.init(uuidString:)) != nil &&
+      ["local", "remote", "decline", "timeout"].contains($0["reason"] as? String ?? "")
+    }.suffix(16))
+    UserDefaults.standard.set(pendingEnds, forKey: endJournalKey)
+  }
+  func configureAccount(_ value: String) {
+    guard value.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil else { return }
+    if account != value {
+      if account != nil {
+        events.removeAll { $0["type"] as? String == "end" }
+        releaseEndDelivery()
+      }
+      // First launch after upgrade may already have a native end event; keep
+      // its short activity assertion while JS authenticates that exact call.
+      pendingEnds.removeAll()
+    }
+    account = value
+    UserDefaults.standard.set(value, forKey: accountKey)
+    prunePendingEnds()
+  }
+  private func holdEndDelivery() {
+    guard endDeliveryTask == .invalid else { return }
+    // Acquire BEFORE fulfilling the CallKit end action removes our VoIP activity.
+    // The database module separately releases its own locks on expiration.
+    endDeliveryTask = UIApplication.shared.beginBackgroundTask(withName: "Mnelo call end") { [weak self] in
+      Task { @MainActor in self?.releaseEndDelivery() }
+    }
+    guard endDeliveryTask != .invalid else { return }
+    endDeliveryDeadline = Timer.scheduledTimer(withTimeInterval: 25, repeats: false) { [weak self] _ in
+      Task { @MainActor in self?.releaseEndDelivery() }
+    }
+  }
+  private func releaseEndDelivery() {
+    endDeliveryDeadline?.invalidate()
+    endDeliveryDeadline = nil
+    let task = endDeliveryTask
+    endDeliveryTask = .invalid
+    if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+  }
+  private func terminalEvent(_ id: UUID, reason: String) {
+    holdEndDelivery()
+    prunePendingEnds()
+    if let account, !pendingEnds.contains(where: { $0["id"] as? String == id.uuidString.lowercased() }) {
+      pendingEnds.append(["id": id.uuidString.lowercased(), "reason": reason,
+                          "account": account, "expires": Date().timeIntervalSince1970 + 120])
+      prunePendingEnds()
+    }
+    event(["type": "end", "id": id.uuidString.lowercased(), "reason": reason])
+  }
+  func acknowledgeEnd(_ id: UUID, account value: String) {
+    guard value == account else { return }
+    pendingEnds.removeAll { $0["id"] as? String == id.uuidString.lowercased() }
+    prunePendingEnds()
+    if pendingEnds.isEmpty { releaseEndDelivery() }
+  }
+  func drain() -> [[String: Any]] {
+    prunePendingEnds()
+    var result = events
+    events.removeAll()
+    // Draining JS events is not an acknowledgement: an interrupted SQL/Signal
+    // write must replay after the next runtime or process starts.
+    for value in pendingEnds {
+      guard let id = value["id"] as? String, let reason = value["reason"] as? String else { continue }
+      if !result.contains(where: { $0["type"] as? String == "end" && $0["id"] as? String == id }) {
+        result.append(["type": "end", "id": id, "reason": reason])
+      }
+    }
+    return result
+  }
   func state() -> [String: Any] {
     var result: [String: Any] = ["environment": environment(), "managedAudio": true]
     if let token { result["voipToken"] = token }
@@ -152,8 +222,8 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     deadlines[id]?.invalidate()
     deadlines[id] = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { _ in
       Task { @MainActor in
+        self.terminalEvent(id, reason: "timeout")
         self.finish(id, reason: .unanswered)
-        self.event(["type": "end", "id": id.uuidString.lowercased(), "reason": "timeout"])
       }
     }
   }
@@ -180,7 +250,6 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
       Task { @MainActor in
         if error == nil && allowed && self.ended[id] == nil {
           self.arm(id)
-          self.scheduleCallReplyNotification(id, video: video, title: displayName)
           self.event(["type": "incoming", "id": id.uuidString.lowercased(), "video": video])
         } else {
           self.live.remove(id)
@@ -207,25 +276,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     if cache.count > 256, let oldest = cache.keys.sorted().first { cache.removeValue(forKey: oldest) }
     UserDefaults.standard.set(cache, forKey: callerCacheKey)
   }
-  private func scheduleCallReplyNotification(_ id: UUID, video: Bool, title: String) {
-    guard UIApplication.shared.applicationState != .active, !callNotifications.contains(id) else { return }
-    callNotifications.insert(id)
-    let content = UNMutableNotificationContent()
-    content.title = title
-    content.body = video ? "Incoming video call" : "Incoming voice call"
-    content.categoryIdentifier = callReplyCategory
-    content.userInfo = [
-      "mneloCall": ["v": 1, "kind": "call-reply", "id": id.uuidString.lowercased()]
-    ]
-    let request = UNNotificationRequest(
-      identifier: "mnelo-call-" + id.uuidString.lowercased(),
-      content: content,
-      trigger: nil
-    )
-    UNUserNotificationCenter.current().add(request)
-  }
   private func removeCallReplyNotification(_ id: UUID) {
-    callNotifications.remove(id)
     let identifier = "mnelo-call-" + id.uuidString.lowercased()
     UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
     UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
@@ -350,7 +401,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     return data
   }()
   func providerDidReset(_ provider: CXProvider) {
-    for id in live { event(["type":"end", "id":id.uuidString.lowercased()]) }
+    for id in live { terminalEvent(id, reason: "local") }
     MneloScreenShare.shared.stop()
     live.removeAll()
     answeredCalls.removeAll()
@@ -374,8 +425,9 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     catch { action.fail(); finish(action.callUUID, reason: .failed); event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "code":"NATIVE_AUDIO_FAILED"]) }
   }
   func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
+    guard live.contains(action.callUUID) else { action.fulfill(); return }
     let declined = live.contains(action.callUUID) && !outgoingCalls.contains(action.callUUID) && !answeredCalls.contains(action.callUUID)
-    event(["type":"end", "id":action.callUUID.uuidString.lowercased(), "reason": declined ? "decline" : "local"])
+    terminalEvent(action.callUUID, reason: declined ? "decline" : "local")
     finish(action.callUUID, reason: declined ? .declinedElsewhere : .remoteEnded); action.fulfill()
   }
   func provider(_ provider: CXProvider, perform action: CXSetMutedCallAction) {
@@ -436,6 +488,10 @@ public class MneloCallsModule: Module {
     AsyncFunction("prepareCallAudio") { (speaker: Bool) async throws in try await MainActor.run { try MneloCallManager.shared.prepareCallAudio(speaker) } }
     AsyncFunction("speaker") { (enabled: Bool) async throws in try await MainActor.run { try MneloCallManager.shared.speaker(enabled) } }
     AsyncFunction("timing") { (code: String, duration: Double) async in await MainActor.run { MneloCallManager.shared.timing(code, duration: duration) } }
+    AsyncFunction("configureAccount") { (account: String) async in await MainActor.run { MneloCallManager.shared.configureAccount(account) } }
+    AsyncFunction("acknowledgeEnd") { (value: String, account: String) async in
+      await MainActor.run { if let id = UUID(uuidString: value) { MneloCallManager.shared.acknowledgeEnd(id, account: account) } }
+    }
     AsyncFunction("drain") { () async -> [[String: Any]] in await MainActor.run { MneloCallManager.shared.drain() } }
     AsyncFunction("incoming") { (value: String, video: Bool, callerHint: String?) async in
       await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

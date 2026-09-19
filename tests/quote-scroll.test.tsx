@@ -78,3 +78,54 @@ test('a quote to a photo inside an album scrolls to and highlights that album wi
   await hook.unmount();
   jest.useRealTimers();
 });
+
+test('missing quote notice clears on the next interaction and ignores its late lookup', async () => {
+  let finish!: (exists: boolean) => void;
+  const more = jest.fn();
+  const exists = jest
+    .fn<Promise<boolean>, [string]>()
+    .mockResolvedValueOnce(false)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  const hook = await renderHook(() =>
+    useQuotedMessageScroll('chat', { current: null }, [], exists, more, true),
+  );
+  await act(() => hook.result.current.jump('removed-photo'));
+  expect(hook.result.current.unavailable).toBe(true);
+  await act(() => hook.result.current.cancel());
+  expect(hook.result.current.unavailable).toBe(false);
+  let pending!: Promise<void>;
+  await act(() => {
+    pending = hook.result.current.jump('removed-photo');
+  });
+  await act(() => hook.result.current.cancel());
+  await act(async () => {
+    finish(true);
+    await pending;
+  });
+  expect(more).not.toHaveBeenCalled();
+  expect(hook.result.current.unavailable).toBe(false);
+  await hook.unmount();
+});
+
+test('a missing quote notice expires and cannot persist into another conversation', async () => {
+  jest.useFakeTimers();
+  const hook = await renderHook(
+    ({ chat }: { chat: string }) =>
+      useQuotedMessageScroll(chat, { current: null }, [], async () => false, jest.fn(), true),
+    { initialProps: { chat: 'first' } },
+  );
+  await act(() => hook.result.current.jump('removed-photo'));
+  await act(() => jest.advanceTimersByTime(5000));
+  expect(hook.result.current.unavailable).toBe(false);
+  await act(() => hook.result.current.jump('removed-photo'));
+  expect(hook.result.current.unavailable).toBe(true);
+  await hook.rerender({ chat: 'second' });
+  expect(hook.result.current.unavailable).toBe(false);
+  await hook.unmount();
+  jest.useRealTimers();
+});

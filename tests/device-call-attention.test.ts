@@ -523,3 +523,162 @@ test('pending media setup releases the inbox for hangup and cannot fail a replac
     f.calls.stop();
   }
 });
+
+test('decline before answering ends the caller immediately without receiver capture', async () => {
+  const outgoing = runtime();
+  const incoming = runtime({
+    send: async (_peer, control) => outgoing.calls.receive('peer', control),
+    flushTerminal: jest.fn(async () => undefined),
+  });
+  try {
+    await outgoing.calls.start('peer', 'video');
+    await incoming.calls.receive('peer', {
+      type: 'call',
+      id: 'outgoing-id',
+      action: 'invite',
+      media: 'video',
+    });
+    jest.mocked(captureCall).mockClear();
+    expect(incoming.calls.snapshot()?.local).toBeNull();
+    await expect(incoming.calls.endFromSystem('outgoing-id', 'decline')).resolves.toBe(true);
+    expect(captureCall).not.toHaveBeenCalled();
+    expect(incoming.calls.snapshot()?.status).toBe('ended');
+    expect(outgoing.calls.snapshot()?.status).toBe('ended');
+    expect(outgoing.recordCall).toHaveBeenLastCalledWith(
+      'development-chat',
+      'outgoing-id',
+      'peer',
+      'video',
+      'declined',
+      'outgoing',
+    );
+    expect(incoming.recordCall).toHaveBeenLastCalledWith(
+      'development-chat',
+      'outgoing-id',
+      'peer',
+      'video',
+      'declined',
+      'incoming',
+    );
+  } finally {
+    incoming.calls.stop();
+    outgoing.calls.stop();
+  }
+});
+
+test('failed native decline persistence remains retryable after the UI ends, without duplicating history', async () => {
+  const send = jest
+    .fn(async () => undefined)
+    .mockRejectedValueOnce(new Error('DATABASE_SUSPENDED'));
+  const { calls, recordCall, mesh } = runtime({ send });
+  try {
+    await calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    await expect(calls.endFromSystem('incoming-id', 'decline')).rejects.toThrow(
+      'DATABASE_SUSPENDED',
+    );
+    expect(calls.snapshot()?.status).toBe('ended');
+    // A failed write keeps the durable invite recoverable on the next runtime.
+    expect(recordCall).not.toHaveBeenCalled();
+    await expect(calls.endFromSystem('incoming-id', 'decline')).resolves.toBe(true);
+    await expect(calls.endFromSystem('incoming-id', 'decline')).resolves.toBe(true);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'decline',
+      media: 'voice',
+    });
+    expect(recordCall).toHaveBeenCalledTimes(1);
+    expect(mesh.endMedia).toHaveBeenCalledTimes(1);
+  } finally {
+    calls.stop();
+  }
+});
+
+test('native completion waits for server acceptance, while an old call retry cannot end its replacement', async () => {
+  let finish!: () => void;
+  const flushTerminal = jest.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const { calls, recordCall } = runtime({ send: async () => undefined, flushTerminal });
+  try {
+    await calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    let completed = false;
+    const pending = calls.endFromSystem('incoming-id', 'decline').then((value) => {
+      completed = value;
+    });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    expect(completed).toBe(false);
+    expect(flushTerminal).toHaveBeenCalledTimes(1);
+    await calls.receive('new-peer', {
+      type: 'call',
+      id: 'new-call',
+      action: 'invite',
+      media: 'voice',
+    });
+    finish();
+    await pending;
+    expect(completed).toBe(true);
+    expect(calls.snapshot()).toMatchObject({ id: 'new-call', status: 'incoming' });
+    expect(recordCall).toHaveBeenCalledTimes(1);
+    await expect(calls.endFromSystem('unknown-id', 'decline')).resolves.toBe(false);
+    expect(calls.snapshot()?.status).toBe('incoming');
+  } finally {
+    calls.stop();
+  }
+});
+
+test('native teardown failures do not prevent durable decline propagation', async () => {
+  const send = jest.fn(async () => undefined);
+  const { calls, mesh } = runtime({ send });
+  try {
+    await calls.receive('peer', {
+      type: 'call',
+      id: 'incoming-id',
+      action: 'invite',
+      media: 'voice',
+    });
+    jest.mocked(mesh.endMedia).mockImplementation(() => {
+      throw new Error('ALREADY_CLOSED');
+    });
+    await expect(calls.endFromSystem('incoming-id', 'decline')).resolves.toBe(true);
+    expect(send).toHaveBeenCalledWith('peer', expect.objectContaining({ action: 'decline' }));
+  } finally {
+    calls.stop();
+  }
+});
+
+test('an interrupted runtime cannot resume old terminal history writes after disposal', async () => {
+  let deliver!: () => void;
+  const { calls, recordCall } = runtime({
+    send: () =>
+      new Promise((resolve) => {
+        deliver = resolve;
+      }),
+  });
+  await calls.receive('peer', {
+    type: 'call',
+    id: 'incoming-id',
+    action: 'invite',
+    media: 'voice',
+  });
+  const pending = calls.endFromSystem('incoming-id', 'decline');
+  calls.stop();
+  deliver();
+  await expect(pending).rejects.toThrow('CALL_UNAVAILABLE');
+  expect(recordCall).not.toHaveBeenCalled();
+  expect(calls.snapshot()).toBeNull();
+});

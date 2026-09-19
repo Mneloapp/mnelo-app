@@ -185,3 +185,49 @@ test('missing notification permission/token can retry later without requiring a 
     routes.close();
   }
 });
+
+test('an invite acknowledged while an earlier notification batch is in flight cannot become a stale missed alert', async () => {
+  let now = 2_000_000_000_000;
+  const store = new DeliveryStore(new DatabaseSync(':memory:'), access, () => now);
+  const sent: string[] = [];
+  let release!: () => void, started!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const firstBatch = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const worker = new DeliveryNotificationWorker(
+    store,
+    {
+      deliverQueued: async (_from, _to, event) => {
+        sent.push(event.id);
+        if (sent.length === 4) started();
+        await gate;
+        return true;
+      },
+    },
+    () => now,
+  );
+  try {
+    for (let index = 0; index < 5; index++)
+      store.submit(a, envelope(now, { kind: 'call', id: randomUUID(), video: false }));
+    now += 60000;
+    const waiting = store.notifications()[4]!;
+    worker.start();
+    const work = worker.tick();
+    await firstBatch;
+    // The phone handled this invite (answer/decline/local timeout), while the
+    // server still holds an earlier snapshot of its notification job.
+    store.acknowledge(b, a, waiting.id);
+    release();
+    await work;
+    assert.equal(sent.length, 4);
+    assert.equal(sent.includes(waiting.event.id), false);
+    assert.equal(store.notifications().length, 0);
+  } finally {
+    release();
+    worker.stop();
+    store.close();
+  }
+});

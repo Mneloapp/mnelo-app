@@ -73,6 +73,8 @@ export interface LocalDatabase {
   run(sql: string, ...params: SQLValue[]): Promise<void>;
   all<T>(sql: string, ...params: SQLValue[]): Promise<T[]>;
   close(): Promise<void>;
+  observeSuspension?(listener: () => void): () => void;
+  isSuspended?(): boolean;
 }
 
 // Application packets travel inside authenticated Signal envelopes in delivery

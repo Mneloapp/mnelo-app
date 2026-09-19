@@ -4,9 +4,15 @@ import type { AlertKind, AlertPermission } from './device-alerts';
 import { alertKind } from './notification-policy';
 const prefix = 'mnelo-local-';
 const channelId = 'mnelo-private-alerts';
-const callReplyAction = 'MNELO_CALL_REPLY';
 const callReplyKind = 'call-reply';
 const defaultAction = Notifications.DEFAULT_ACTION_IDENTIFIER ?? 'default';
+const foregroundAlerts = new Map<string, { expires: number; current?: () => boolean }>();
+const hiddenAlert = {
+  shouldPlaySound: false,
+  shouldSetBadge: false,
+  shouldShowBanner: false,
+  shouldShowList: false,
+};
 
 type ResponseListener = (response: Notifications.NotificationResponse) => void;
 let responseSubscription: { remove(): void } | null = null;
@@ -76,16 +82,28 @@ function objectData(value: unknown): Record<string, unknown> | null {
   }
 }
 Notifications.setNotificationHandler?.({
-  handleNotification: async () => {
-    // Foreground presentation belongs to DeviceNotifications, which knows the
-    // visible chat and local contact name. Also suppress delayed local alerts.
-    if (AppState.currentState !== 'background')
-      return {
-        shouldPlaySound: false,
-        shouldSetBadge: false,
-        shouldShowBanner: false,
-        shouldShowList: false,
-      };
+  handleNotification: async (notification) => {
+    const local = foregroundAlerts.get(notification.request?.identifier);
+    if (local) {
+      const current = local.current;
+      delete local.current; // A repeated callback cannot present the same alert twice.
+      // Preview resolution happens before scheduling, outside Expo's three-
+      // second handler deadline. Only this locally authorized banner can show
+      // in foreground; a generic APNs wake must not produce a second banner.
+      const visible =
+        local.expires > Date.now() && AppState.currentState === 'active' && current?.();
+      return visible
+        ? {
+            shouldPlaySound: true,
+            shouldSetBadge: false,
+            shouldShowBanner: true,
+            shouldShowList: true,
+          }
+        : hiddenAlert;
+    }
+    // Remote pushes and delayed background local alerts stay silent when the
+    // app is active/inactive. Verified foreground messages schedule once above.
+    if (AppState.currentState !== 'background') return hiddenAlert;
     return {
       shouldPlaySound: true,
       shouldSetBadge: true,
@@ -154,6 +172,37 @@ export async function showDeviceAlert(id: string, kind: AlertKind, body: string,
     trigger: Platform.OS === 'android' ? { channelId } : null,
   });
 }
+export async function showForegroundDeviceAlert(
+  id: string,
+  kind: AlertKind,
+  body: string,
+  title: string,
+  isCurrent: () => boolean,
+) {
+  const current = () => AppState.currentState === 'active' && isCurrent();
+  if (!current() || !(await alertPermission()).allowed) return;
+  await ensureChannel();
+  if (!current()) return;
+  const now = Date.now();
+  for (const [key, value] of foregroundAlerts)
+    if (value.expires <= now) foregroundAlerts.delete(key);
+  const identifier = prefix + id;
+  if (foregroundAlerts.has(identifier)) return;
+  if (foregroundAlerts.size >= 128) foregroundAlerts.delete(foregroundAlerts.keys().next().value!);
+  foregroundAlerts.set(identifier, { expires: now + 60_000, current });
+  try {
+    // iOS owns banner styling, preview visibility and Focus/sound settings.
+    // Opaque local ID routing uses the same verified-vault path as remote taps.
+    await Notifications.scheduleNotificationAsync({
+      identifier,
+      content: { title, body, data: { kind }, sound: 'default' },
+      trigger: Platform.OS === 'android' ? { channelId } : null,
+    });
+  } catch (error) {
+    foregroundAlerts.delete(identifier);
+    throw error;
+  }
+}
 export async function dismissDeviceAlert(id: string) {
   await Notifications.dismissNotificationAsync(prefix + id);
 }
@@ -183,23 +232,6 @@ export function observeAlertTaps(listener: (kind: AlertKind, messageId?: string)
     if (!response.notification.request.identifier.startsWith(prefix)) return;
     const kind = alertKind(data);
     if (kind) listener(kind, response.notification.request.identifier.slice(prefix.length));
-  };
-  return addResponseListener(consume);
-}
-
-// CallKit cannot add an application-specific reply action to its full-screen
-// sheet. The native call module posts a notification with a text-input action;
-// this listener carries that action back to the durable call runtime when the
-// app is launched from the lock screen.
-export function observeCallReplies(listener: (id: string, text: string) => void) {
-  const consume = (response: Notifications.NotificationResponse) => {
-    if (response.actionIdentifier !== callReplyAction) return;
-    const data = response.notification.request.content.data as Record<string, unknown> | undefined;
-    const call = objectData(data?.mneloCall);
-    const id = call?.id;
-    const text = response.userText;
-    if (call?.kind === callReplyKind && typeof id === 'string' && typeof text === 'string')
-      listener(id, text);
   };
   return addResponseListener(consume);
 }

@@ -13,6 +13,8 @@ jest.mock('expo-modules-core', () => {
     changed: () => {},
     state: jest.fn(async () => ({ environment: 'sandbox', voipToken: 'a'.repeat(64) })),
     drain: jest.fn(async (): Promise<unknown[]> => []),
+    configureAccount: jest.fn(async () => {}),
+    acknowledgeEnd: jest.fn(async () => {}),
     incoming: jest.fn(async () => {}),
     outgoing: jest.fn(async () => {}),
     answer: jest.fn(async () => {}),
@@ -57,6 +59,12 @@ function fixture(
   let changed = () => {};
   let control = (_value: CallControl) => {};
   const calls = {
+    owner: 'owner',
+    endFromSystem: jest.fn(async (callId: string, reason: string, failed: boolean) => {
+      if (value?.id !== callId) return false;
+      if (value.status !== 'ended') await calls.end(failed, true, reason);
+      return true;
+    }),
     snapshot: () => value,
     subscribe: (fn: () => void) => {
       changed = fn;
@@ -70,7 +78,7 @@ function fixture(
       value = { ...value!, status: 'connecting' };
       changed();
     }),
-    end: jest.fn(async () => {
+    end: jest.fn(async (_failed?: boolean, _notify?: boolean, _reason?: string) => {
       value = { ...value!, status: 'ended' };
       changed();
     }),
@@ -89,9 +97,10 @@ function fixture(
     incoming = true,
     ringingConfirmed = false,
     peer?: string,
+    callId = id,
   ) => {
     value = {
-      id,
+      id: callId,
       incoming,
       media,
       status,
@@ -277,6 +286,7 @@ test('a native event arriving during an asynchronous drain is not dropped', asyn
         }),
     );
     native.changed();
+    await tick();
     native.drain.mockResolvedValueOnce([{ type: 'answer', id }]);
     native.changed();
     finish([{ type: 'incoming', id, video: false }]);
@@ -496,4 +506,107 @@ test('iOS speaker selection and initial capture configuration use the CallKit ow
   await expect(systemCallSpeaker(false)).resolves.toBe(true);
   expect(native.prepareCallAudio).toHaveBeenCalledWith(true);
   expect(native.speaker.mock.calls).toEqual([[true], [false]]);
+});
+
+test('native decline is acknowledged only after its authenticated terminal work completes', async () => {
+  const f = fixture();
+  let complete!: (value: boolean) => void;
+  try {
+    await tick();
+    f.update('incoming');
+    await tick();
+    f.calls.endFromSystem.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'decline' }]);
+    native.changed();
+    await tick();
+    expect(native.acknowledgeEnd).not.toHaveBeenCalled();
+    complete(true);
+    await tick();
+    expect(native.acknowledgeEnd).toHaveBeenCalledWith(id, 'a'.repeat(64));
+  } finally {
+    f.stop();
+  }
+});
+
+test('cold native decline waits for the exact authenticated invite and survives a failed write', async () => {
+  jest.useFakeTimers();
+  const f = fixture();
+  try {
+    await tick();
+    native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'decline' }]);
+    native.changed();
+    await tick();
+    expect(native.acknowledgeEnd).not.toHaveBeenCalled();
+    f.calls.endFromSystem.mockRejectedValueOnce(new Error('DATABASE_SUSPENDED'));
+    f.update('incoming');
+    await tick();
+    expect(native.acknowledgeEnd).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1000);
+    await tick();
+    expect(f.calls.end).toHaveBeenCalledWith(false, true, 'decline');
+    expect(native.acknowledgeEnd).toHaveBeenCalledWith(id, 'a'.repeat(64));
+    expect(native.incoming).not.toHaveBeenCalled();
+  } finally {
+    f.stop();
+    jest.useRealTimers();
+  }
+});
+
+test('disposing a runtime while terminal work waits does not acknowledge or erase its native intent', async () => {
+  const f = fixture();
+  let complete!: (value: boolean) => void;
+  await tick();
+  f.update('incoming');
+  await tick();
+  f.calls.endFromSystem.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'decline' }]);
+  native.changed();
+  await tick();
+  f.stop();
+  complete(true);
+  await tick();
+  expect(native.acknowledgeEnd).not.toHaveBeenCalled();
+  expect(native.configureAccount).toHaveBeenCalledTimes(1);
+});
+
+test('a pending previous decline upload never blocks answering the next native call', async () => {
+  const f = fixture();
+  const nextId = 'a9870ee4-4c80-4bb3-9b52-a9c77f905b9a';
+  let uploaded!: (value: boolean) => void;
+  try {
+    await tick();
+    f.update('incoming');
+    await tick();
+    f.calls.endFromSystem.mockImplementationOnce(async () => {
+      await f.calls.end();
+      return new Promise((resolve) => {
+        uploaded = resolve;
+      });
+    });
+    native.drain.mockResolvedValueOnce([{ type: 'end', id, reason: 'decline' }]);
+    native.changed();
+    await tick();
+    expect(native.acknowledgeEnd).not.toHaveBeenCalled();
+    f.update('incoming', 'voice', true, false, undefined, nextId);
+    native.drain.mockResolvedValueOnce([{ type: 'answer', id: nextId }]);
+    native.changed();
+    await tick();
+    expect(f.calls.accept).toHaveBeenCalledTimes(1);
+    expect(f.calls.snapshot()).toMatchObject({ id: nextId, status: 'connecting' });
+    uploaded(true);
+    await tick();
+    expect(f.calls.snapshot()?.id).toBe(nextId);
+  } finally {
+    f.stop();
+  }
 });

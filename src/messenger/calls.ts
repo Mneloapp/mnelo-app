@@ -20,6 +20,7 @@ export type CallControl = Extract<Packet, { type: 'call' }>;
 export type CallSignaling = {
   send(peer: string, control: CallControl): Promise<void>;
   ringingReceipt?(peer: string, id: string): Promise<void>;
+  flushTerminal?(peer: string, control: CallControl): Promise<void>;
 };
 export type CallParticipant = {
   ringingConfirmed?: boolean;
@@ -58,6 +59,117 @@ export class DeviceCalls {
   private listeners = new Set<() => void>();
   private controls = new Set<(value: CallControl) => void>();
   private incomingReceipt: { id: string; promise: Promise<void> } | null = null;
+  private terminal = new Map<
+    string,
+    {
+      owner: string;
+      call: DeviceCall;
+      failed: boolean;
+      reason: 'local' | 'remote' | 'decline' | 'timeout';
+      notify: boolean;
+      requireDurable: boolean;
+      notified: boolean;
+      recorded: boolean;
+      expires: number;
+      work?: Promise<void>;
+    }
+  >();
+  get owner() {
+    return this.engine.currentIdentity()?.key ?? null;
+  }
+  // Native end actions can arrive before JS has loaded the authenticated invite.
+  // A terminal screen is not evidence that its decline was durably persisted.
+  async endFromSystem(
+    id: string,
+    reason: 'local' | 'remote' | 'decline' | 'timeout',
+    failed = false,
+  ): Promise<boolean> {
+    if (this.value?.id === id && this.active()) await this.end(failed, true, reason, true);
+    const pending = this.terminal.get(id);
+    if (!pending || pending.owner !== this.owner || pending.expires < Date.now()) return false;
+    await this.finishTerminal(id);
+    if (pending.owner !== this.owner || this.terminal.get(id) !== pending) return false;
+    if (pending.notify && this.signaling?.flushTerminal) {
+      const call = pending.call;
+      const control: CallControl = {
+        type: 'call',
+        id: call.id,
+        media: call.media,
+        action: call.status === 'incoming' ? 'decline' : 'end',
+        ...(call.group ? { group: call.group } : {}),
+      };
+      await Promise.all(
+        (call.group ? call.participants!.map((person) => person.peer) : [call.peer]).map((peer) =>
+          this.signaling!.flushTerminal!(peer, control),
+        ),
+      );
+    }
+    return pending.owner === this.owner && this.terminal.get(id) === pending;
+  }
+  private finishTerminal(id: string): Promise<void> {
+    const pending = this.terminal.get(id);
+    if (!pending || pending.owner !== this.owner)
+      return Promise.reject(new Error('CALL_UNAVAILABLE'));
+    if (pending.work) return pending.work;
+    const { call } = pending;
+    const assertCurrent = () => {
+      if (pending.owner !== this.owner || this.terminal.get(id) !== pending)
+        throw new Error('CALL_UNAVAILABLE');
+    };
+    const notify = async () => {
+      if (!pending.notified && pending.notify) {
+        const control: CallControl = {
+          type: 'call',
+          id: call.id,
+          media: call.media,
+          action: call.status === 'incoming' ? 'decline' : 'end',
+          ...(call.group ? { group: call.group } : {}),
+        };
+        if (call.group)
+          await Promise.all(call.participants!.map((person) => this.send(person.peer, control)));
+        else if (this.signaling) await this.send(call.peer, control);
+        else if (!this.mesh.send(call.peer, control)) {
+          await this.mesh.waitForPeer(call.peer, () => this.owner === pending.owner, 15000);
+          if (this.owner !== pending.owner || !this.mesh.send(call.peer, control))
+            throw new Error('CALL_UNAVAILABLE');
+        }
+        assertCurrent();
+        pending.notified = true;
+      }
+    };
+    const record = async () => {
+      assertCurrent();
+      if (!pending.recorded) {
+        await this.engine.recordCall(
+          call.chat,
+          call.id,
+          call.peer,
+          call.media,
+          callOutcome(call, pending.failed, pending.reason),
+          call.incoming ? 'incoming' : 'outgoing',
+        );
+        pending.recorded = true;
+      }
+    };
+    const work = (async () => {
+      // A native decline keeps its saved incoming invite recoverable until the
+      // terminal control is durable. Ordinary call history remains immediate.
+      if (pending.requireDurable) {
+        await notify();
+        await record();
+      } else {
+        const results = await Promise.allSettled([notify(), record()]);
+        for (const result of results) if (result.status === 'rejected') throw result.reason;
+      }
+    })();
+    pending.work = work;
+    void work
+      .finally(() => {
+        if (pending.work === work) delete pending.work;
+      })
+      .catch(() => undefined);
+    return work;
+  }
   // Called only after the incoming UI was presented (CallKit/Telecom success
   // event, or the focused foreground call screen without a native provider).
   confirmIncoming(id: string): Promise<void> {
@@ -779,13 +891,40 @@ export class DeviceCalls {
     failed = false,
     notify = true,
     reason: 'local' | 'remote' | 'decline' | 'timeout' = 'local',
+    requireDurable = false,
   ) {
     const call = this.value;
     if (!call || !this.active()) return;
     connectionTiming(failed ? 'CALL_FAILED' : 'CALL_ENDED');
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
-    this.stopCapturedScreen();
+    try {
+      this.stopCapturedScreen();
+    } catch {
+      /* A closed capture must not prevent decline. */
+    }
+    for (const [id, pending] of this.terminal)
+      if (pending.expires < Date.now()) this.terminal.delete(id);
+    if (this.terminal.size >= 16) this.terminal.delete(this.terminal.keys().next().value!);
+    this.terminal.set(call.id, {
+      owner: this.owner ?? '',
+      call: {
+        ...call,
+        local: null,
+        remote: null,
+        screen: null,
+        ...(call.participants
+          ? { participants: call.participants.map((person) => ({ ...person, remote: null })) }
+          : {}),
+      },
+      failed,
+      reason,
+      notify,
+      requireDurable,
+      notified: !notify,
+      recorded: false,
+      expires: Date.now() + 120000,
+    });
     this.update({
       ...call,
       status: failed ? 'failed' : 'ended',
@@ -797,49 +936,29 @@ export class DeviceCalls {
         ? { participants: call.participants.map((value) => ({ ...value, remote: null })) }
         : {}),
     });
-    // Stop local capture and playback before waiting for delivery of the hangup control.
+    // Stop local capture/playback even if one native resource already closed.
     this.clearGroupTimers();
-    for (const peer of call.group ? call.group.participants : [call.peer])
-      this.mesh.endMedia(peer, call.id);
-    call.local?.getTracks().forEach((track) => track.stop());
-    const audioStopped = stopCallAudio().catch(() => undefined);
-    let notification = Promise.resolve();
-    if (notify) {
-      const control: CallControl = {
-        type: 'call',
-        id: call.id,
-        media: call.media,
-        action: call.status === 'incoming' ? 'decline' : 'end',
-        ...(call.group ? { group: call.group } : {}),
-      };
-      if (call.group)
-        notification = Promise.all(
-          call.participants!.map((participant) =>
-            this.send(participant.peer, control).catch(() => undefined),
-          ),
-        ).then(() => undefined);
-      else if (this.signaling) notification = this.send(call.peer, control).catch(() => undefined);
-      else if (!this.mesh.send(call.peer, control))
-        void this.mesh
-          .waitForPeer(call.peer, () => true, 15000)
-          .then(() => {
-            this.mesh.send(call.peer, control);
-          })
-          .catch(() => undefined);
+    for (const peer of call.group ? call.group.participants : [call.peer]) {
+      try {
+        this.mesh.endMedia(peer, call.id);
+      } catch {
+        /* Continue terminal signaling. */
+      }
     }
+    for (const track of call.local?.getTracks() ?? []) {
+      try {
+        track.stop();
+      } catch {
+        /* Continue releasing remaining tracks. */
+      }
+    }
+    const terminal = this.finishTerminal(call.id);
     await Promise.all([
-      audioStopped,
-      notification,
-      this.engine.recordCall(
-        call.chat,
-        call.id,
-        call.peer,
-        call.media,
-        callOutcome(call, failed, reason),
-        call.incoming ? 'incoming' : 'outgoing',
-      ),
+      stopCallAudio().catch(() => undefined),
+      requireDurable ? terminal : terminal.catch(() => undefined),
     ]);
   }
+
   mute() {
     const call = this.value;
     if (!call?.local) return;
@@ -883,6 +1002,7 @@ export class DeviceCalls {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     this.value?.local?.getTracks().forEach((track) => track.stop());
+    this.terminal.clear();
     this.update(null);
     void stopCallAudio().catch(() => undefined);
   }

@@ -176,6 +176,6 @@ struct ShareView: View {
           }.padding(.vertical, 16).background(accent, in: Capsule())
         }.disabled(model.selected == nil || model.sending).opacity(model.selected == nil ? 0.45 : 1).padding(20)
       }
-    }.foregroundStyle(.black).background(Color(red: 0.94, green: 0.94, blue: 0.93)).preferredColorScheme(.light)
+    }.foregroundStyle(.black).background(Color(red: 247.0 / 255.0, green: 248.0 / 255.0, blue: 245.0 / 255.0)).preferredColorScheme(.light)
   }
 }

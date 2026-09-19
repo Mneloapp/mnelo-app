@@ -46,3 +46,33 @@ The first launch without a populated cache and limited Contacts access can still
 require a fresh scan; the row placeholders cover this period. The existing
 intermittent suspension crash remains unresolved. Earlier build archives and
 source releases, including 37 and 43, are retained.
+
+## Packaged build and source
+
+Frozen private source: `bb7f1765fc751c6b5a0284d748b0230ae8014e14`.
+The public `ios-0.1.0-44` tag points to
+`d215900af0f744d75155c7dda8b1d8546299180b`; both share exact tree
+`8186d995ead5614c1be1edb9f91c6dafa3a3dc6b`.
+
+The signed archive and App Store IPA pass configuration, signature, all extension,
+production entitlement, permission, source-offer and compiled regression checks.
+The archive and distribution Hermes hashes match:
+`7e21b87bb1c143aadd5c2ce44336f593a646b9190bfdbef2878fa8e4215f85e2`.
+The 121,098,161-byte IPA has SHA-256
+`b85dcc6297aac5a1749b9ce7b8bd04b48c8a2d68b1b900612f0f172b4904d83e`
+and zero packaged-secret findings. Archive and IPA are retained in `artifacts`.
+
+Exact-source CI run `35456817227` passed the full check, Expo doctor and dependency
+compatibility steps in two attempts. Both attempts then stopped because npm's
+advisory endpoint returned HTTP 503 maintenance; a local audit reproduced it.
+Thus CI is not fully green and the current dependency advisory scan is unavailable.
+Dependencies are byte-for-byte unchanged from build 43. Mobile exports and secret
+scans that were skipped by CI passed locally. The security gate was not altered.
+
+Xcode confirmed upload at 21:12 Asia/Tbilisi, with the four pre-existing vendor
+dSYM warnings for React, ReactNativeDependencies, WebRTC and hermesvm. Apple
+build ID: `4bdcca5f-288a-4b4f-be09-bc26e98ec440`. Apple completed processing. Distribution to tester groups is held: while
+processing, the owner reported a fresh build-43 crash on declining an incoming
+call, with the caller left ringing. The following release will include the
+loading fix together with the decline fix and requested visual changes. Build 44
+has not been assigned to either tester group.

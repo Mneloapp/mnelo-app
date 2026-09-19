@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { CallScreen } from '@/messenger/screens/CallScreen';
+import { AppState, Platform } from 'react-native';
+import { CallScreen, IncomingCalls } from '@/messenger/screens/CallScreen';
 import type { DeviceCall } from '@/messenger/calls';
 
-jest.mock('@/messenger/system-calls', () => ({ systemCallAudio: () => false }));
+let mockSystemCalls = false;
+jest.mock('@/messenger/system-calls', () => ({ systemCallAudio: () => mockSystemCalls }));
 let mockFocused = true;
 let mockRouteMedia: 'voice' | 'video' | undefined;
 jest.mock('expo-router', () => ({
@@ -90,6 +92,7 @@ async function show(waitForName = true) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockFocused = true;
+  mockSystemCalls = false;
   mockRouteMedia = undefined;
   jest.mocked(router.canGoBack).mockReturnValue(true);
   mockProfile.mockResolvedValue({ avatar: '' });
@@ -193,9 +196,10 @@ test('hangup remains available during an audio route change and ends only once',
   await act(() => finish());
 });
 
-test('incoming calls expose accept/decline and connection failure returns to the previous screen', async () => {
+test('incoming calls expose accept/decline without custom quick replies and failure returns to the previous screen', async () => {
   mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null };
   await show();
+  expect(screen.queryByRole('button', { name: /reply|message/i })).toBeNull();
   expect(screen.getByRole('button', { name: 'Decline' })).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Accept' }));
   expect(mockCalls.accept).toHaveBeenCalledTimes(1);
@@ -314,4 +318,64 @@ test('incoming answer and media playback remain available while display aliases 
   await act(() => update({ status: 'active', remote: stream('remote') }));
   expect(screen.getByTestId('call-audio', { includeHiddenElements: true })).toBeOnTheScreen();
   expect(screen.getByRole('button', { name: 'End call' })).toBeOnTheScreen();
+});
+
+test('iOS foreground ringing stays in CallKit and opens app controls only once after answering', async () => {
+  const previousPlatform = Platform.OS,
+    previousState = AppState.currentState;
+  Platform.OS = 'ios';
+  AppState.currentState = 'active';
+  mockSystemCalls = true;
+  mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null, chat: 'other-chat' };
+  try {
+    await render(<IncomingCalls />);
+    expect(router.push).not.toHaveBeenCalled();
+    await act(() => update({ status: 'connecting' }));
+    expect(router.push).toHaveBeenCalledTimes(1);
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/call/[id]',
+      params: { id: 'other-chat' },
+    });
+    await act(() => update({ status: 'active' }));
+    expect(router.push).toHaveBeenCalledTimes(1);
+  } finally {
+    Platform.OS = previousPlatform;
+    AppState.currentState = previousState;
+  }
+});
+
+test('declining an iOS system incoming call never opens the app call screen', async () => {
+  const previousPlatform = Platform.OS,
+    previousState = AppState.currentState;
+  Platform.OS = 'ios';
+  AppState.currentState = 'active';
+  mockSystemCalls = true;
+  mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null, chat: 'other-chat' };
+  try {
+    await render(<IncomingCalls />);
+    await act(() => update({ status: 'ended' }));
+    expect(router.push).not.toHaveBeenCalled();
+  } finally {
+    Platform.OS = previousPlatform;
+    AppState.currentState = previousState;
+  }
+});
+
+test('Android foreground incoming calls retain the app answer screen', async () => {
+  const previousPlatform = Platform.OS,
+    previousState = AppState.currentState;
+  Platform.OS = 'android';
+  AppState.currentState = 'active';
+  mockSystemCalls = true;
+  mockCall = { ...mockCall!, incoming: true, status: 'incoming', local: null, chat: 'other-chat' };
+  try {
+    await render(<IncomingCalls />);
+    expect(router.push).toHaveBeenCalledWith({
+      pathname: '/call/[id]',
+      params: { id: 'other-chat' },
+    });
+  } finally {
+    Platform.OS = previousPlatform;
+    AppState.currentState = previousState;
+  }
 });

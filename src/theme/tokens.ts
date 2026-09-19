@@ -1,8 +1,8 @@
 export const theme = {
   colors: {
-    background: '#F0F1EE',
+    background: '#F7F8F5',
     surface: '#FFFFFF',
-    surfaceSoft: '#F3F4F1',
+    surfaceSoft: '#FAFBF8',
     textPrimary: '#1A1A1A',
     textSecondary: '#626974',
     // Secondary text retains contrast on the gray canvas and soft surfaces.

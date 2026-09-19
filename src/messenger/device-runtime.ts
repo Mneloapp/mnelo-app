@@ -1,6 +1,7 @@
 import { getRandomBytes, randomUUID } from 'expo-crypto';
 import { openDeviceDatabase } from './database';
 import { DeviceMessenger } from './engine';
+import { DeviceEnginePool } from './device-engine-pool';
 import { PeerMesh } from './peer-mesh';
 import { makePeer } from './peer-platform';
 import { DeviceCalls } from './calls';
@@ -41,9 +42,6 @@ function publish(next: NetworkView) {
 export function deviceNetworkFailed() {
   publish({ ...emptyNetwork, invalid: true });
 }
-let enginePromise: Promise<DeviceMessenger> | null = null;
-let engineUsers = 0;
-let closing: Promise<void> = Promise.resolve();
 let network: {
   engine: DeviceMessenger;
   key: string;
@@ -53,42 +51,29 @@ let network: {
   listeners: Set<() => void>;
   dispose: () => void;
 } | null = null;
+const enginePool = new DeviceEnginePool(
+  openDeviceDatabase,
+  async (database) => {
+    const engine = new DeviceMessenger(database, getRandomBytes, randomUUID);
+    await engine.initialize();
+    return engine;
+  },
+  (engine) => engine.close(),
+  (engine) => {
+    if (network && (!engine || network.engine === engine)) {
+      const old = network;
+      network = null;
+      old.dispose();
+    }
+    publish(emptyNetwork);
+  },
+);
+export const deviceEngineRecoverySnapshot = enginePool.snapshot;
+export const observeDeviceEngineRecovery = enginePool.observe;
+export const deviceEngineNeedsForeground = enginePool.needsForeground;
 export async function acquireDeviceEngine() {
-  engineUsers++;
-  if (!enginePromise)
-    enginePromise = closing.then(async () => {
-      const database = await openDeviceDatabase();
-      const engine = new DeviceMessenger(database, getRandomBytes, randomUUID);
-      try {
-        await engine.initialize();
-        return engine;
-      } catch (error) {
-        await database.close();
-        throw error;
-      }
-    });
-  const current = enginePromise;
-  let engine: DeviceMessenger;
-  try {
-    engine = await current;
-  } catch (error) {
-    engineUsers--;
-    if (enginePromise === current) enginePromise = null;
-    throw error;
-  }
-  let released = false;
-  return {
-    engine,
-    release() {
-      if (released) return;
-      released = true;
-      engineUsers--;
-      if (engineUsers === 0 && enginePromise === current) {
-        enginePromise = null;
-        closing = engine.close().catch(() => undefined);
-      }
-    },
-  };
+  const lease = await enginePool.acquire();
+  return { engine: lease.value, release: lease.release };
 }
 export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => void) {
   const own = engine.currentIdentity();
@@ -157,6 +142,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
       delivery
         ? {
             ringingReceipt: (peer, id) => delivery.sendRingingReceipt(peer, id),
+            flushTerminal: (peer, control) => delivery.waitForCallUpload(peer, control),
             send: async (peer, control) => {
               if (!(await delivery.sendDurable(peer, control))) throw new Error('CALL_UNAVAILABLE');
             },
@@ -230,6 +216,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
     );
     mesh.start();
     const reconcile = () => {
+      if (enginePool.needsForeground()) return;
       void mesh.enforceContacts().catch(() => undefined);
       void mesh.wake?.reconcile().catch(() => undefined);
       if (delivery) {
@@ -249,13 +236,15 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
     if (delivery)
       void delivery
         .start()
-        .then(() => engine.flush())
+        .then(() => {
+          if (view.mesh === mesh) return engine.flush();
+        })
         .catch(() => {
           if (view.mesh === mesh) publish({ ...view, delivery: 'update-required' });
         });
     const foreground = delivery
       ? AppState.addEventListener('change', (state) => {
-          if (state === 'active') {
+          if (state === 'active' && !enginePool.needsForeground() && network?.mesh === mesh) {
             delivery.pump.receiveWake();
             void engine.flush().catch(() => undefined);
           }
@@ -263,7 +252,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
       : null;
     const connectivity = delivery
       ? NetInfo.addEventListener((state) => {
-          if (state.isConnected) {
+          if (state.isConnected && !enginePool.needsForeground() && network?.mesh === mesh) {
             delivery.pump.receiveWake();
             void engine.flush().catch(() => undefined);
           }

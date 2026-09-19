@@ -1228,3 +1228,30 @@ checkpoint. The first launch populates the cache. No physical-phone installation
 is attempted because the owner cannot connect one. Existing archives remain
 retained, and the previously documented intermittent suspension crash is not
 claimed fixed. See [BUILD_44](BUILD_44.md).
+
+Build 44 uploaded successfully at 21:12 Asia/Tbilisi and Apple completed processing
+(build ID `4bdcca5f-288a-4b4f-be09-bc26e98ec440`). Archive and distribution checks
+pass; public exact-tree source is `d215900af0f744d75155c7dda8b1d8546299180b`.
+Tester distribution is held after the owner reported a new build-43 decline
+crash during processing. The next release will carry the loading fix with that
+correction and the newly requested notification/visual changes. No group received 44. CI passed full check/doctor/dependency compatibility twice, then stopped on
+HTTP 503 from npm's advisory service; the same audit failure reproduced locally.
+Dependencies are unchanged, local exports and secret scans pass, and CI's security
+gate is preserved. This is not a fully green CI result. See [BUILD_44](BUILD_44.md).
+
+## September 19, 2026 — Build 45 native incoming calls and suspension safety
+
+The owner reported simultaneous Mnelo and system incoming call interfaces and a
+native decline incorrectly recorded as missed. Incoming iOS ringing now stays in
+CallKit; Mnelo controls open after answering, and both decline paths agree.
+Custom call replies/companion notifications are removed at the owner's request.
+Native end intent survives interruption until the encrypted terminal event has
+uploaded, with bounded background time and account-scoped replay.
+
+Fresh build-43 reports show RunningBoard `0xdead10cc` during suspension. An owned
+iOS SQLCipher adapter now protects shared-file work with finite background tasks,
+interrupts and closes expired connections, and reopens the existing history with
+a new engine generation. Native SQLCipher probes and scoped regressions pass;
+full release checks and physical acceptance are tracked in [BUILD_45](BUILD_45.md).
+The release also uses native foreground message banners, lightens the background,
+clears stale missing-quote notices and includes build 44's warm contact-name cache.

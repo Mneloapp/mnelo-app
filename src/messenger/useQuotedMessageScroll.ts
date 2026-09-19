@@ -24,6 +24,20 @@ export function useQuotedMessageScroll(
   const [target, setTarget] = useState<string | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
+  const [stateChat, setStateChat] = useState(chat);
+  // Reset the previous conversation's presentation before committing this
+  // render, so neither its notice nor a scroll target flashes in the new chat.
+  if (stateChat !== chat) {
+    setStateChat(chat);
+    setUnavailable(false);
+    setTarget(null);
+    setHighlighted(null);
+  }
+  useEffect(() => {
+    if (!unavailable) return;
+    const timer = setTimeout(() => setUnavailable(false), 5000);
+    return () => clearTimeout(timer);
+  }, [unavailable]);
   useEffect(() => {
     const generation = request.current;
     return () => {
@@ -64,7 +78,10 @@ export function useQuotedMessageScroll(
       request.current.serial++;
       pending.current = null;
       setTarget(null);
+      setUnavailable(false);
+      setHighlighted(null);
       if (retry.current) clearTimeout(retry.current);
+      if (highlightTimer.current) clearTimeout(highlightTimer.current);
     },
     onViewableItemsChanged: visible,
     onScrollToIndexFailed: ({
@@ -92,8 +109,10 @@ export function useQuotedMessageScroll(
       setTarget(null);
       setUnavailable(false);
       try {
-        if (!(await latest.current.exists(id))) {
-          if (ticket === request.current.serial) setUnavailable(true);
+        const available = await latest.current.exists(id);
+        if (ticket !== request.current.serial) return;
+        if (!available) {
+          setUnavailable(true);
           return;
         }
         let loaded = latest.current.rows;

@@ -31,7 +31,8 @@ export function callOutcome(
   failed: boolean,
   reason: 'local' | 'remote' | 'decline' | 'timeout',
 ): CallOutcome {
-  if (call.status === 'incoming') return reason === 'local' && !failed ? 'declined' : 'missed';
+  if (call.status === 'incoming')
+    return (reason === 'local' || reason === 'decline') && !failed ? 'declined' : 'missed';
   if (reason === 'decline') return 'declined';
   if (call.status === 'ringing' && (reason === 'timeout' || reason === 'remote' || !failed))
     return 'unanswered';

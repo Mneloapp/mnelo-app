@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { Platform } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams, usePathname } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -10,7 +11,6 @@ import { useDevice } from '../DeviceProvider';
 import { useLocalAction } from './shared';
 import { useAppActive } from '@/hooks/useAppActive';
 import { systemCallAudio } from '../system-calls';
-import { CallQuickReplies } from '../components/CallQuickReplies';
 const noSubscribe = () => () => {};
 const noCall = () => null;
 export function IncomingCalls() {
@@ -20,7 +20,13 @@ export function IncomingCalls() {
   const path = usePathname();
   const presented = useRef<string | null>(null);
   useEffect(() => {
-    const present = call?.incoming && ['incoming', 'connecting', 'active'].includes(call.status);
+    // iOS presents the CallKit banner while ringing, even with Mnelo open.
+    // Open our media controls only after the person answers that system UI.
+    const nativeRinging = Platform.OS === 'ios' && systemCallAudio() && call?.status === 'incoming';
+    const present =
+      call?.incoming &&
+      !nativeRinging &&
+      ['incoming', 'connecting', 'active'].includes(call.status);
     if (active && present && call && presented.current !== call.id) {
       presented.current = call.id;
       if (path !== '/call/' + call.chat)
@@ -38,7 +44,6 @@ export function CallScreen() {
   const shareAction = useLocalAction();
   const started = useRef(false);
   const [groupStarted, setGroupStarted] = useState(false);
-  const [replying, setReplying] = useState(false);
   const dismissed = useRef(false);
   const focused = useIsFocused();
   const foreground = useAppActive();
@@ -123,63 +128,54 @@ export function CallScreen() {
   }
   const avatarPeer = active?.peer ?? peer?.key;
   return (
-    <>
-      <CallSurface
-        call={active}
-        title={name}
-        names={names}
-        avatar={
-          avatarPeer ? (
-            <PeerAvatar peer={avatarPeer} name={name} size="call" />
-          ) : (
-            <Avatar name={name} size="call" />
-          )
-        }
-        available={Boolean(calls)}
-        busy={action.busy}
-        ending={endAction.busy}
-        error={endAction.error ?? shareAction.error ?? action.error}
-        onBack={dismiss}
-        onReply={() => setReplying(true)}
-        onAccept={() =>
-          void action.run(async () => {
-            await calls?.accept();
-          })
-        }
-        onEnd={() =>
+    <CallSurface
+      call={active}
+      title={name}
+      names={names}
+      avatar={
+        avatarPeer ? (
+          <PeerAvatar peer={avatarPeer} name={name} size="call" />
+        ) : (
+          <Avatar name={name} size="call" />
+        )
+      }
+      available={Boolean(calls)}
+      busy={action.busy}
+      ending={endAction.busy}
+      error={endAction.error ?? shareAction.error ?? action.error}
+      onBack={dismiss}
+      onAccept={() =>
+        void action.run(async () => {
+          await calls?.accept();
+        })
+      }
+      onEnd={() =>
+        void endAction.run(async () => {
+          await calls?.end();
+        })
+      }
+      onShareScreen={() => {
+        if (active?.screenStarting)
           void endAction.run(async () => {
-            await calls?.end();
-          })
-        }
-        onShareScreen={() => {
-          if (active?.screenStarting)
-            void endAction.run(async () => {
-              await calls?.stopScreenShare();
-            });
-          else
-            void shareAction.run(async () => {
-              await calls?.shareScreen();
-            });
-        }}
-        onMute={() => calls?.mute()}
-        onSpeaker={() =>
-          void action.run(async () => {
-            await calls?.speaker();
-          })
-        }
-        onCamera={() => calls?.camera()}
-        onSwitchCamera={() =>
-          void action.run(async () => {
-            await calls?.switchCamera();
-          })
-        }
-      />
-      {replying && active?.status === 'incoming' && calls && (
-        <CallQuickReplies
-          onClose={() => setReplying(false)}
-          onSend={(text) => calls.replyAndDecline(active.id, text)}
-        />
-      )}
-    </>
+            await calls?.stopScreenShare();
+          });
+        else
+          void shareAction.run(async () => {
+            await calls?.shareScreen();
+          });
+      }}
+      onMute={() => calls?.mute()}
+      onSpeaker={() =>
+        void action.run(async () => {
+          await calls?.speaker();
+        })
+      }
+      onCamera={() => calls?.camera()}
+      onSwitchCamera={() =>
+        void action.run(async () => {
+          await calls?.switchCamera();
+        })
+      }
+    />
   );
 }

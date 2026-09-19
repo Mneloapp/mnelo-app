@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
   type PropsWithChildren,
@@ -27,6 +28,9 @@ import {
   deviceNetworkSnapshot,
   observeDeviceNetwork,
   deviceNetworkFailed,
+  deviceEngineRecoverySnapshot,
+  observeDeviceEngineRecovery,
+  deviceEngineNeedsForeground,
 } from './device-runtime';
 
 type Context = {
@@ -62,8 +66,14 @@ export function DeviceProvider({ children }: PropsWithChildren) {
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const recoveryAttempts = useRef(0);
   const cache = useQueryClient();
   const { t } = useTranslation();
+  const recovery = useSyncExternalStore(
+    observeDeviceEngineRecovery,
+    deviceEngineRecoverySnapshot,
+    deviceEngineRecoverySnapshot,
+  );
   useEffect(() => {
     const timer = setTimeout(() => setWelcomeFinished(true), theme.motion.welcomeMinimumMs);
     return () => clearTimeout(timer);
@@ -73,7 +83,21 @@ export function DeviceProvider({ children }: PropsWithChildren) {
     let current: DeviceMessenger | undefined;
     let release: (() => void) | undefined;
     let unsubscribe: (() => void) | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     void (async () => {
+      if (deviceEngineNeedsForeground()) {
+        await cache.cancelQueries({ queryKey: ['device'] });
+        if (!alive) return;
+        setEngine(null);
+        setError(false);
+        cache.removeQueries({ queryKey: ['device'] });
+        if (AppState.currentState !== 'active') return;
+        if (recoveryAttempts.current >= 3) {
+          setError(true);
+          return;
+        }
+        recoveryAttempts.current++;
+      }
       const lease = await acquireDeviceEngine();
       current = lease.engine;
       release = lease.release;
@@ -82,6 +106,7 @@ export function DeviceProvider({ children }: PropsWithChildren) {
         release();
         return;
       }
+      recoveryAttempts.current = 0;
       setEngine(current);
       setIdentity(next ? { key: next.key, name: next.name } : null);
       setEnrollment(current.currentEnrollment());
@@ -99,15 +124,25 @@ export function DeviceProvider({ children }: PropsWithChildren) {
         );
         void cache.invalidateQueries({ queryKey: ['device'] });
       });
-    })().catch(() => {
-      if (alive) setError(true);
+    })().catch((error: unknown) => {
+      const suspended = error instanceof Error && error.message === 'DATABASE_SUSPENDED';
+      if (!alive) return;
+      if (!suspended) setError(true);
+      else if (AppState.currentState === 'active') {
+        if (recoveryAttempts.current >= 3) setError(true);
+        else
+          retryTimer = setTimeout(() => {
+            if (alive && AppState.currentState === 'active') setAttempt((value) => value + 1);
+          }, 250);
+      }
     });
     return () => {
       alive = false;
+      if (retryTimer) clearTimeout(retryTimer);
       unsubscribe?.();
       release?.();
     };
-  }, [attempt, cache]);
+  }, [attempt, cache, recovery]);
   useEffect(() => {
     // A reopened database (including Fast Refresh) has a new engine. Cached
     // queries may still hold an error from the old, already closed connection.
@@ -115,7 +150,10 @@ export function DeviceProvider({ children }: PropsWithChildren) {
   }, [engine, cache]);
   useEffect(() => {
     const listener = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && engine) {
+      if (state === 'active' && deviceEngineNeedsForeground()) {
+        recoveryAttempts.current = 0;
+        setAttempt((value) => value + 1);
+      } else if (state === 'active' && engine) {
         void cache.invalidateQueries({ queryKey: ['device'] });
         void engine.flush().catch(() => undefined);
       }
@@ -150,6 +188,7 @@ export function DeviceProvider({ children }: PropsWithChildren) {
         <StateView
           error={t('messenger.deviceUnavailable')}
           onRetry={() => {
+            recoveryAttempts.current = 0;
             setError(false);
             setEngine(null);
             setAttempt((value) => value + 1);

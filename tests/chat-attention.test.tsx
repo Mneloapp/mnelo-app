@@ -60,6 +60,8 @@ test.each([
   [true, 'incoming', false, 'remote', 'missed'],
   [true, 'incoming', true, 'timeout', 'missed'],
   [true, 'incoming', false, 'local', 'declined'],
+  [true, 'incoming', false, 'decline', 'declined'],
+  [true, 'incoming', true, 'decline', 'missed'],
   [false, 'ringing', false, 'decline', 'declined'],
   [false, 'ringing', true, 'timeout', 'unanswered'],
   [true, 'connecting', true, 'local', 'failed'],

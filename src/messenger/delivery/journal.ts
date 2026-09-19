@@ -184,6 +184,18 @@ export class SignalJournal {
         ).length > 0,
     );
   }
+  async eventUploaded(peer: string, eventKey: string) {
+    return this.atomic(async (db) => {
+      const row = (
+        await db.all<{ uploaded: number }>(
+          'SELECT uploaded FROM signal_outbox WHERE token=? AND peer=?',
+          hash(JSON.stringify([peer, ['event', eventKey]])),
+          peer,
+        )
+      )[0];
+      return row ? row.uploaded === 1 : null;
+    });
+  }
   async needsBundle(peer: string) {
     return this.atomic(async (db) => this.signal.needsBundle(await this.state(db), peer));
   }

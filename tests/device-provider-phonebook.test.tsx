@@ -38,6 +38,9 @@ jest.mock('@/messenger/device-runtime', () => ({
   deviceNetworkSnapshot: () => mockNetwork,
   observeDeviceNetwork: () => jest.fn(),
   deviceNetworkFailed: jest.fn(),
+  deviceEngineRecoverySnapshot: () => 0,
+  observeDeviceEngineRecovery: () => jest.fn(),
+  deviceEngineNeedsForeground: () => false,
 }));
 jest.mock('@/messenger/enrollment', () => ({ enrollmentAllowsAccess: () => true }));
 jest.mock('@/messenger/phonebook', () => ({

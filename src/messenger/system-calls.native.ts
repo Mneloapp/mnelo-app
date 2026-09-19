@@ -8,11 +8,12 @@ import type { PhoneClient } from './phone-client';
 import { pushRegistration } from './wake-protocol';
 import { z } from 'zod';
 import { setBackgroundStatus, registerBackgroundRetry } from './background-status';
-import { observeCallReplies } from './device-alerts.native';
 type NativeCalls = NativeModule<{ changed: () => void }> & {
   addListener(name: 'changed', listener: () => void): { remove(): void };
   state(): Promise<{ voipToken?: string; environment: string }>;
   drain(): Promise<unknown[]>;
+  configureAccount?(account: string): Promise<void>;
+  acknowledgeEnd?(id: string, account: string): Promise<void>;
   incoming(id: string, video: boolean, callerHint?: string): Promise<void>;
   outgoing(id: string, video: boolean): Promise<void>;
   identify?(id: string, name: string, phone: string, video: boolean): Promise<void>;
@@ -77,9 +78,52 @@ export function observeSystemCalls(
   const nativePending = new Set<string>();
   const ended = new Map<
     string,
-    { expires: number; reason: 'local' | 'remote' | 'decline' | 'timeout' }
+    {
+      expires: number;
+      reason: 'local' | 'remote' | 'decline' | 'timeout';
+      native?: boolean;
+      failed?: boolean;
+    }
   >();
-  const quickReplies = new Map<string, { text: string; expires: number }>();
+  const owner = calls.owner;
+  const account = owner
+    ? callerHint(owner).then(async (value) => {
+        if (!stopped) await bridge.configureAccount?.(value);
+        return value;
+      })
+    : Promise.resolve(null);
+  // Attach rejection immediately, while registration and call presentation run.
+  void account.catch(() => undefined);
+  const ending = new Map<string, Promise<void>>();
+  let endRetry: ReturnType<typeof setTimeout> | null = null;
+  function scheduleEndRetry() {
+    if (stopped || endRetry || !Array.from(ended.values()).some((value) => value.native)) return;
+    endRetry = setTimeout(() => {
+      endRetry = null;
+      void drain().catch(() => undefined);
+    }, 1000);
+  }
+  async function finishNativeEnd(id: string) {
+    const pending = ended.get(id);
+    if (!pending?.native || stopped) return;
+    if (ending.has(id)) return ending.get(id);
+    const work = (async () => {
+      const scope = await account;
+      if (stopped || calls.owner !== owner) return;
+      const completed = await calls.endFromSystem(id, pending.reason, Boolean(pending.failed));
+      if (completed && !stopped && calls.owner === owner) {
+        if (scope) await bridge.acknowledgeEnd?.(id, scope);
+        pending.native = false;
+      }
+    })();
+    ending.set(id, work);
+    try {
+      await work;
+    } finally {
+      if (ending.get(id) === work) ending.delete(id);
+      scheduleEndRetry();
+    }
+  }
   let shown: string | null = null;
   let connected: string | null = null;
   let ringing: string | null = null;
@@ -149,6 +193,12 @@ export function observeSystemCalls(
     if (stopped) return;
     const call = calls.snapshot();
     for (const [id, value] of ended) if (value.expires < Date.now()) ended.delete(id);
+    if (call && ended.get(call.id)?.native) {
+      // Durable upload can wait on connectivity. Never block a new CallKit
+      // answer/mute/end event behind the previous call's terminal upload.
+      void finishNativeEnd(call.id).catch(() => undefined);
+      if (!['ended', 'failed'].includes(call.status)) return;
+    }
     if (!call || call.status === 'ended' || call.status === 'failed') {
       if (shown) {
         const previous = shown;
@@ -162,7 +212,8 @@ export function observeSystemCalls(
       return;
     }
     if (ended.has(call.id)) {
-      await calls.end(false, true, ended.get(call.id)!.reason);
+      if (ended.get(call.id)!.native) void finishNativeEnd(call.id).catch(() => undefined);
+      else await calls.end(false, true, ended.get(call.id)!.reason);
       return;
     }
     if (shown !== call.id) {
@@ -196,12 +247,6 @@ export function observeSystemCalls(
       // A successful native report and an authenticated invite must both exist.
       // Do not wait for the receipt's storage/network work before processing an answer.
       void calls.confirmIncoming(call.id).catch(() => undefined);
-    }
-    const reply = quickReplies.get(call.id);
-    if (reply && reply.expires > Date.now() && call.status === 'incoming') {
-      quickReplies.delete(call.id);
-      void calls.replyAndDecline(call.id, reply.text).catch(() => undefined);
-      return;
     }
     const shouldRing = isRemoteRinging(call) && Boolean(call.local);
     if (ringing && (!shouldRing || ringing !== call.id)) {
@@ -254,6 +299,8 @@ export function observeSystemCalls(
     try {
       do {
         drainAgain = false;
+        await account;
+        if (stopped) return;
         for (const raw of await bridge.drain()) {
           const parsed = event.safeParse(raw);
           if (!parsed.success) continue;
@@ -279,15 +326,20 @@ export function observeSystemCalls(
             answers.delete(value.id);
             nativeAnswered.delete(value.id);
             nativePending.delete(value.id);
-            if (!ended.has(value.id))
+            const previous = ended.get(value.id);
+            if (!previous)
               ended.set(value.id, {
                 expires: Date.now() + 120000,
                 reason: value.reason ?? 'local',
+                native: true,
+                failed: Boolean(value.code),
               });
-            if (calls.snapshot()?.id === value.id) {
-              if (value.code) calls.stage(value.code);
-              await calls.end(Boolean(value.code), true, ended.get(value.id)!.reason);
+            else if (previous.reason !== 'remote') {
+              previous.native = true;
+              previous.failed ||= Boolean(value.code);
             }
+            if (value.code && calls.snapshot()?.id === value.id) calls.stage(value.code);
+            void finishNativeEnd(value.id).catch(() => undefined);
           }
           if (
             value.type === 'mute' &&
@@ -301,6 +353,7 @@ export function observeSystemCalls(
       } while (drainAgain && !stopped);
     } finally {
       draining = false;
+      scheduleEndRetry();
     }
   }
   const controls = calls.observeControl((value) => {
@@ -310,14 +363,6 @@ export function observeSystemCalls(
         ended.set(value.id, { expires: Date.now() + 120000, reason: 'remote' });
       void bridge.end(value.id).catch(() => undefined);
     }
-  });
-  const callReplies = observeCallReplies((id, text) => {
-    const call = calls.snapshot();
-    if (call?.id === id && call.status === 'incoming') {
-      void calls.replyAndDecline(id, text).catch(() => undefined);
-      return;
-    }
-    quickReplies.set(id, { text, expires: Date.now() + 120000 });
   });
   registerBackgroundRetry(register);
   const changes = bridge.addListener('changed', () => {
@@ -347,13 +392,13 @@ export function observeSystemCalls(
   void drain().catch(() => undefined);
   return () => {
     stopped = true;
+    if (endRetry) clearTimeout(endRetry);
     if (shown) nativePending.add(shown);
     for (const id of nativePending) void bridge.end(id).catch(() => undefined);
     nativePending.clear();
     changes.remove();
     unsubscribe();
     controls();
-    callReplies();
     registerBackgroundRetry(null);
     app.remove();
     tokens.remove();

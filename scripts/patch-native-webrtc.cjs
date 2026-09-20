@@ -1,5 +1,5 @@
 /* global __dirname */
-// Native iOS camera selection regression in the pinned WebRTC dependency.
+// Native iOS camera selection and CallKit AudioEngine integration fixes.
 // Refuse unknown versions/source; a dependency update requires a fresh review.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -30,3 +30,22 @@ if (digest() !== patched) {
   if (digest() !== patched) throw new Error('Native camera patch integrity check failed.');
 }
 console.log('Verified WebRTC 144.1.2 native camera patch.');
+const audioTarget = path.join(dependency, 'ios/RCTWebRTC/WebRTCModule.m');
+const audioDigest = () => createHash('sha256').update(fs.readFileSync(audioTarget)).digest('hex');
+const audioOriginal = '2d3a38aef55fddbaa6dfd31d3d1f37aea872508f059eac0dbdec65305053f89a';
+const audioPatched = 'c91ad663a93a078a00a529d755b0a45c9afb6216fcdadaf6b98024f202d3f3e5';
+if (audioDigest() !== audioPatched) {
+  if (audioDigest() !== audioOriginal) throw new Error('Unexpected native audio source.');
+  execFileSync(
+    'patch',
+    [
+      '--batch',
+      '--forward',
+      audioTarget,
+      path.join(root, 'patches/livekit-webrtc-144.1.2-callkit-audio.patch'),
+    ],
+    { stdio: 'pipe' },
+  );
+  if (audioDigest() !== audioPatched) throw new Error('Native audio patch integrity check failed.');
+}
+console.log('Verified WebRTC 144.1.2 native CallKit audio patch.');

@@ -1,0 +1,79 @@
+--- a/ios/RCTWebRTC/WebRTCModule.m
++++ b/ios/RCTWebRTC/WebRTCModule.m
+@@ -12,7 +12,8 @@
+ #import "WebRTCModule.h"
+ #import "WebRTCModuleOptions.h"
+ 
+-@interface WebRTCModule ()
++@interface WebRTCModule () <RTCAudioSessionDelegate>
++- (void)mneloSyncCallKitAudio;
+ @end
+ 
+ @implementation WebRTCModule
+@@ -22,6 +23,7 @@
+ }
+ 
+ - (void)dealloc {
++    [[RTCAudioSession sharedInstance] removeDelegate:self];
+     [_localTracks removeAllObjects];
+     _localTracks = nil;
+     [_localStreams removeAllObjects];
+@@ -101,11 +103,58 @@
+         dispatch_queue_attr_t attributes =
+             dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, -1);
+         _workerQueue = dispatch_queue_create("WebRTCModule.queue", attributes);
++
++        // AudioEngine ADM does not use the legacy VoIP audio-unit manual gate.
++        // Park input/output before any track exists, then follow CallKit natively.
++        // Reconcile after subscribing: activation may predate this lazy module.
++        RTCAudioSession *session = [RTCAudioSession sharedInstance];
++        if (session.useManualAudio) {
++            RTCAudioEngineAvailability unavailable = { NO, NO };
++            [_audioDeviceModule setEngineAvailability:unavailable];
++            [session addDelegate:self];
++            [self mneloSyncCallKitAudio];
++        }
+     }
+ 
+     return self;
+ }
+ 
++// BEGIN MNELO CALLKIT AUDIO
++- (void)mneloSyncCallKitAudio {
++    // RTCAudioSession calls its delegates under locks. Never synchronously enter
++    // the ADM worker (which can acquire that session lock) from a delegate.
++    __weak WebRTCModule *weakSelf = self;
++    dispatch_async(self.workerQueue, ^{
++        WebRTCModule *module = weakSelf;
++        if (!module) return;
++        RTCAudioSession *session = [RTCAudioSession sharedInstance];
++        if (!session.useManualAudio) return;
++        // Read at execution time, so an old queued activation cannot reopen the
++        // mic after deactivation/end. Tracks and SDP can exist with this gate shut.
++        BOOL available = session.isActive && session.isAudioEnabled;
++        RTCAudioEngineAvailability availability = { available, available };
++        NSInteger result = [module.audioDeviceModule setEngineAvailability:availability];
++        NSDictionary *state = @{ @"available": @(available), @"result": @(result) };
++        dispatch_async(dispatch_get_main_queue(), ^{
++            [[NSNotificationCenter defaultCenter] postNotificationName:@"MneloNativeAudioEngineState"
++                                                                object:nil userInfo:state];
++        });
++    });
++}
++- (void)audioSession:(RTCAudioSession *)session didChangeCanPlayOrRecord:(BOOL)canPlayOrRecord {
++    [self mneloSyncCallKitAudio];
++}
++- (void)audioSession:(RTCAudioSession *)session didSetActive:(BOOL)active {
++    [self mneloSyncCallKitAudio];
++}
++- (void)audioSessionDidBeginInterruption:(RTCAudioSession *)session {
++    [self mneloSyncCallKitAudio];
++}
++- (void)audioSessionDidEndInterruption:(RTCAudioSession *)session shouldResumeSession:(BOOL)shouldResumeSession {
++    [self mneloSyncCallKitAudio];
++}
++// END MNELO CALLKIT AUDIO
++
+ - (RTCMediaStream *)streamForReactTag:(NSString *)reactTag {
+     RTCMediaStream *stream = _localStreams[reactTag];
+     if (!stream) {

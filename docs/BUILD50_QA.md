@@ -20,4 +20,11 @@ Host checks passed: 681 Jest tests in 117 suites, 225 device integration tests a
 4. With the receiving app open, backgrounded and phone locked, select an iPhone preset reply. Verify one message in both Mnelo chats and the caller stops ringing. Repeat once offline and reconnect; no duplicate reply.
 5. Recheck voice/video answer-to-audio, phone at ear, camera switching, cancellation and decline. Build 49's timing optimization remains; no millisecond latency claim is supported without physical measurement.
 
-The signed build/archive and TestFlight status will be recorded after validation and upload. Prior signed archives/IPAs remain retained. This is a TestFlight release, not a public App Store submission.
+## Release evidence
+
+- Private source commit: `41fd860db659c224fd117f472bd65c8f8f244dbb`; matching public source tag `ios-0.1.0-50` at `4cbc79a43464194979b6154adf7d9cde27237a17`. GitHub checks run `35475990728` passed.
+- Archive: `artifacts/Mnelo-0.1.0-50.xcarchive`; signed IPA: `artifacts/Mnelo-0.1.0-50-export/Mnelo.ipa`, SHA-256 `38edb2e278457c0991083aaf6a56b3c9aa22e0237bc6bd3adcd3447f966d0d83`.
+- Distribution signature, production APNs, shared keychain/app group, service endpoints, Siri vocabulary and source offer passed verification. Main app and all four extensions match the archive executable sections and their own dSYM UUIDs; 95 packaged resource files match. Decoded Hermes scan has no findings; the two packaged minified-JS scanner matches were verified by AST as runtime identity expressions, not embedded secrets.
+- Apple upload and processing completed. Build `1639ed1e-8b22-4ae4-91a4-f1f373f13fdc` is **Testing** in Mnelo Preview (2 external testers) and Mnelo Development (1 internal tester), expiring in 90 days. Automatic tester notification is enabled. The four pre-existing vendor dSYM warnings (React, ReactNativeDependencies, WebRTC, Hermes) remain; Mnelo and extension symbols are retained and verified.
+
+Prior signed archives/IPAs, including build 37, remain retained. Physical acceptance is pending. This is a TestFlight release, not a public App Store submission.

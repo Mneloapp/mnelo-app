@@ -1,28 +1,23 @@
 import Foundation
 
-// Keep CallKit's answer action pending during ICE/DTLS negotiation. Completing
-// the button press itself starts iOS's timer before the call can communicate.
-// Media transport readiness does not depend on audio-session activation.
+// Fulfill as soon as the answer's audio configuration is ready. CallKit grants
+// its audio session after fulfillment; holding this action for network readiness
+// delays audio activation and can leave a connected transport without sound.
+// The in-app duration is still measured from transport readiness independently.
 final class MneloAnswerCompletion {
-  private struct Pending {
-    let fulfill: (Date) -> Void
-    let fail: () -> Void
-  }
-  private var pending: [UUID: Pending] = [:]
+  private var completed: Set<UUID> = []
   private var connectedDates: [UUID: Date] = [:]
 
   func answer(_ id: UUID, fulfill: @escaping (Date) -> Void, fail: @escaping () -> Void) {
-    if let date = connectedDates[id] { fulfill(date); return }
-    guard pending[id] == nil else { fail(); return }
-    pending[id] = Pending(fulfill: fulfill, fail: fail)
+    guard completed.insert(id).inserted else { fail(); return }
+    fulfill(connectedDates[id] ?? Date())
   }
   func connected(_ id: UUID, at date: Date) {
     guard connectedDates[id] == nil else { return }
     connectedDates[id] = date
-    pending.removeValue(forKey: id)?.fulfill(date)
   }
   func end(_ id: UUID) {
     connectedDates.removeValue(forKey: id)
-    pending.removeValue(forKey: id)?.fail()
+    completed.remove(id)
   }
 }

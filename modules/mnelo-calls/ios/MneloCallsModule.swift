@@ -30,6 +30,7 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
   private var explicitSpeaker: Bool?
   private var routeObserver: NSObjectProtocol?
   private var proximityObserver: NSObjectProtocol?
+  private var audioEngineObserver: NSObjectProtocol?
   private var preparingAudio = false
   private var timingEvents = MneloConnectionTimings()
   private var timingFlush: Timer?
@@ -67,6 +68,11 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     provider.setDelegate(self, queue: .main)
     RTCAudioSession.sharedInstance().useManualAudio = true
     RTCAudioSession.sharedInstance().isAudioEnabled = false
+    audioEngineObserver = NotificationCenter.default.addObserver(forName: Notification.Name("MneloNativeAudioEngineState"), object: nil, queue: .main) { [weak self] note in
+      let result = note.userInfo?["result"] as? Int ?? -1
+      let available = note.userInfo?["available"] as? Bool ?? false
+      Task { @MainActor in self?.timing(result != 0 ? "AUDIO_ENGINE_FAILED" : (available ? "AUDIO_ENGINE_AVAILABLE" : "AUDIO_ENGINE_SUSPENDED")) }
+    }
     routeObserver = NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in
       Task { @MainActor in self?.reportAudioRoute() }
     }
@@ -355,7 +361,10 @@ final class MneloCallManager: NSObject, PKPushRegistryDelegate, CXProviderDelega
     answeredCalls.remove(id)
     answerCompletion.end(id)
     let wasLive = live.remove(id) != nil
-    if live.isEmpty { preparingAudio = false }
+    if live.isEmpty {
+      preparingAudio = false
+      RTCAudioSession.sharedInstance().isAudioEnabled = false
+    }
     guard wasLive else { return }
     if live.isEmpty { explicitSpeaker = nil; defaultSpeaker = false }
     provider.reportCall(with: id, endedAt: Date(), reason: reason)

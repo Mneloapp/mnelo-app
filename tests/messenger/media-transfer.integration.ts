@@ -118,8 +118,11 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
       }),
       /CONFLICT/,
     );
-    const upload = new MediaTransfer(flakyUpload, aj);
+    let uploadProgress = 0,
+      downloadProgress = 0;
+    const upload = new MediaTransfer(flakyUpload, aj, () => uploadProgress++);
     await assert.rejects(upload.uploadStep(descriptor.blob.id), /RESPONSE_LOST/);
+    assert.equal(uploadProgress, 0, 'an uncertain response must back off instead of spinning');
     uploadOrder.length = 0;
     assert.equal(
       await upload.uploadStep(descriptor.blob.id, async () => {
@@ -140,9 +143,10 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
       'a newly queued answer can run before each next media request, not after the whole step',
     );
     assert.equal(puts, 3); // A new step sends at most two missing chunks.
+    assert.equal(uploadProgress, 1, 'only a successful partial step requests continuation');
     assert.equal(await new MediaTransfer(ac, aj).uploadStep(descriptor.blob.id), true);
     assert.equal((await aj.upload(descriptor.blob.id))?.cipher.length, 0);
-    const download = new MediaTransfer(flakyDownload, bj);
+    const download = new MediaTransfer(flakyDownload, bj, () => downloadProgress++);
     assert.throws(() => download.downloadStep('c'.repeat(64), descriptor), /UNAUTHORIZED/);
     assert.equal(
       await download.downloadStep(ar.key, descriptor, async () => {
@@ -156,8 +160,10 @@ test('real signed HTTP media transfers resume after lost responses, yield betwee
       'call-boundary',
       'delivery-blob-get',
     ]);
+    assert.equal(downloadProgress, 1);
     b.failCommit();
     await assert.rejects(download.downloadStep(ar.key, descriptor), /COMMIT_FAILED/);
+    assert.equal(downloadProgress, 1, 'failed durable writes do not request immediate retries');
     assert.equal(await new MediaTransfer(bc, bj).downloadStep(ar.key, descriptor), true);
     assert.deepEqual(Buffer.from(await bj.plaintext(ar.key, descriptor.blob.id)), plain);
     assert.deepEqual(await bj.acknowledgements(), []);

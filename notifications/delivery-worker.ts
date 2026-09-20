@@ -7,6 +7,7 @@ export class DeliveryNotificationWorker {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private stopped = true;
   private running: Promise<void> | null = null;
+  private wakePending = false;
   constructor(
     private readonly store: DeliveryStore,
     private readonly wake: Pick<WakeService, 'deliverQueued'>,
@@ -18,11 +19,14 @@ export class DeliveryNotificationWorker {
   }
   stop() {
     this.stopped = true;
+    this.wakePending = false;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
   }
   wakeNow() {
-    if (!this.stopped) this.schedule(0);
+    if (this.stopped) return;
+    if (this.running) this.wakePending = true;
+    else this.schedule(0);
   }
   private schedule(delay: number) {
     if (this.stopped) return;
@@ -42,7 +46,13 @@ export class DeliveryNotificationWorker {
       await operation;
     } finally {
       if (this.running === operation) this.running = null;
-      this.schedule(1000);
+      // A submission arriving while a provider request is in flight must not
+      // lose its wake when this tick replaces the timer. Provider failures
+      // retain per-job backoff; only due work resumes immediately.
+      const immediate =
+        this.wakePending || (!this.stopped && this.store.notifications().length > 0);
+      this.wakePending = false;
+      this.schedule(immediate ? 0 : 1000);
     }
   }
   private async cycle() {

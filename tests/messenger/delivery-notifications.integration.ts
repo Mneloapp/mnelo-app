@@ -26,6 +26,56 @@ function envelope(now: number, notify: WakeEvent) {
   };
 }
 
+test('a notification queued during provider delivery keeps its wake and a full page drains without idle gaps', async () => {
+  const store = new DeliveryStore(new DatabaseSync(':memory:'), access);
+  let release!: () => void;
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered!: () => void;
+  const firstEntered = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const sent = new Map<string, number>();
+  let first = true;
+  const worker = new DeliveryNotificationWorker(store, {
+    deliverQueued: async (_sender, _recipient, event) => {
+      if (first) {
+        first = false;
+        entered();
+        await blocked;
+      }
+      sent.set(event.id, Date.now());
+      return true;
+    },
+  });
+  try {
+    store.submit(a, envelope(Date.now(), { kind: 'message', id: randomUUID() }));
+    worker.start();
+    const initial = worker.tick();
+    await firstEntered;
+    const pending = Array.from({ length: 25 }, () => randomUUID());
+    for (const id of pending) store.submit(a, envelope(Date.now(), { kind: 'message', id }));
+    worker.wakeNow();
+    // Let the previous implementation's zero-delay wake run during the active
+    // tick. Its finally clause used to overwrite that wake with an idle delay.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const resumed = Date.now();
+    release();
+    await initial;
+    const deadline = resumed + 750;
+    while (pending.some((id) => !sent.has(id)) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal(sent.size, 26, 'new work and the next bounded page must not wait a second each');
+    assert.equal(store.notifications().length, 0);
+    assert.equal(store.fetch(b).length, 20, 'push acceptance never consumes ciphertext');
+  } finally {
+    release();
+    worker.stop();
+    store.close();
+  }
+});
+
 test('push intent survives restart/provider failure and is coupled atomically to its ciphertext, not to sender connectivity', async () => {
   let now = 2_000_000_000_000,
     fail = true;

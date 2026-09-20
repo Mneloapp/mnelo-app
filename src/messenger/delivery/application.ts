@@ -106,7 +106,7 @@ export class ApplicationDelivery {
     this.owner = own.key;
     this.journal = new SignalJournal(engine.deliveryAtomic, signal, own, now);
     this.media = new MediaJournal(engine.deliveryAtomic, own.key, random, uuid, now);
-    this.transfer = new MediaTransfer(client, this.media);
+    this.transfer = new MediaTransfer(client, this.media, () => this.pump.wake());
     this.pump = new DeliveryPump(
       client,
       this.journal,

@@ -15,6 +15,7 @@ export class MediaTransfer {
   constructor(
     private readonly client: Pick<PhoneClient, 'execute'>,
     private readonly journal: MediaJournal,
+    private readonly progressed: () => void = () => {},
   ) {}
   private async command(value: DeliveryCommand, yieldToCalls?: () => Promise<void>) {
     // Only a serial pump operation supplies this cooperative callback. It runs
@@ -69,7 +70,13 @@ export class MediaTransfer {
           );
           if (!response.ok) throw new Error('DELIVERY_RESPONSE_INVALID');
         }
-        if (missing.length > 2) return false;
+        if (missing.length > 2) {
+          // More work is ready after two successful transfers. Resume through
+          // the single pump owner instead of its idle polling timer. Failures
+          // still throw and use the durable retry/backoff path.
+          this.progressed();
+          return false;
+        }
         const response = await this.command({ action: 'delivery-blob-finish', id }, yieldToCalls);
         if (!response.ok) throw new Error('DELIVERY_RESPONSE_INVALID');
       }
@@ -103,6 +110,7 @@ export class MediaTransfer {
         if (!media?.data) throw new Error('DELIVERY_RESPONSE_INVALID');
         await this.journal.put(sender, descriptor.blob.id, part, media.data);
       }
+      if (missing.length > 2) this.progressed();
       return missing.length <= 2;
     });
   }

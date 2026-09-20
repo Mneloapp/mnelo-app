@@ -1,5 +1,7 @@
 # Public App Store preparation — September 12, 2026
 
+Historical checkpoint. See [21 September readiness](PUBLIC_LAUNCH_2026_09_21.md) for current work and blockers. The current service has a temporary encrypted offline queue; the no-queue statements below describe the old implementation.
+
 Status: **NOT READY for public submission**. This is an engineering readiness result, not an Apple rejection. The owner explicitly requested public App Store distribution; the earlier TestFlight-only publication scope is superseded. Existing security and functional failures must still be resolved rather than disabled.
 
 ## Verified now

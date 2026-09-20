@@ -227,8 +227,13 @@ export class DeliveryPump {
     await this.journal.prune();
     await this.sendOutgoing(tokens);
     this.issue ??= await this.journal.outgoingIssue(tokens);
-    await this.hooks.afterCycle?.(() => this.sendOutgoing(tokens, 3));
+    await this.hooks.afterCycle?.(() => this.sendOutgoing(tokens, 2, 4));
     if (this.bufferedInbox.length) this.wakePending = true;
+    // Drain a successfully advancing backlog without adding the idle interval
+    // between every bounded page. Blocked/failed/deferred work alone must not
+    // create a busy loop or bypass its persisted retry deadline.
+    if (this.uploadedThisCycle.size && (await this.journal.readyOutgoing(tokens)).length)
+      this.wakePending = true;
   }
   private async sendOutgoing(tokens?: readonly string[], minPriority = 0, limit = Infinity) {
     const started = this.uploadedThisCycle.size;
@@ -280,7 +285,9 @@ export class DeliveryPump {
       await this.pin(row.peer, urgent);
       if (
         this.hooks.beforeSend &&
-        !(await this.hooks.beforeSend(row.peer, row.body, () => this.sendOutgoing(tokens, 3)))
+        !(await this.hooks.beforeSend(row.peer, row.body, () =>
+          this.sendOutgoing(tokens, row.priority >= 2 ? 3 : 2, 4),
+        ))
       )
         return;
       const needBundle = await this.journal.needsBundle(row.peer);
@@ -419,6 +426,7 @@ export class DeliveryPump {
       this.projectCursor = undefined;
       inbox = await this.journal.inbox();
     }
+    let applied = 0;
     for (const row of inbox) {
       if (this.stopped) return;
       await this.sendOutgoing(undefined, 3, 1);
@@ -433,19 +441,23 @@ export class DeliveryPump {
               id: row.id,
               createdAt: row.created_at,
             },
-            () => this.sendOutgoing(undefined, 3),
+            () => this.sendOutgoing(undefined, 2, 4),
           );
           if (accepted !== false && !this.stopped) {
             await this.journal.applied(row.sender, row.id, accepted.receipt);
             await this.journal.recovered('project', row.sender, row.id);
+            applied++;
           }
-          await this.sendOutgoing(undefined, 3, 1);
+          // Delivery/read receipts should not wait for all other attachments
+          // in this inbox page. Calls retain higher priority and burst fairness.
+          await this.sendOutgoing(undefined, 2, 1);
         } catch (error) {
           this.issue = this.failureCode(error);
           await this.journal.failed('project', row.sender, row.id, row.created_at, this.issue);
         }
       this.projectCursor = { createdAt: row.created_at, sender: row.sender, id: row.id };
     }
+    if (inbox.length === 20 && applied) this.wakePending = true;
   }
   private failureCode(error: unknown): RetryCode {
     const message = error instanceof Error ? error.message : '';

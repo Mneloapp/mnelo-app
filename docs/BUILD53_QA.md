@@ -34,4 +34,12 @@ The iPhone's own incoming-call timer can precede actual audio readiness; this re
 
 ## Release status
 
-Build 53 archive, source publication, distribution verification and TestFlight processing are pending. Build 52 and earlier original archives/IPAs remain preserved.
+Build 53 is uploaded, Apple processing is complete, and both existing groups show **Testing**: Mnelo Preview (2 external testers) and Mnelo Development (1 internal tester). Automatic tester notification is enabled. No public App Store submission was made.
+
+The product source commit is `954337eba2fdafba6e52c7eeb2fdbaedddd74b3f`, with tree `85bed4fd73b83b7723d33cf1e6b6af33a0958839`. Public tag [`ios-0.1.0-53`](https://github.com/Mneloapp/mnelo-app/tree/ios-0.1.0-53) points to `eaf81baac24a2e0a0136625957c8368a9db8de6c` with the identical tree. [Public CI](https://github.com/Mneloapp/mnelo-app/actions/runs/35532367778) passed.
+
+Signed archive and distribution verification passed for the main app and all four extensions, version 0.1.0 (53), service endpoints, source offer, permissions, entitlements and matching application/extension dSYMs. The distribution's code and 95 non-signing resources match the archive. The packaged Hermes bundle includes the prepared connection implementation and has SHA-256 `c54c83346c57cca2260bc0e8ffb584750d80fc365338daba9a095d228604f1b0`.
+
+Source and decoded-Hermes secret scans found no secrets. Two packaged minified-JavaScript findings were reviewed at their exact AST positions and proven to be runtime identity member access followed by constructor syntax, with no embedded credential literal. Xcode reported the existing four missing vendor-symbol warnings (React, ReactNativeDependencies, WebRTC and Hermes); these did not prevent upload, and Mnelo's own five dSYMs match.
+
+The first upload preparation ran out of local disk space while packaging symbols. Only temporary Mnelo distribution copies and reproducible compilation caches were removed, then upload succeeded. Build 53's archive/IPA and all earlier original archives/IPAs remain preserved. Detailed local evidence is in `artifacts/build53-release.json`, `artifacts/build53-test-summary.json` and the build 53 verification reports. Physical first-word audibility remains pending.

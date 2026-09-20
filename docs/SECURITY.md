@@ -1,4 +1,4 @@
-> **Current September 13 state:** the development ciphertext delivery service is deployed and enabled, while both physical phones remain on build 9. [Current rollout, data boundaries, evidence and open release gates](DELIVERY_ROLLOUT.md) supersede historical no-queue/undeployed statements below. Native iOS/Android Signal probes and separate TURN voice/video checks passed; physical migration, key lifecycle/recovery and binary distribution compliance remain unresolved. The owner has authorized open source; see [source licensing](OPEN_SOURCE.md).
+> **21 September checkpoint:** TestFlight 53 is available. [Public launch preparation](PUBLIC_LAUNCH_2026_09_21.md) records the current engineering checks, messaging improvements and outstanding production requirements. The [encrypted delivery rollout](DELIVERY_ROLLOUT.md) supersedes historical no-queue statements below. Engineering verification does not constitute an independent protocol audit. See also [source licensing](OPEN_SOURCE.md).
 
 # Mnelo security — current architecture
 

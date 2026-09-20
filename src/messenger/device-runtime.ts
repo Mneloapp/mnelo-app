@@ -114,6 +114,7 @@ export function acquireDeviceNetwork(engine: DeviceMessenger, changed: () => voi
         ? async (number, peer) =>
             (await phone.execute({ action: 'lookup', phone: number })).key === peer
         : undefined,
+      queued,
     );
     const delivery = queued
       ? new ApplicationDelivery(

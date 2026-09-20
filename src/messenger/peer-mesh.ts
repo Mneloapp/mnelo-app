@@ -11,7 +11,8 @@ import {
   type PeerTransport,
 } from './model';
 import type { DeviceMessenger } from './engine';
-import type { DeviceCalls } from './calls';
+import type { CallControl, DeviceCalls } from './calls';
+import { PreparedCall, isDataOnlyDescription } from './prepared-call';
 import type { DeviceWake } from './wake-client';
 import { wakeGrantPacket } from './wake-protocol';
 import { bindProfileChannel } from './profile-channel';
@@ -65,6 +66,8 @@ export class PeerMesh implements PeerTransport {
   calls: DeviceCalls | null = null;
   wake: DeviceWake | null = null;
   private videoReplacement = Promise.resolve();
+  private preparedCall: { remote: string; id: string; call: PreparedCall } | null = null;
+  private preparingCall: { remote: string; id: string } | null = null;
   private preparedMedia = new Map<string, { id: string; ready: Promise<RTCPeerConnection> }>();
   private incomingPreparation = new Map<
     string,
@@ -129,7 +132,128 @@ export class PeerMesh implements PeerTransport {
       bundlePolicy: 'max-bundle',
     }),
     private readonly verifyIntroduction?: (phone: string, peer: string) => Promise<boolean>,
+    private readonly prepareTransport = false,
   ) {}
+  private async prepareCallTransport(remote: string, id: string, incoming: boolean) {
+    if (!this.prepareTransport || !this.callSignaling || this.stopped) return null;
+    if (this.preparedCall)
+      return this.preparedCall.remote === remote && this.preparedCall.id === id
+        ? this.preparedCall.call
+        : null;
+    if (this.preparingCall) return null;
+    const pending = { remote, id };
+    this.preparingCall = pending;
+    try {
+      const configuration = await this.configuration();
+      const pool = incoming ? this.incomingPreparation.get(remote) : undefined;
+      const pooled = pool?.id === id ? await pool.ready : null;
+      if (!(await this.engine.acceptsPeer(remote))) return null;
+      const valid = () => {
+        const call = this.calls?.snapshot();
+        return (
+          !this.stopped &&
+          call?.id === id &&
+          call.peer === remote &&
+          !call.group &&
+          !['ended', 'failed'].includes(call.status)
+        );
+      };
+      if (
+        this.preparingCall !== pending ||
+        !valid() ||
+        !['ringing', 'incoming'].includes(this.calls!.snapshot()!.status) ||
+        configuration.iceTransportPolicy !== 'relay'
+      )
+        return null;
+      let prepared!: PreparedCall;
+      // Reuse the recipient's already bounded relay allocation. Running a
+      // separate warm peer beside its ICE pool needlessly reserves bandwidth
+      // and can exhaust a small relay's admission budget while still ringing.
+      const peer =
+        pooled && this.incomingPreparation.get(remote) === pool
+          ? pooled
+          : this.factory({ ...configuration, bundlePolicy: 'max-bundle' });
+      if (peer === pooled) this.incomingPreparation.delete(remote);
+      prepared = new PreparedCall(peer, incoming, {
+        valid: () => valid() && this.preparedCall?.call === prepared,
+        consent: () => {
+          const call = this.calls?.snapshot();
+          return Boolean(valid() && call && ['connecting', 'active'].includes(call.status));
+        },
+        send: async (preparation, type, sdp) => {
+          if (!(await this.engine.acceptsPeer(remote)) || !valid())
+            throw new Error('CALL_CANCELLED');
+          const envelope = signSignal(this.own.secret, {
+            protocol: 'mnelo-dtls-v1',
+            from: this.own.key,
+            to: remote,
+            session: id,
+            purpose: 'call',
+            preparation,
+            expires: Date.now() + 120_000,
+            type,
+            sdp,
+          });
+          if (preparation === 'media') prepared.sendEnvelope(envelope);
+          await this.callSignaling!(remote, envelope);
+          return envelope;
+        },
+        signal: (envelope) => this.receiveCallSignal(remote, envelope),
+        control: async (control) => {
+          if (control.id === id && valid()) await this.calls?.receive(remote, control);
+        },
+        remote: (stream) => this.calls?.remote(remote, id, stream),
+        state: (state) => this.calls?.remoteMediaState(remote, id, state),
+        connected: () => {
+          const call = this.calls?.snapshot();
+          if (!valid() || !call?.local) return;
+          this.preparedStats?.();
+          this.preparedStats = observeMediaTiming(peer, call.media === 'video');
+          this.calls?.connected(remote, id);
+          this.publishMediaState(id);
+        },
+        failed: () => {
+          void this.calls?.failed(remote, id);
+        },
+      });
+      this.preparedCall = { remote, id, call: prepared };
+      if (!incoming) void prepared.offer().catch(() => prepared.close());
+      return prepared;
+    } finally {
+      if (this.preparingCall === pending) this.preparingCall = null;
+    }
+  }
+  private preparedStats: (() => void) | null = null;
+  private usesPreparedCall(remote: string, id: string) {
+    return (
+      this.preparedCall?.remote === remote &&
+      this.preparedCall.id === id &&
+      this.preparedCall.call.isSelected()
+    );
+  }
+  selectPreparedCall(remote: string, id: string, requireReady = true) {
+    const prepared = this.preparedCall;
+    if (prepared?.remote !== remote || prepared.id !== id || !prepared.call.select(requireReady))
+      return false;
+    this.discardLegacyMedia(remote, id);
+    return true;
+  }
+  sendPreparedControl(remote: string, control: CallControl) {
+    const prepared = this.preparedCall;
+    if (prepared?.remote === remote && prepared.id === control.id)
+      prepared.call.sendControl(control);
+  }
+  cancelPreparedCall(remote: string, id: string) {
+    if (this.preparingCall?.remote === remote && this.preparingCall.id === id)
+      this.preparingCall = null;
+    const warm = this.preparedCall;
+    if (warm?.remote === remote && warm.id === id) {
+      this.preparedCall = null;
+      warm.call.close();
+      this.preparedStats?.();
+      this.preparedStats = null;
+    }
+  }
   start() {
     this.stopped = false;
     this.connect();
@@ -155,6 +279,8 @@ export class PeerMesh implements PeerTransport {
       ...this.incomingPreparation.keys(),
       ...this.pendingLinks.keys(),
       ...this.pendingMedia.keys(),
+      ...(this.preparedCall ? [this.preparedCall.remote] : []),
+      ...(this.preparingCall ? [this.preparingCall.remote] : []),
     ])) {
       if (!(await this.engine.acceptsPeer(peer))) {
         const call = this.calls?.snapshot();
@@ -676,6 +802,7 @@ export class PeerMesh implements PeerTransport {
       if (
         this.stopped ||
         !accepted ||
+        this.usesPreparedCall(remote, id) ||
         this.pendingMedia.get(remote) !== id ||
         call?.id !== id ||
         !(
@@ -852,6 +979,12 @@ export class PeerMesh implements PeerTransport {
     else this.sendSignal({ type: 'signal', to: remote, envelope });
   }
   async startMedia(remote: string, id: string, stream: MediaStream) {
+    const warm = this.preparedCall;
+    if (warm?.remote === remote && warm.id === id && warm.call.isSelected()) {
+      await warm.call.activate(stream);
+      return;
+    }
+    this.cancelPreparedCall(remote, id);
     const prepared = this.preparedMedia.get(remote);
     const peer =
       prepared?.id === id ? await prepared.ready : await this.createOffer(remote, id, stream);
@@ -863,6 +996,10 @@ export class PeerMesh implements PeerTransport {
     this.publishMediaInBackground(remote, id, peer, 'offer', true);
   }
   async publishPreparedMedia(remote: string, id: string) {
+    if (this.prepareTransport && this.callSignaling) {
+      await this.prepareCallTransport(remote, id, false);
+      return;
+    }
     const prepared = this.preparedMedia.get(remote);
     if (prepared?.id !== id) return;
     const peer = await prepared.ready;
@@ -886,6 +1023,12 @@ export class PeerMesh implements PeerTransport {
   }
   async resumeCallMedia(remote: string, id: string) {
     if (!(await this.engine.acceptsPeer(remote))) return;
+    const warm = this.preparedCall;
+    const local = this.calls?.snapshot()?.local;
+    if (warm?.remote === remote && warm.id === id && warm.call.isSelected() && local) {
+      await warm.call.activate(local);
+      return;
+    }
     const signal = this.deferredCallSignal;
     const call = this.calls?.snapshot();
     if (
@@ -913,6 +1056,11 @@ export class PeerMesh implements PeerTransport {
     this.enqueueCallSignal(remote, signal);
   }
   async prepareOutgoingMedia(remote: string, id: string, stream: MediaStream) {
+    // Current recipients negotiate a single data-only connection while ringing.
+    // An older recipient ignores that signed extension; its ordinary acceptance
+    // falls back to createOffer in startMedia, without retaining a second TURN
+    // connection throughout every current-to-current call.
+    if (this.prepareTransport && this.callSignaling) return;
     if (
       this.preparedMedia.has(remote) ||
       this.mediaLinks.has(remote) ||
@@ -951,6 +1099,30 @@ export class PeerMesh implements PeerTransport {
       throw new Error('CALL_SIGNAL_INVALID');
     const call = this.calls?.snapshot();
     if (!call || call.id !== signal.session || ['ended', 'failed'].includes(call.status)) return;
+    if (signal.preparation) {
+      if (!this.prepareTransport || call.group || call.peer !== sender) return;
+      if (signal.preparation === 'transport' && !isDataOnlyDescription(signal.sdp)) return;
+      let warm =
+        this.preparedCall?.remote === sender && this.preparedCall.id === call.id
+          ? this.preparedCall.call
+          : null;
+      if (
+        !warm &&
+        signal.type === 'offer' &&
+        signal.preparation === 'transport' &&
+        call.incoming &&
+        call.status === 'incoming'
+      )
+        warm = await this.prepareCallTransport(sender, call.id, true);
+      warm?.receive(signal);
+      return;
+    }
+    if (
+      this.preparedCall?.remote === sender &&
+      this.preparedCall.id === call.id &&
+      this.preparedCall.call.isSelected()
+    )
+      return;
     this.enqueueCallSignal(sender, signal);
   }
   private enqueueCallSignal(sender: string, signal: Signal) {
@@ -1023,6 +1195,7 @@ export class PeerMesh implements PeerTransport {
     });
   }
   private async mediaSignal(signal: Signal) {
+    if (this.usesPreparedCall(signal.from, signal.session)) return;
     const call = this.calls?.snapshot();
     if (
       this.stopped ||
@@ -1065,7 +1238,8 @@ export class PeerMesh implements PeerTransport {
         await peer.setLocalDescription(await peer.createAnswer());
         this.publishMediaInBackground(signal.from, signal.session, peer, 'answer');
       } catch {
-        await this.calls?.failed(signal.from, signal.session);
+        if (!this.usesPreparedCall(signal.from, signal.session))
+          await this.calls?.failed(signal.from, signal.session);
       }
     } else {
       const link = this.mediaLinks.get(signal.from);
@@ -1117,6 +1291,8 @@ export class PeerMesh implements PeerTransport {
     });
   }
   publishMediaState(id: string) {
+    if (this.preparedCall?.id === id)
+      this.preparedCall.call.sendState(this.calls?.localMediaState());
     const state = JSON.stringify(this.calls?.localMediaState());
     for (const link of this.mediaLinks.values())
       if (link.id === id && link.state?.readyState === 'open') {
@@ -1131,6 +1307,13 @@ export class PeerMesh implements PeerTransport {
     const next = this.videoReplacement
       .catch(() => undefined)
       .then(async () => {
+        const warm = this.preparedCall;
+        if (warm?.id === id && warm.call.isSelected()) {
+          const sender = warm.call.peer
+            .getSenders()
+            .find((sender) => sender.track?.kind === 'video');
+          if (sender) await sender.replaceTrack(track);
+        }
         const results = await Promise.allSettled(
           [...this.mediaLinks.entries()]
             .filter(([, link]) => link.id === id)
@@ -1153,6 +1336,10 @@ export class PeerMesh implements PeerTransport {
     return next;
   }
   endMedia(remote: string, id: string) {
+    this.cancelPreparedCall(remote, id);
+    this.discardLegacyMedia(remote, id);
+  }
+  private discardLegacyMedia(remote: string, id: string) {
     const preparation = this.incomingPreparation.get(remote);
     if (preparation?.id === id) {
       this.incomingPreparation.delete(remote);
@@ -1173,6 +1360,11 @@ export class PeerMesh implements PeerTransport {
   }
   stop() {
     this.stopped = true;
+    this.preparingCall = null;
+    this.preparedCall?.call.close();
+    this.preparedCall = null;
+    this.preparedStats?.();
+    this.preparedStats = null;
     this.pendingLinks.clear();
     this.pendingMedia.clear();
     this.preparedMedia.clear();

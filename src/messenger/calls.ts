@@ -222,6 +222,7 @@ export class DeviceCalls {
     mesh.calls = this;
   }
   private async send(peer: string, control: CallControl) {
+    this.mesh.sendPreparedControl?.(peer, control);
     if (this.signaling) return this.signaling.send(peer, control);
     if (!this.mesh.send(peer, control)) throw new Error('CALL_UNAVAILABLE');
   }
@@ -749,6 +750,10 @@ export class DeviceCalls {
       return;
     this.controls.forEach((listener) => listener(control));
     if (control.action === 'accept' && !call.incoming && call.status === 'ringing' && call.local) {
+      if (control.prepared && !this.mesh.selectPreparedCall?.(peer, call.id, false)) {
+        await this.end(true);
+        return;
+      }
       this.update({ ...call, status: 'connecting' });
       this.stage('REMOTE_ACCEPT_RECEIVED');
       this.stage('MEDIA_OFFER');
@@ -771,6 +776,8 @@ export class DeviceCalls {
     if (call.group) return this.acceptGroup({ ...call, group: call.group });
     this.update({ ...call, status: 'connecting' });
     this.stage('ANSWER_ACCEPTED');
+    const prepared = this.mesh.selectPreparedCall?.(call.peer, call.id) ?? false;
+    if (!prepared) this.mesh.cancelPreparedCall?.(call.peer, call.id);
     // The user has answered. Persist acceptance while native capture starts,
     // instead of adding capture time to the signaling round trip. An offer
     // arriving in the meantime stays cached until local capture is ready.
@@ -779,6 +786,7 @@ export class DeviceCalls {
       id: call.id,
       action: 'accept',
       media: call.media,
+      ...(prepared ? { prepared: 'v1' as const } : {}),
     }).catch(async () => {
       if (this.value?.id === call.id && this.active()) await this.end(true).catch(() => undefined);
     });

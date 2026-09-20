@@ -12,6 +12,7 @@ export const signalBody = z
     expires: z.number().int(),
     type: z.enum(['offer', 'answer']),
     purpose: z.enum(['message', 'call']).default('message'),
+    preparation: z.enum(['transport', 'media']).optional(),
     sdp: z.string().min(1).max(60_000),
     introduction: internationalPhone.optional(),
   })

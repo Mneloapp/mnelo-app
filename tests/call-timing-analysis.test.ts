@@ -118,3 +118,19 @@ test('bounded parser ignores malformed and unrelated raw data without echoing it
   expect(() => analyzeCallTimings({})).toThrow('bounded array');
   expect(() => analyzeCallTimings(Array(20001))).toThrow('bounded array');
 });
+
+test('prepared transport time is separate from post-consent media and cannot leak to a later call', () => {
+  const report = analyzeCallTimings([
+    event('CAPTURE_OUTGOING', 100),
+    event('CALL_PREPARED_CHANNEL_OPEN', 500),
+    event('REMOTE_ACCEPT_RECEIVED', 2000),
+    event('CALL_PREPARED_MEDIA_READY', 2190),
+    event('CALL_ENDED', 4000),
+    event('REMOTE_ACCEPT_RECEIVED', 5000),
+  ]);
+  expect(report.calls[0]!.measurements).toEqual({
+    preparedChannelOpenMs: -1500,
+    preparedMediaReadyMs: 190,
+  });
+  expect(report.calls[1]!.measurements).toEqual({});
+});

@@ -105,6 +105,7 @@ export const packetSchema = z.discriminatedUnion('type', [
       id: identifier,
       action: z.enum(['invite', 'accept', 'decline', 'end']),
       media: z.enum(['voice', 'video']),
+      prepared: z.literal('v1').optional(),
       group: groupCallSchema.optional(),
     })
     .strict(),

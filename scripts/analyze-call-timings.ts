@@ -9,6 +9,8 @@ const measurements = {
   CAPTURE_INCOMING_READY: 'captureReadyMs',
   AUDIO_ACTIVATED: 'audioSessionActivatedMs',
   MEDIA_TRANSPORT_CONNECTED: 'transportConnectedMs',
+  CALL_PREPARED_CHANNEL_OPEN: 'preparedChannelOpenMs',
+  CALL_PREPARED_MEDIA_READY: 'preparedMediaReadyMs',
   REMOTE_AUDIO_RTP: 'firstAudioRtpObservedMs',
   REMOTE_VIDEO_DECODED: 'firstVideoDecodedObservedMs',
   REMOTE_VIDEO_FRAME: 'firstVideoRendererEventMs',
@@ -58,6 +60,7 @@ export function analyzeCallTimings(input: unknown) {
   const calls: Call[] = [];
   let call: Call | undefined;
   let activation: number | undefined;
+  let preparation: number | undefined;
   for (const event of events) {
     if (boundaries.has(event.stage)) {
       if (call) {
@@ -66,9 +69,11 @@ export function analyzeCallTimings(input: unknown) {
       }
       call = undefined;
       activation = undefined;
+      preparation = undefined;
       continue;
     }
     if (event.stage === 'AUDIO_ACTIVATED') activation = event.at;
+    if (event.stage === 'CALL_PREPARED_CHANNEL_OPEN') preparation = event.at;
     if (
       event.stage === 'ANSWER_ACTION' ||
       event.stage === 'ANSWER_ACCEPTED' ||
@@ -96,6 +101,7 @@ export function analyzeCallTimings(input: unknown) {
         call.endedBy = 'NEXT_ACCEPTANCE';
         call.endedAfterMs = event.at - call.acceptedAt;
         activation = undefined;
+        preparation = undefined;
       }
       call = {
         acceptance:
@@ -105,8 +111,10 @@ export function analyzeCallTimings(input: unknown) {
               ? 'local-answer-handler'
               : 'remote-accept-received',
         acceptedAt: event.at,
-        measurements:
-          activation === undefined ? {} : { audioSessionActivatedMs: activation - event.at },
+        measurements: {
+          ...(activation === undefined ? {} : { audioSessionActivatedMs: activation - event.at }),
+          ...(preparation === undefined ? {} : { preparedChannelOpenMs: preparation - event.at }),
+        },
         statsStarted: false,
         statsUnavailable: false,
         statsReadFailed: false,
@@ -138,6 +146,7 @@ export function analyzeCallTimings(input: unknown) {
       'RTP and decoded-frame times are first positive statistics observations, sampled every 500 ms plus native bridge/event-loop delay; they are not exact packet/frame arrival timestamps.',
       'Audio RTP does not prove audible playback. AUDIO_ACTIVATED is the operating-system session callback, not an acoustic measurement. A negative activation offset means the callback preceded the earliest local acceptance marker.',
       'The renderer event reports non-clearing video dimensions; it does not measure when a person saw a displayed frame.',
+      'A negative prepared-channel offset means the data-only connection was ready before acceptance. Prepared media readiness is completion of post-consent negotiation on that connection, not an acoustic measurement.',
       'Missing measurements remain absent. A timeout or unavailable statistics does not prove that no media arrived. Old or truncated traces without an acceptance marker cannot measure answer-to-media latency.',
     ],
     calls,

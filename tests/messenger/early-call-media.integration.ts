@@ -38,6 +38,7 @@ class Peer extends EventTarget {
   remoteDescription: RTCSessionDescriptionInit | null = null;
   offers = 0;
   remoteSets = 0;
+  tracks = 0;
   gatheringListeners = new Set<EventListenerOrEventListenerObject>();
   override addEventListener(type: string, listener: EventListenerOrEventListenerObject | null) {
     if (type === 'icecandidate' && listener) this.gatheringListeners.add(listener);
@@ -47,7 +48,9 @@ class Peer extends EventTarget {
     if (type === 'icecandidate' && listener) this.gatheringListeners.delete(listener);
     super.removeEventListener(type, listener);
   }
-  addTrack() {}
+  addTrack() {
+    this.tracks++;
+  }
   createDataChannel(label: string) {
     return Object.assign(new EventTarget(), { label, close() {} });
   }
@@ -75,7 +78,12 @@ class Peer extends EventTarget {
     this.dispatchEvent(new Event('connectionstatechange'));
   }
 }
-function pair() {
+function pair(
+  configuration: () => Promise<RTCConfiguration> = async () => ({
+    iceServers: [],
+    iceTransportPolicy: 'relay',
+  }),
+) {
   const alice = { ...createKeys(randomBytes), name: 'Synthetic caller' };
   const bob = { ...createKeys(randomBytes), name: 'Synthetic recipient' };
   const id = randomUUID();
@@ -91,20 +99,22 @@ function pair() {
       } as DeviceCall,
       allowed: true,
       peers: [] as Peer[],
+      configurations: [] as RTCConfiguration[],
       failures: [] as string[],
     };
     const mesh = new PeerMesh(
       own,
       { acceptsPeer: async () => state.allowed } as unknown as DeviceMessenger,
       'ws://127.0.0.1:8084',
-      () => {
+      (configuration) => {
+        state.configurations.push(configuration);
         const peer = new Peer();
         state.peers.push(peer);
         return peer as unknown as RTCPeerConnection;
       },
       randomUUID,
       () => {},
-      async () => ({ iceServers: [] }),
+      configuration,
     );
     mesh.calls = {
       snapshot: () => state.call,
@@ -349,6 +359,88 @@ test('a block during initial candidate gathering suppresses early SDP publicatio
     f.a.state.peers[0]!.dispatchEvent(new Event('icecandidate'));
     await pause(100);
     assert.equal(published, 0);
+  } finally {
+    f.stop();
+  }
+});
+
+test('ringing prepares one relay-only pool without tracks or SDP and reuses it only after acceptance', async () => {
+  const f = pair();
+  try {
+    await Promise.all([
+      f.b.mesh.prepareIncomingMedia(f.a.own.key, f.id),
+      f.b.mesh.prepareIncomingMedia(f.a.own.key, f.id),
+    ]);
+    const peer = f.b.state.peers[0]!;
+    assert.equal(f.b.state.peers.length, 1);
+    assert.equal(f.b.state.configurations[0]!.iceCandidatePoolSize, 1);
+    assert.equal(f.b.state.configurations[0]!.iceTransportPolicy, 'relay');
+    assert.equal(peer.tracks, 0);
+    assert.equal(peer.localDescription, null);
+    assert.equal(peer.remoteDescription, null);
+    await f.b.mesh.receiveCallSignal(f.a.own.key, f.offer());
+    await pause();
+    assert.equal(peer.remoteDescription, null, 'early signed SDP still waits for consent');
+    f.b.state.call = { ...f.b.state.call, status: 'connecting', local: f.stream };
+    await f.b.mesh.resumeCallMedia(f.a.own.key, f.id);
+    await until(() => peer.localDescription?.type === 'answer');
+    assert.equal(f.b.state.peers.length, 1, 'no second TURN setup after answer');
+    f.b.mesh.endMedia(f.a.own.key, f.id);
+    assert.equal(peer.connectionState, 'closed');
+  } finally {
+    f.stop();
+  }
+});
+
+for (const reason of ['end', 'blocked', 'replacement', 'stop'] as const) {
+  test(`pending relay preparation cannot allocate after ${reason}`, async () => {
+    let ready!: (configuration: RTCConfiguration) => void;
+    const f = pair(
+      () =>
+        new Promise((resolve) => {
+          ready = resolve;
+        }),
+    );
+    try {
+      const preparing = f.b.mesh.prepareIncomingMedia(f.a.own.key, f.id);
+      if (reason === 'end') f.b.mesh.endMedia(f.a.own.key, f.id);
+      if (reason === 'blocked') f.b.state.allowed = false;
+      if (reason === 'replacement') f.b.state.call = { ...f.b.state.call, id: randomUUID() };
+      if (reason === 'stop') f.b.mesh.stop();
+      ready({ iceServers: [], iceTransportPolicy: 'relay' });
+      await preparing;
+      assert.equal(f.b.state.peers.length, 0);
+    } finally {
+      f.stop();
+    }
+  });
+}
+
+test('an ended or stopped ringing call releases its idle allocation and a failed preparation falls back', async () => {
+  for (const stop of [false, true]) {
+    const f = pair();
+    try {
+      await f.b.mesh.prepareIncomingMedia(f.a.own.key, f.id);
+      const peer = f.b.state.peers[0]!;
+      if (stop) f.b.mesh.stop();
+      else f.b.mesh.endMedia(f.a.own.key, f.id);
+      assert.equal(peer.connectionState, 'closed');
+    } finally {
+      f.stop();
+    }
+  }
+  let attempt = 0;
+  const f = pair(async () => {
+    if (++attempt === 1) throw new Error('TEMPORARY_TURN_FAILURE');
+    return { iceServers: [], iceTransportPolicy: 'relay' };
+  });
+  try {
+    await f.b.mesh.prepareIncomingMedia(f.a.own.key, f.id);
+    assert.equal(f.b.state.peers.length, 0);
+    f.b.state.call = { ...f.b.state.call, status: 'connecting', local: f.stream };
+    await f.b.mesh.receiveCallSignal(f.a.own.key, f.offer());
+    await until(() => f.b.state.peers[0]?.localDescription?.type === 'answer');
+    assert.deepEqual(f.b.state.failures, []);
   } finally {
     f.stop();
   }

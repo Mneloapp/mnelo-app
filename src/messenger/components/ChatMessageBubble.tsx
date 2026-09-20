@@ -1,7 +1,7 @@
 import { SharedMapMessage } from './SharedMapMessage';
 import { sharedMapLink } from '../map-link';
 import { SharedContactMessage } from './SharedContactMessage';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -26,6 +26,8 @@ import { ChatVideo } from './ChatVideo';
 import { LocationMessage } from './LocationMessage';
 import { ReplyQuote } from './ReplyQuote';
 import type { MessageAnchor } from './MessageActions';
+import { messageLinkRanges } from '../message-links';
+import { MessageText } from './MessageText';
 function MessageMedia({
   message,
   onSelect,
@@ -159,6 +161,7 @@ export function ChatMessageBubble({
   const size = mediaPreviewSize(dimensions, (windowWidth - 32) * 0.86);
   const card = message.kind === 'file' ? readRichMedia(attachment.data) : null;
   const own = message.sender === identity?.key;
+  const links = useMemo(() => messageLinkRanges(message.body), [message.body]);
   const bubbleRef = useRef<View>(null);
   function select() {
     const bubble = bubbleRef.current;
@@ -181,6 +184,7 @@ export function ChatMessageBubble({
           Boolean(message.replyTo && onQuote) ||
           message.kind === 'contact' ||
           message.kind === 'location' ||
+          links.length > 0 ||
           Boolean(sharedMapLink(message.body))
         }
         bubbleRef={bubbleRef}
@@ -232,9 +236,12 @@ export function ChatMessageBubble({
               (message.kind === 'contact' ? (
                 <SharedContactMessage body={message.body} enabled={!menuOpen} />
               ) : (
-                <AppText>
-                  {message.body || (message.kind === 'contact' ? t('messenger.contact') : '')}
-                </AppText>
+                <MessageText
+                  body={message.body}
+                  links={links}
+                  enabled={!menuOpen}
+                  onLongPress={select}
+                />
               ))}
           </View>
         ) : null}
@@ -250,7 +257,12 @@ export function ChatMessageBubble({
         ) : null}
         {visual && Boolean(message.body) && (
           <View style={styles.visualText}>
-            <AppText>{message.body}</AppText>
+            <MessageText
+              body={message.body}
+              links={links}
+              enabled={!menuOpen}
+              onLongPress={select}
+            />
           </View>
         )}
         {Boolean(message.editedAt) && (

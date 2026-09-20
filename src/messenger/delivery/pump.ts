@@ -209,11 +209,20 @@ export class DeliveryPump {
     // Call signals and delivery/read receipts precede media and housekeeping.
     // All journal mutation and encryption remain serial.
     await this.sendOutgoing(tokens, 2);
+    // Recover persisted incoming calls before projecting their SDP/acceptance.
     await this.hooks.beforeCycle?.();
+    // A submit may already have brought back the remote answer. Apply that
+    // response before another upload round trip.
+    const receivedEarly = this.bufferedInbox.length > 0;
+    if (receivedEarly) await this.receiveCycle();
     // A submit exchange already fetches the inbox. Sending ordinary work first
     // avoids an empty poll before every message; a remote hint still preempts it.
     if (this.syncSupported) await this.sendOutgoing(tokens);
-    if (!this.hooks.outgoingOnly) await this.receiveCycle();
+    if (
+      !this.hooks.outgoingOnly &&
+      (!receivedEarly || this.bufferedInbox.length || this.incomingPending)
+    )
+      await this.receiveCycle();
     await this.maintainKeys();
     await this.journal.prune();
     await this.sendOutgoing(tokens);
@@ -221,10 +230,15 @@ export class DeliveryPump {
     await this.hooks.afterCycle?.(() => this.sendOutgoing(tokens, 3));
     if (this.bufferedInbox.length) this.wakePending = true;
   }
-  private async sendOutgoing(tokens?: readonly string[], minPriority = 0) {
+  private async sendOutgoing(tokens?: readonly string[], minPriority = 0, limit = Infinity) {
+    const started = this.uploadedThisCycle.size;
     const outgoing = await this.journal.readyOutgoing(tokens, minPriority);
     for (const row of outgoing) {
       if (this.stopped) return;
+      if (this.uploadedThisCycle.size - started >= limit) return;
+      // Do not leave an encrypted answer/hangup in memory behind an entire
+      // candidate or receipt batch. Decryption still has one serial owner.
+      if (this.bufferedInbox.length && !this.hooks.outgoingOnly) return;
       if (this.uploadedThisCycle.has(row.id)) continue;
       // A remote delivery hint interrupts the bulk snapshot at a safe boundary.
       // The next serial cycle fetches it before any more ordinary uploads.
@@ -237,8 +251,11 @@ export class DeliveryPump {
         return;
       // Recheck between receipts too: an answer/SDP may have been enqueued while
       // the preceding receipt's HTTP request was in flight.
-      if (minPriority < 3 && row.priority < 3) await this.sendOutgoing(tokens, 3);
-      if (minPriority < 2 && row.priority < 2) await this.sendOutgoing(tokens, 2);
+      if (minPriority < 3 && row.priority < 3)
+        await this.sendOutgoing(tokens, 3, limit - (this.uploadedThisCycle.size - started));
+      if (minPriority < 2 && row.priority < 2)
+        await this.sendOutgoing(tokens, 2, limit - (this.uploadedThisCycle.size - started));
+      if (this.uploadedThisCycle.size - started >= limit || this.bufferedInbox.length) return;
       if (this.uploadedThisCycle.has(row.id)) continue;
       // A candidate burst cannot starve delivery/read acknowledgements. Keep
       // one ready receipt moving per four successfully uploaded call events.
@@ -246,6 +263,7 @@ export class DeliveryPump {
         const receipt = (await this.journal.readyOutgoing(tokens, 2, 2))[0];
         if (receipt) await this.sendOne(receipt, tokens);
         this.callBurst = 0;
+        if (this.uploadedThisCycle.size - started >= limit || this.bufferedInbox.length) return;
       }
       await this.sendOne(row, tokens);
     }
@@ -367,7 +385,7 @@ export class DeliveryPump {
     if (inbox.length === 20) this.wakePending = true;
     for (const envelope of inbox) {
       if (this.stopped) return;
-      await this.sendOutgoing(undefined, 2);
+      await this.sendOutgoing(undefined, 3, 1);
       const retry = await this.journal.retry('receive', envelope.sender, envelope.id);
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
@@ -403,7 +421,7 @@ export class DeliveryPump {
     }
     for (const row of inbox) {
       if (this.stopped) return;
-      await this.sendOutgoing(undefined, 2);
+      await this.sendOutgoing(undefined, 3, 1);
       const retry = await this.journal.retry('project', row.sender, row.id);
       if (retry && retry.next_at > this.now()) this.issue = retry.code;
       else
@@ -421,7 +439,7 @@ export class DeliveryPump {
             await this.journal.applied(row.sender, row.id, accepted.receipt);
             await this.journal.recovered('project', row.sender, row.id);
           }
-          await this.sendOutgoing(undefined, 2);
+          await this.sendOutgoing(undefined, 3, 1);
         } catch (error) {
           this.issue = this.failureCode(error);
           await this.journal.failed('project', row.sender, row.id, row.created_at, this.issue);

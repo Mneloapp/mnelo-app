@@ -645,3 +645,49 @@ test('a pending previous decline upload never blocks answering the next native c
     f.stop();
   }
 });
+
+test('an authenticated native answer bypasses a pending presentation callback without waiting for it', async () => {
+  let finishPresentation!: () => void;
+  native.incoming.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishPresentation = resolve;
+      }),
+  );
+  const f = fixture();
+  try {
+    await tick();
+    f.update('incoming');
+    await tick();
+    expect(native.incoming).toHaveBeenCalled();
+    native.drain.mockResolvedValueOnce([{ type: 'answer', id }]);
+    native.changed();
+    await tick();
+    expect(f.calls.accept).toHaveBeenCalledTimes(1);
+    expect(f.calls.snapshot()?.status).toBe('connecting');
+    finishPresentation();
+    await tick();
+    expect(f.calls.accept).toHaveBeenCalledTimes(1);
+  } finally {
+    finishPresentation?.();
+    f.stop();
+  }
+});
+
+test('answer and hangup drained in the same native batch never open media', async () => {
+  const f = fixture();
+  try {
+    f.update('incoming');
+    await tick();
+    native.drain.mockResolvedValueOnce([
+      { type: 'answer', id },
+      { type: 'end', id, reason: 'local' },
+    ]);
+    native.changed();
+    await tick();
+    expect(f.calls.accept).not.toHaveBeenCalled();
+    expect(f.calls.endFromSystem).toHaveBeenCalledWith(id, 'local', false);
+  } finally {
+    f.stop();
+  }
+});

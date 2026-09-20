@@ -1,0 +1,15 @@
+--- a/ios/RCTWebRTC/RCTConvert+WebRTC.m
++++ b/ios/RCTWebRTC/RCTConvert+WebRTC.m
+@@ -118,6 +118,12 @@
+         } else if ([bundlePolicy isEqualToString:@"max-bundle"]) {
+             config.bundlePolicy = RTCBundlePolicyMaxBundle;
+         }
++    }
++
++    // Mnelo: gather one relay allocation while an authenticated call is ringing.
++    // A pool has no tracks/descriptions and cannot capture or send media.
++    if ([json[@"iceCandidatePoolSize"] isKindOfClass:[NSNumber class]]) {
++        config.iceCandidatePoolSize = MAX(0, MIN(1, [RCTConvert int:json[@"iceCandidatePoolSize"]]));
+     }
+ 
+     if (json[@"iceBackupCandidatePairPingInterval"] != nil &&

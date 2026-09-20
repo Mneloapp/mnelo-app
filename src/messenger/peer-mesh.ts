@@ -66,6 +66,14 @@ export class PeerMesh implements PeerTransport {
   wake: DeviceWake | null = null;
   private videoReplacement = Promise.resolve();
   private preparedMedia = new Map<string, { id: string; ready: Promise<RTCPeerConnection> }>();
+  private incomingPreparation = new Map<
+    string,
+    {
+      id: string;
+      ready: Promise<RTCPeerConnection | null>;
+      peer?: RTCPeerConnection;
+    }
+  >();
   private mediaLinks = new Map<
     string,
     {
@@ -144,6 +152,7 @@ export class PeerMesh implements PeerTransport {
     for (const peer of new Set([
       ...this.links.keys(),
       ...this.mediaLinks.keys(),
+      ...this.incomingPreparation.keys(),
       ...this.pendingLinks.keys(),
       ...this.pendingMedia.keys(),
     ])) {
@@ -657,9 +666,11 @@ export class PeerMesh implements PeerTransport {
     this.calls?.stage('MEDIA_CONFIGURATION');
     let peer: RTCPeerConnection;
     try {
-      const [configuration, accepted] = await Promise.all([
+      const preparation = this.incomingPreparation.get(remote);
+      const [configuration, accepted, pooled] = await Promise.all([
         this.configuration(),
         this.engine.acceptsPeer(remote),
+        preparation?.id === id ? preparation.ready : Promise.resolve(null),
       ]);
       const call = this.calls?.snapshot();
       if (
@@ -678,7 +689,11 @@ export class PeerMesh implements PeerTransport {
         )
       )
         throw new Error('CALL_CANCELLED');
-      peer = this.factory(configuration);
+      if (pooled && this.incomingPreparation.get(remote) === preparation) {
+        this.incomingPreparation.delete(remote);
+        peer = pooled;
+        connectionTiming('MEDIA_REUSED_ICE_POOL');
+      } else peer = this.factory(configuration);
     } finally {
       if (this.pendingMedia.get(remote) === id) this.pendingMedia.delete(remote);
     }
@@ -713,10 +728,46 @@ export class PeerMesh implements PeerTransport {
     });
     return peer;
   }
-  // Fetch the short-lived TURN credentials while ringing, without opening a
-  // microphone, camera or media peer on the recipient before they accept.
+  // Fetch the short-lived TURN credentials while ringing.
   async prepareCall() {
     await this.configuration();
+  }
+  async prepareIncomingMedia(remote: string, id: string) {
+    if (this.incomingPreparation.has(remote) || this.mediaLinks.has(remote) || this.stopped) return;
+    const preparation: {
+      id: string;
+      ready: Promise<RTCPeerConnection | null>;
+      peer?: RTCPeerConnection;
+    } = {
+      id,
+      ready: Promise.resolve(null),
+    };
+    this.incomingPreparation.set(remote, preparation);
+    preparation.ready = (async () => {
+      const configuration = await this.configuration();
+      const accepted = await this.engine.acceptsPeer(remote);
+      const call = this.calls?.snapshot();
+      if (
+        this.stopped ||
+        !accepted ||
+        this.incomingPreparation.get(remote) !== preparation ||
+        call?.id !== id ||
+        call.peer !== remote ||
+        !call.incoming ||
+        call.group ||
+        !['incoming', 'connecting'].includes(call.status) ||
+        configuration.iceTransportPolicy !== 'relay'
+      )
+        return null;
+      // Only one TURN allocation pool, scoped to an authenticated ringing call.
+      // No tracks, remote/local SDP, media capture or peer publication before consent.
+      preparation.peer = this.factory({ ...configuration, iceCandidatePoolSize: 1 });
+      connectionTiming('MEDIA_ICE_POOL_STARTED');
+      return preparation.peer;
+    })().catch(() => null);
+    const peer = await preparation.ready;
+    if (!peer && this.incomingPreparation.get(remote) === preparation)
+      this.incomingPreparation.delete(remote);
   }
   private async publishMedia(
     remote: string,
@@ -1102,6 +1153,11 @@ export class PeerMesh implements PeerTransport {
     return next;
   }
   endMedia(remote: string, id: string) {
+    const preparation = this.incomingPreparation.get(remote);
+    if (preparation?.id === id) {
+      this.incomingPreparation.delete(remote);
+      preparation.peer?.close();
+    }
     if (this.deferredCallSignal?.from === remote && this.deferredCallSignal.session === id)
       this.deferredCallSignal = null;
     if (this.callSignalTasks.get(remote)?.id === id) this.callSignalTasks.delete(remote);
@@ -1120,6 +1176,8 @@ export class PeerMesh implements PeerTransport {
     this.pendingLinks.clear();
     this.pendingMedia.clear();
     this.preparedMedia.clear();
+    for (const preparation of this.incomingPreparation.values()) preparation.peer?.close();
+    this.incomingPreparation.clear();
     this.callSignalTasks.clear();
     this.deferredCallSignal = null;
     this.ready = false;

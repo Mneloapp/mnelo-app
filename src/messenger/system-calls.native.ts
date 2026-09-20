@@ -4,6 +4,7 @@ import { requireOptionalNativeModule, type NativeModule } from 'expo-modules-cor
 import * as Notifications from 'expo-notifications';
 import type { DeviceCalls, DeviceCall } from './calls';
 import { isRemoteRinging } from './call-ringing';
+import { connectionTiming } from './connection-timing';
 import type { PhoneClient } from './phone-client';
 import { pushRegistration } from './wake-protocol';
 import { z } from 'zod';
@@ -132,6 +133,24 @@ export function observeSystemCalls(
   let observedAlertToken: string | null = null;
   let registering: Promise<void> | null = null;
   let registerAgain = false;
+  function acceptQueuedAnswer() {
+    const call = calls.snapshot();
+    if (
+      stopped ||
+      !call?.incoming ||
+      call.status !== 'incoming' ||
+      !answers.has(call.id) ||
+      ended.has(call.id) ||
+      (call.media === 'video' && AppState.currentState !== 'active')
+    )
+      return false;
+    answers.delete(call.id);
+    // An answer from CallKit proves the native call was already presented.
+    // Start capture/signaling without waiting for caller-name or presentation
+    // bridge callbacks still running in synchronizeOnce.
+    void calls.accept().catch(() => undefined);
+    return true;
+  }
   async function registerOnce() {
     try {
       const status = await bridge.state();
@@ -261,11 +280,10 @@ export function observeSystemCalls(
       // Camera capture requires a foreground application. A locked-screen answer
       // stays queued until the user opens/unlocks the app; voice can start there.
       if (call.media === 'video' && AppState.currentState !== 'active') return;
-      answers.delete(call.id);
       // Acceptance changes the call state synchronously, then waits for native
       // capture and negotiation. Keep draining CallKit while that work runs so
       // a hangup, mute or audio-route event never waits for a slow camera.
-      void calls.accept().catch(() => undefined);
+      acceptQueuedAnswer();
       return;
     }
     if (
@@ -324,6 +342,7 @@ export function observeSystemCalls(
           if (value.type === 'incoming') nativePending.add(value.id);
           // A PushKit report may precede the authenticated peer invite; do not end it while JS has no call yet.
           if (value.type === 'answer') {
+            connectionTiming('ANSWER_EVENT_RECEIVED_JS');
             answers.add(value.id);
             nativeAnswered.add(value.id);
           }
@@ -354,6 +373,9 @@ export function observeSystemCalls(
           )
             calls.mute();
         }
+        // Consume terminal events in this batch first: an answer followed by
+        // hangup must not open media. Unknown invites remain queued for recovery.
+        acceptQueuedAnswer();
         await synchronize();
       } while (drainAgain && !stopped);
     } finally {

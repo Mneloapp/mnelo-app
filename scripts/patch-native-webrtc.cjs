@@ -49,3 +49,23 @@ if (audioDigest() !== audioPatched) {
   if (audioDigest() !== audioPatched) throw new Error('Native audio patch integrity check failed.');
 }
 console.log('Verified WebRTC 144.1.2 native CallKit audio patch.');
+
+const iceTarget = path.join(dependency, 'ios/RCTWebRTC/RCTConvert+WebRTC.m');
+const iceDigest = () => createHash('sha256').update(fs.readFileSync(iceTarget)).digest('hex');
+const iceOriginal = '20638bb13e6fe2444e17c6d965d28074709b94f1c3e036ef77fb5440e943a954';
+const icePatched = '6dfa01cd5d4bbcb954db10af246aa43e4c6d7cb88da562662df805c47d5914e2';
+if (iceDigest() !== icePatched) {
+  if (iceDigest() !== iceOriginal) throw new Error('Unexpected native ICE configuration source.');
+  execFileSync(
+    'patch',
+    [
+      '--batch',
+      '--forward',
+      iceTarget,
+      path.join(root, 'patches/livekit-webrtc-144.1.2-ice-pool.patch'),
+    ],
+    { stdio: 'pipe' },
+  );
+  if (iceDigest() !== icePatched) throw new Error('Native ICE pool patch integrity check failed.');
+}
+console.log('Verified WebRTC 144.1.2 native ICE pool patch.');

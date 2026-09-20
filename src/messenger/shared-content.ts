@@ -1,3 +1,4 @@
+import { messageLinks } from './message-links';
 import { richMime } from './rich-message';
 import type { LocalDatabase } from './model';
 
@@ -43,43 +44,14 @@ export async function readPhotoPage(
   return { items, next: items.length === 40 ? items.at(-1)?.sequence : undefined };
 }
 
-// Never fetch previews or follow a link while indexing a private conversation.
-export function messageLinks(body: string): string[] {
-  const found = body.match(/https?:\/\/[^\s<>"\u0000-\u001f]+/giu) ?? [];
-  return [
-    ...new Set(
-      found.flatMap((candidate) => {
-        const trimmed = candidate.replace(/[.,!?;:'\u2019\u201d]+$/u, '');
-        let value = trimmed;
-        for (const [open, close] of [
-          ['(', ')'],
-          ['[', ']'],
-          ['{', '}'],
-        ]) {
-          while (value.endsWith(close!) && value.split(close!).length > value.split(open!).length)
-            value = value.slice(0, -1);
-        }
-        try {
-          const url = new URL(value);
-          return ['http:', 'https:'].includes(url.protocol) &&
-            url.hostname &&
-            !url.username &&
-            !url.password
-            ? [url.href]
-            : [];
-        } catch {
-          return [];
-        }
-      }),
-    ),
-  ];
-}
+export { messageLinks } from './message-links';
 
 const visual = "(f.mime LIKE 'image/%' OR f.mime LIKE 'video/%')";
 const filters: Record<ContentTab, string> = {
   media: `m.kind IN ('image','file') AND ${visual}`,
   docs: `m.kind='file' AND NOT ${visual} AND f.mime!='${richMime}'`,
-  links: "m.kind='text' AND (m.body LIKE '%https://%' OR m.body LIKE '%http://%')",
+  links:
+    "m.kind='text' AND (m.body LIKE '%https://%' OR m.body LIKE '%http://%' OR m.body LIKE '%www.%')",
 };
 
 export async function readSharedContent(

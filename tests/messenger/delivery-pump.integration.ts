@@ -897,3 +897,113 @@ test('native call wakes send encrypted work with display timers paused and stop 
     b.sql.close();
   }
 });
+
+for (const phase of ['receipt-backlog', 'last-upload'] as const) {
+  test(`an encrypted response from ${phase} is projected promptly without an extra polling interval`, async () => {
+    const a = device(),
+      b = device();
+    const delivery = new DeliveryService(
+      new DeliveryStore(new DatabaseSync(':memory:'), {
+        registered: () => true,
+        canContact: () => true,
+      }),
+      new SignalDirectory(new DatabaseSync(':memory:')),
+    );
+    let inject = false,
+      uploads = 0,
+      uploadsAtAnswer = -1;
+    const received: string[] = [];
+    const bp = new DeliveryPump(
+      { execute: async (command) => ({ delivery: delivery.execute(b.root.key, command) }) },
+      b.journal,
+      async () => ({}),
+      () => {},
+    );
+    const ap = new DeliveryPump(
+      {
+        execute: async (command) => {
+          if (command.action === 'delivery-sync' && command.envelope) {
+            uploads++;
+            if (inject) {
+              inject = false;
+              await b.journal.enqueue(
+                a.root.key,
+                randomUUID(),
+                'REMOTE_ANSWER',
+                Date.now(),
+                undefined,
+                undefined,
+                3,
+              );
+              await bp.tick();
+            }
+          }
+          return { delivery: delivery.execute(a.root.key, command) };
+        },
+      },
+      a.journal,
+      async (_sender, body) => {
+        received.push(body);
+        if (body === 'REMOTE_ANSWER') uploadsAtAnswer = uploads;
+        if (body === 'INVITE') await a.journal.enqueue(b.root.key, randomUUID(), 'FINAL_REPLY');
+        return {};
+      },
+      () => {},
+    );
+    try {
+      // Real Signal keys, encryption, journal commits and server inbox/ACK semantics.
+      const bKeys = await b.journal.initialize();
+      delivery.directory.publish(b.root.key, bKeys, b.journal.binding(bKeys));
+      ap.start();
+      await ap.tick();
+      bp.start();
+      await bp.tick();
+      inject = true;
+      if (phase === 'receipt-backlog') {
+        for (let n = 0; n < 20; n++)
+          await a.journal.enqueue(
+            b.root.key,
+            randomUUID(),
+            'RECEIPT_' + n,
+            Date.now(),
+            undefined,
+            undefined,
+            2,
+          );
+      } else {
+        await b.journal.enqueue(a.root.key, randomUUID(), 'INVITE');
+        await bp.tick();
+      }
+      const started = Date.now();
+      await ap.tick();
+      while (!received.includes('REMOTE_ANSWER')) {
+        assert.ok(
+          Date.now() - started < 1000,
+          'already-received response waited for the 3-second timer',
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      assert.equal(
+        uploadsAtAnswer,
+        1,
+        'remote answer is applied before uploading the remaining receipt backlog',
+      );
+      assert.equal(received.filter((body) => body === 'REMOTE_ANSWER').length, 1);
+      await ap.tick();
+      assert.equal(
+        received.filter((body) => body === 'REMOTE_ANSWER').length,
+        1,
+        'no repeated ratchet projection',
+      );
+    } finally {
+      ap.stop();
+      bp.stop();
+      // Any microtask-triggered serial cycle is allowed to observe stop before closing SQLite.
+      await ap.tick();
+      await bp.tick();
+      delivery.close();
+      a.sql.close();
+      b.sql.close();
+    }
+  });
+}

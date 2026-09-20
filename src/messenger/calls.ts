@@ -735,6 +735,7 @@ export class DeviceCalls {
       });
       this.expire(ringWindow);
       void this.mesh.prepareCall?.().catch(() => undefined);
+      void this.mesh.prepareIncomingMedia?.(peer, control.id).catch(() => undefined);
       return;
     }
     const call = this.value;

@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { Keyboard, type KeyboardEvent } from 'react-native';
+import { Keyboard, Platform, type KeyboardEvent } from 'react-native';
 import { useAttachmentPanel } from '@/messenger/useAttachmentPanel';
 
 test('keyboard and attachment grid keep the same inset throughout both directions of replacement', async () => {
@@ -52,5 +52,30 @@ test('keyboard and attachment grid keep the same inset throughout both direction
     shown.mockRestore();
     metrics.mockRestore();
     dismiss.mockRestore();
+  }
+});
+
+test('web attachment panel opens when the browser has no native keyboard metrics API', async () => {
+  const platform = Platform.OS;
+  const metrics = Object.getOwnPropertyDescriptor(Keyboard, 'metrics');
+  const visible = Object.getOwnPropertyDescriptor(Keyboard, 'isVisible');
+  Platform.OS = 'web';
+  Object.defineProperty(Keyboard, 'metrics', { value: undefined, configurable: true });
+  Object.defineProperty(Keyboard, 'isVisible', { value: undefined, configurable: true });
+  const { result, unmount } = await renderHook(() => useAttachmentPanel(12));
+  try {
+    await act(() => result.current.toggle(jest.fn()));
+    expect(result.current.visible).toBe(true);
+    expect(result.current.reservedHeight).toBeGreaterThan(12);
+    await act(() => result.current.focusInput());
+    expect(result.current.visible).toBe(false);
+    expect(result.current.reservedHeight).toBe(12);
+  } finally {
+    await unmount();
+    Platform.OS = platform;
+    if (metrics) Object.defineProperty(Keyboard, 'metrics', metrics);
+    else Reflect.deleteProperty(Keyboard, 'metrics');
+    if (visible) Object.defineProperty(Keyboard, 'isVisible', visible);
+    else Reflect.deleteProperty(Keyboard, 'isVisible');
   }
 });

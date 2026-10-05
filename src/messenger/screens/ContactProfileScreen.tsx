@@ -170,7 +170,7 @@ export function ContactProfileScreen() {
             />
           </View>
           {chatId && (
-            <ProfileGroup>
+            <ProfileGroup flat>
               <ProfileRow
                 icon="image"
                 label={t('library.title')}

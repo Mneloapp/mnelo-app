@@ -54,7 +54,7 @@ export function CallHistoryRow({
           : {}),
       }).format(date);
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, missed && styles.missedRow]}>
       <FocusPressable
         style={styles.call}
         onPress={onPress}
@@ -62,7 +62,7 @@ export function CallHistoryRow({
         accessibilityLabel={`${call.name}. ${detail}. ${formatDate(date.toISOString())}, ${formatTime(date.toISOString())}`}
       >
         {avatar}
-        <View style={styles.content}>
+        <View style={[styles.content, missed && styles.missedContent]}>
           <View style={styles.summary}>
             <AppText
               variant="bodyMedium"
@@ -110,6 +110,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 88,
+    marginVertical: theme.spacing.xs,
   },
   call: {
     flex: 1,
@@ -124,12 +126,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: theme.controls.borderWidth,
     borderBottomColor: theme.colors.border,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: theme.spacing.lg,
     gap: theme.spacing.sm,
   },
   summary: { flex: 1, minWidth: 0 },
   stamp: { flexShrink: 0, maxWidth: '30%', textAlign: 'right' },
   missed: { color: theme.colors.error },
+  missedRow: {
+    backgroundColor: '#FFF2F1',
+    borderRadius: theme.radii.lg,
+    paddingHorizontal: theme.spacing.md,
+  },
+  missedContent: { borderBottomWidth: 0 },
   detail: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs },
   description: { flex: 1 },
 });

@@ -124,7 +124,7 @@ export function CallSurface({
                 {t('brand')} ·{' '}
                 {t(call?.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice')}
               </AppText>
-              <AppText variant="headline" centered numberOfLines={2} accessibilityRole="header">
+              <AppText variant="title" centered numberOfLines={2} accessibilityRole="header">
                 {title}
               </AppText>
               <AppText variant="caption" centered tone="secondary" accessibilityLiveRegion="polite">
@@ -318,7 +318,7 @@ function CallControl({
         <View style={variant === 'end' && styles.hangup}>
           <AppIcon
             name={icon}
-            color={selected || variant === 'accept' ? theme.colors.black : theme.colors.callText}
+            color={selected || variant === 'accept' ? theme.colors.onAccent : theme.colors.callText}
           />
         </View>
       </View>
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     gap: theme.spacing.sm,
   },
-  headerOverVideo: { backgroundColor: 'rgba(17,17,17,0.78)' },
+  headerOverVideo: { backgroundColor: 'rgba(23,32,25,0.78)' },
   heading: { flex: 1, gap: theme.spacing.xs, paddingVertical: theme.spacing.xs },
   headerSpacer: { width: theme.controls.minTapTarget },
   headerControl: {
@@ -369,8 +369,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.callSecondary,
   },
   footer: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.md,
     gap: theme.spacing.sm,
   },
   controls: {
@@ -378,10 +378,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'center',
     flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-    borderRadius: theme.radii.xl,
-    backgroundColor: 'rgba(42,42,42,0.96)',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.lg,
+    borderRadius: 26,
+    backgroundColor: theme.colors.callSurface,
   },
   control: {
     flex: 1,
@@ -395,10 +395,10 @@ const styles = StyleSheet.create({
   circle: {
     width: theme.controls.minTapTarget,
     height: theme.controls.minTapTarget,
-    borderRadius: theme.radii.pill,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.callBackground,
+    backgroundColor: '#344639',
   },
   selected: { backgroundColor: theme.colors.callSelectedSurface },
   end: { backgroundColor: theme.colors.endCall },

@@ -34,7 +34,7 @@ if (command === 'build' || command === 'diagnostic') {
   const warm = existsSync(
     join(project, `android/app/build/outputs/apk/${variant}/app-${variant}.apk`),
   );
-  const minimumGiB = warm ? 2 : 5;
+  const minimumGiB = warm ? 2 : 10;
   if (space.bavail * space.bsize < minimumGiB * 1024 ** 3)
     throw new Error(
       `ANDROID_DISK_SPACE: At least ${minimumGiB} GiB free required before this local build.`,

@@ -7,6 +7,9 @@ import { PhoneService } from '../identity/service';
 import { phoneProvider, phoneProviderMode } from '../identity/provider';
 import { startPhoneHttp } from '../identity/http';
 import { DevelopmentSmsGuard } from '../identity/development-guard';
+import { PublicSmsGuard, publicRegistrationPolicy } from '../identity/public-registration';
+import { hostedIdentityConfiguration } from '../identity/hosted-configuration';
+import { reviewPhones } from '../src/messenger/review-account';
 import { turnIssuer } from '../identity/turn';
 import { ApplePushProvider, ApplePushEnvironments } from '../notifications/apns';
 import { WakeRegistry } from '../notifications/registry';
@@ -24,14 +27,14 @@ process.umask(0o077);
 // Kept separate from all legacy Supabase fixtures and from the content-free relay.
 const mode = phoneProviderMode(process.argv.slice(2));
 const fixture = mode === '--fixture';
-const hosted = process.env.MNELO_HOSTED_IDENTITY === 'development';
-if (process.env.MNELO_HOSTED_IDENTITY && !hosted) throw new Error('IDENTITY_CONFIGURATION_INVALID');
+const { hosted, publicRegistration, combinedRelay, policyFile } = hostedIdentityConfiguration(
+  process.env,
+);
 if (hosted && mode !== '--infobip') throw new Error('HOSTED_IDENTITY_REQUIRES_INFOBIP');
-const combinedRelay = process.env.MNELO_COMBINED_RELAY === '1';
-if (process.env.MNELO_COMBINED_RELAY && (!hosted || !combinedRelay))
-  throw new Error('IDENTITY_CONFIGURATION_INVALID');
-if (process.env.MNELO_REVIEW_ACCESS_FILE && (!hosted || !combinedRelay))
-  throw new Error('REVIEW_REQUIRES_ISOLATED_HOSTED_ROUTING');
+// Empty or unconfigured coverage must never silently mean all phone destinations.
+const publicPolicy = publicRegistration
+  ? publicRegistrationPolicy(JSON.parse(readPushCredential(policyFile!)))
+  : undefined;
 // Validate the selected provider before creating any local state. Never fall back silently.
 const provider = phoneProvider(mode, process.env);
 const turn = process.env.MNELO_TURN_SECRET
@@ -46,20 +49,35 @@ if (!existsSync(keyPath)) {
   writeFileSync(keyPath, randomBytes(32), { flag: 'wx', mode: 0o600 });
 }
 const registry = new PhoneRegistry(new DatabaseSync(databasePath), readFileSync(keyPath));
-const guard = hosted
-  ? new DevelopmentSmsGuard(
-      new DatabaseSync(join(directory, 'sms-budget.db')),
-      process.env.MNELO_ALLOWED_PHONE_INDICES ?? '',
+const guard = publicPolicy
+  ? new PublicSmsGuard(
+      new DatabaseSync(join(directory, 'sms-abuse.db')),
+      publicPolicy,
+      readFileSync(keyPath),
     )
-  : undefined;
+  : hosted
+    ? new DevelopmentSmsGuard(
+        new DatabaseSync(join(directory, 'sms-budget.db')),
+        process.env.MNELO_ALLOWED_PHONE_INDICES ?? '',
+      )
+    : undefined;
 const review = process.env.MNELO_REVIEW_ACCESS_FILE
   ? new ReviewAccess(
       JSON.parse(readPushCredential(process.env.MNELO_REVIEW_ACCESS_FILE)),
       (phone) => registry.index(phone),
     )
   : undefined;
+const reservedReviewIndices = new Set(reviewPhones.map((phone) => registry.index(phone)));
 const access = guard
-  ? new IdentityAccess(registry, (index) => guard.admits(index), review)
+  ? new IdentityAccess(
+      registry,
+      (index) =>
+        guard instanceof DevelopmentSmsGuard
+          ? guard.admits(index)
+          : !reservedReviewIndices.has(index),
+      review,
+      publicRegistration ? 'public' : 'development',
+    )
   : undefined;
 let wakeRegistry: WakeRegistry | undefined;
 let wake: WakeService | undefined;
@@ -114,13 +132,15 @@ delivery =
         }),
       )
     : undefined;
-const expiry = delivery
-  ? setInterval(() => {
-      delivery?.store.prune();
-      delivery?.directory.prune();
-      delivery?.media?.prune();
-    }, 60000)
-  : undefined;
+const expiry =
+  delivery || guard instanceof PublicSmsGuard
+    ? setInterval(() => {
+        delivery?.store.prune();
+        delivery?.directory.prune();
+        delivery?.media?.prune();
+        if (guard instanceof PublicSmsGuard) guard.prune();
+      }, 60000)
+    : undefined;
 expiry?.unref();
 const service = new PhoneService(registry, provider, Date.now, guard, turn, wake, access, delivery);
 // Hosted identity admission and transient relay share one process so every route
@@ -141,9 +161,11 @@ server.on('listening', () =>
   process.stdout.write(
     fixture
       ? 'Mnelo phone identity on loopback 8086. FICTIONAL numbers only; no SMS sent.\n'
-      : hosted
-        ? 'Mnelo development identity on loopback 8086; admitted testers and durable SMS budgets.\n'
-        : 'Mnelo phone identity on loopback 8086. SMS provider enabled; no public deployment.\n',
+      : publicRegistration
+        ? 'Mnelo public identity on loopback 8086; verified phone destinations and durable abuse controls.\n'
+        : hosted
+          ? 'Mnelo development identity on loopback 8086; admitted testers and durable SMS budgets.\n'
+          : 'Mnelo phone identity on loopback 8086. SMS provider enabled; no public deployment.\n',
   ),
 );
 server.on('error', () => {

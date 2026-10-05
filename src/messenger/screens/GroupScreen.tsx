@@ -11,6 +11,7 @@ import { useLocalAction } from './shared';
 import {
   ChatPrivacyActions,
   ContactAction,
+  ContactHero,
   InfoGroup,
   infoStyles,
 } from '../components/ContactInfo';
@@ -78,30 +79,19 @@ export function GroupScreen() {
             accessibilityLabel={owner ? t('messenger.editGroup') : chat.title}
             disabled={!owner}
             onPress={edit}
-            style={infoStyles.hero}
           >
-            <Avatar
+            <ContactHero
               group
               name={chat.title}
               uri={avatarUri(profile.avatar)}
-              size="profile"
               fallbackRingColor={fallbackAvatarColor('group:' + id)}
+              subtitle={
+                members.data
+                  ? t('messenger.groupMembersCount', { count: members.data.length })
+                  : undefined
+              }
+              about={profile.about || (owner ? t('messenger.groupAddDescription') : undefined)}
             />
-            <AppText variant="title" centered style={infoStyles.name}>
-              {chat.title}
-            </AppText>
-            {members.data && (
-              <AppText tone="secondary">
-                {t('messenger.groupMembersCount', { count: members.data.length })}
-              </AppText>
-            )}
-            {profile.about ? (
-              <AppText centered tone="secondary">
-                {profile.about}
-              </AppText>
-            ) : owner ? (
-              <AppText tone="secondary">{t('messenger.groupAddDescription')}</AppText>
-            ) : null}
           </FocusPressable>
           <View style={infoStyles.actions}>
             <ContactAction
@@ -126,7 +116,7 @@ export function GroupScreen() {
               }
             />
           </View>
-          <ProfileGroup>
+          <ProfileGroup flat>
             <ProfileRow
               icon="image"
               label={t('library.title')}

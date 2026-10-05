@@ -20,6 +20,8 @@ export function ChatFilters({
   const { t } = useTranslation();
   return (
     <ScrollView
+      accessibilityRole="tablist"
+      accessibilityLabel={t('tabs.chats')}
       horizontal
       showsHorizontalScrollIndicator={false}
       style={styles.strip}
@@ -29,12 +31,13 @@ export function ChatFilters({
       {(Object.keys(options) as ChatFilter[]).map((filter) => (
         <FocusPressable
           key={filter}
-          accessibilityRole="button"
+          accessibilityRole="tab"
           accessibilityState={{ selected: value === filter }}
+          aria-selected={value === filter}
           onPress={() => onChange(filter)}
           style={[styles.filter, value === filter && styles.selected]}
         >
-          <AppText variant="label" style={styles.text}>
+          <AppText variant="label" style={[styles.text, value === filter && styles.selectedText]}>
             {t(options[filter])}
           </AppText>
         </FocusPressable>
@@ -44,15 +47,16 @@ export function ChatFilters({
 }
 const styles = StyleSheet.create({
   strip: { flexGrow: 0, flexShrink: 0 },
-  filters: { gap: theme.spacing.xs, paddingVertical: theme.spacing.xs },
+  filters: { gap: theme.spacing.lg, paddingVertical: theme.spacing.xs },
   filter: {
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xs,
     paddingVertical: theme.spacing.md,
     minHeight: theme.controls.minTapTarget,
     justifyContent: 'center',
-    borderRadius: theme.radii.pill,
-    backgroundColor: theme.colors.surfaceSoft,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
   },
-  selected: { backgroundColor: theme.colors.accentSoft },
-  text: { color: theme.colors.textPrimary },
+  selected: { borderBottomColor: theme.colors.black },
+  text: { color: theme.colors.textSecondary },
+  selectedText: { color: theme.colors.textPrimary },
 });

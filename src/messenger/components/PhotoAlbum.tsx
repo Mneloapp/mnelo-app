@@ -90,6 +90,7 @@ function AlbumPhoto({
 export function PhotoAlbum({
   photos,
   highlighted,
+  continues = false,
   menuOpen,
   onSelect,
   onReply,
@@ -97,6 +98,7 @@ export function PhotoAlbum({
 }: {
   photos: LocalMessage[];
   highlighted: boolean;
+  continues?: boolean;
   menuOpen: boolean;
   onSelect: (message: LocalMessage, anchor?: MessageAnchor) => void;
   onReply: (message: LocalMessage) => void;
@@ -121,6 +123,7 @@ export function PhotoAlbum({
     >
       <MessageBubble
         own={latest.sender === identity?.key}
+        continues={continues}
         media
         visual
         interactiveChildren

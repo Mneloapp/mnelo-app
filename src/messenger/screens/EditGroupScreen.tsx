@@ -7,6 +7,7 @@ import { GroupProfileFields } from '../components/GroupProfileFields';
 import { groupProfile, readGroupProfile, type GroupProfile } from '../group-profile';
 import { useLocalAction } from './shared';
 import { useGroupInfo } from './GroupScreen';
+import { profileStyles } from '../components/OwnProfile';
 
 export function EditGroupScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,6 +26,7 @@ export function EditGroupScreen() {
       title={t('messenger.editGroup')}
       back
       nativeKeyboardInsets
+      contentStyle={profileStyles.content}
       right={
         owner ? (
           <IconButton

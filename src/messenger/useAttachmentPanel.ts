@@ -20,7 +20,7 @@ export function useAttachmentPanel(bottomInset = 0) {
   const keyboardHeight = useRef(0);
   const mode = useRef<'closed' | 'panel' | 'keyboard'>('closed');
   const managedKeyboard = Platform.OS === 'ios';
-  const minimumPanelHeight = 212 + bottomInset;
+  const minimumPanelHeight = 232 + bottomInset;
   const panelHeight = useRef(Math.max(minimumPanelHeight, Math.min(320, windowHeight * 0.42)));
   const resize = useCallback(
     (height: number, event?: KeyboardEvent) => {
@@ -106,13 +106,13 @@ export function useAttachmentPanel(bottomInset = 0) {
         return;
       }
       mode.current = 'panel';
-      const metrics = Keyboard.metrics();
+      const metrics = Keyboard.metrics?.();
       if (metrics?.height) {
         lastKeyboardHeight.current = metrics.height;
         panelHeight.current = Math.max(minimumPanelHeight, metrics.height);
       }
       setVisible(true);
-      resize(managedKeyboard || !Keyboard.isVisible() ? panelHeight.current : 0);
+      resize(managedKeyboard || !Keyboard.isVisible?.() ? panelHeight.current : 0);
       Keyboard.dismiss();
     },
   };

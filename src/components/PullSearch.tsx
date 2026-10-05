@@ -1,5 +1,12 @@
 import { useRef, useState } from 'react';
-import { FlatList, Keyboard, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import {
+  FlatList,
+  Keyboard,
+  Platform,
+  StyleSheet,
+  View,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { useTranslation } from 'react-i18next';
 import { SearchField } from './SearchField';
@@ -52,7 +59,10 @@ export function usePullSearch<Item>(value: string) {
       // Keep the native sticky wrapper mounted while focusing the input.
       // Inserting it on focus remounts TextInput and reuses the initial scroll
       // offset, dropping the keyboard and moving the header down on iOS.
-      stickyHeaderIndices: [0],
+      // RNWeb does not implement hidden-on-scroll and keeps its sticky wrapper
+      // above the first row at the initial offset. Its header scrolls normally;
+      // toggling the web wrapper on focus would also remount the input.
+      stickyHeaderIndices: Platform.OS === 'web' ? [] : [0],
       stickyHeaderHiddenOnScroll: !locked,
       scrollEventThrottle: 16,
       bounces: true,

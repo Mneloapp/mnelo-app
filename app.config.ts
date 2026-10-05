@@ -43,7 +43,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: 'com.mnelo.messenger',
     appleTeamId: 'CS6GJ2BMS9',
-    buildNumber: '53',
+    buildNumber: '54',
     privacyManifests: {
       NSPrivacyAccessedAPITypes: [
         {

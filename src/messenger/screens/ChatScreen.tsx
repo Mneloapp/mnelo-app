@@ -1,5 +1,6 @@
 import { LocationProviderChoice } from '../components/LocationProviderChoice';
 import { ChatMessageBubble } from '../components/ChatMessageBubble';
+import { ConversationHeader } from '../components/ConversationHeader';
 import { MessageInfoNavigator } from '../components/MessageInfoNavigator';
 import { useMessageInfoNavigation } from '../components/message-info-navigation';
 import { formatTime, formatDate } from '@/i18n/format';
@@ -33,6 +34,7 @@ import { CallBackSheet, CallMessage } from '../components/CallMessage';
 import { PeerAvatar } from '../components/ContactCard';
 import { readGroupProfile } from '../group-profile';
 import { avatarUri } from '../profile-avatar';
+import { fallbackAvatarColor } from '../avatar-color';
 import { AttachmentAction } from '../components/AttachmentAction';
 import { LocationComposer } from '../components/LocationComposer';
 import { choosePlace, coordinateBody, nativePlacePickerAvailable } from '../location-picker';
@@ -43,6 +45,19 @@ import { PhotoAlbum } from '../components/PhotoAlbum';
 import { photoAlbums, timelineContains } from '../photo-albums';
 import { forwardSharedContact, presentSharedContact } from '../contact-share';
 import { ContactShareChoices } from '../components/ContactShareChoices';
+
+// Timeline rows are newest first. A short run shares spacing, while every
+// message keeps its own timestamp, receipt, actions and identity.
+function messageRunContinues(message: LocalMessage, older?: LocalMessage) {
+  return Boolean(
+    older &&
+    message.sender === older.sender &&
+    message.kind !== 'call' &&
+    older.kind !== 'call' &&
+    Math.abs(message.sentAt - older.sentAt) < 5 * 60 * 1000 &&
+    new Date(message.sentAt).toDateString() === new Date(older.sentAt).toDateString(),
+  );
+}
 
 export function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -253,64 +268,40 @@ function ChatConversationScreen() {
         importantForAccessibility={selected ? 'no-hide-descendants' : 'auto'}
       >
         <Page
-          title={chat.data?.title ?? t('tabs.chats')}
-          avatarName={chat.data?.title}
-          avatar={
-            chat.data?.kind === 'direct' && remote ? (
-              <PeerAvatar peer={remote.key} name={chat.data.title} size="small" />
-            ) : chat.data?.kind === 'group' ? (
-              <Avatar
-                group
-                name={chat.data.title}
-                uri={avatarUri(readGroupProfile(chat.data).avatar)}
-                size="small"
-              />
-            ) : undefined
-          }
-          titleActionLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}
-          onTitlePress={
-            chat.data?.kind === 'group'
-              ? () => router.push({ pathname: '/group/[id]', params: { id } })
-              : remote
-                ? () => router.push({ pathname: '/contact/[key]', params: { key: remote.key } })
-                : undefined
-          }
-          titleLines={1}
-          headerStyle={styles.chatHeader}
           bottomSafe={false}
           avoidKeyboard={!attachmentPanel.managedKeyboard}
-          back
           scroll={false}
           contentStyle={[ui.flex, styles.chatContent]}
-          right={
-            <View style={styles.headerButtons}>
-              {chat.data && !chat.data.left_group && !groupUnavailable && remote && (
-                <>
-                  <IconButton
-                    icon="phone"
-                    label={t('messenger.callVoice')}
-                    disabled={
-                      !calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))
-                    }
-                    onPress={() =>
-                      router.push({ pathname: '/call/[id]', params: { id, media: 'voice' } })
-                    }
-                  />
-                  <IconButton
-                    icon="video"
-                    label={t('messenger.callVideo')}
-                    disabled={
-                      !calls || (!calls.supportsQueuedSignaling && !mesh?.online(remote.key))
-                    }
-                    onPress={() =>
-                      router.push({ pathname: '/call/[id]', params: { id, media: 'video' } })
-                    }
-                  />
-                </>
-              )}
-            </View>
-          }
         >
+          <ConversationHeader
+            title={chat.data?.title ?? t('tabs.chats')}
+            avatar={
+              chat.data?.kind === 'direct' && remote ? (
+                <PeerAvatar peer={remote.key} name={chat.data.title} colorfulFallback />
+              ) : chat.data?.kind === 'group' ? (
+                <Avatar
+                  group
+                  name={chat.data.title}
+                  uri={avatarUri(readGroupProfile(chat.data).avatar)}
+                  fallbackRingColor={fallbackAvatarColor(`group:${id}`)}
+                />
+              ) : undefined
+            }
+            infoLabel={t(chat.data?.kind === 'group' ? 'messenger.groupDetails' : 'card.info')}
+            onInfo={
+              chat.data?.kind === 'group'
+                ? () => router.push({ pathname: '/group/[id]', params: { id } })
+                : remote
+                  ? () => router.push({ pathname: '/contact/[key]', params: { key: remote.key } })
+                  : undefined
+            }
+            showCalls={Boolean(chat.data && !chat.data.left_group && !groupUnavailable && remote)}
+            callAvailable={Boolean(
+              calls && remote && (calls.supportsQueuedSignaling || mesh?.online(remote.key)),
+            )}
+            onVoice={() => router.push({ pathname: '/call/[id]', params: { id, media: 'voice' } })}
+            onVideo={() => router.push({ pathname: '/call/[id]', params: { id, media: 'video' } })}
+          />
           {!deliveryState && (
             <AppText variant="caption" tone="secondary">
               {t(
@@ -356,7 +347,8 @@ function ChatConversationScreen() {
             initialNumToRender={8}
             windowSize={5}
             keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) =>
+            contentContainerStyle={styles.timeline}
+            renderItem={({ item, index }) =>
               item.kind === 'call' ? (
                 <CallMessage
                   message={item}
@@ -375,6 +367,7 @@ function ChatConversationScreen() {
               ) : item.photos ? (
                 <PhotoAlbum
                   photos={item.photos}
+                  continues={messageRunContinues(item, timeline[index + 1])}
                   onInfo={item.sender === identity?.key ? showMessageInfo : undefined}
                   highlighted={timelineContains(item, quoteScroll.highlighted)}
                   menuOpen={Boolean(selected)}
@@ -396,6 +389,7 @@ function ChatConversationScreen() {
               ) : (
                 <ChatMessageBubble
                   message={item}
+                  continues={messageRunContinues(item, timeline[index + 1])}
                   onInfo={item.sender === identity?.key ? () => showMessageInfo(item) : undefined}
                   highlighted={quoteScroll.highlighted === item.id}
                   onQuote={(id) => {
@@ -511,6 +505,7 @@ function ChatConversationScreen() {
             <View style={styles.composer}>
               <IconButton
                 disabled={Boolean(editing)}
+                variant="primary"
                 icon={attachmentPanel.visible ? 'keyboard' : 'plus'}
                 label={t(
                   attachmentPanel.visible ? 'messenger.showKeyboard' : 'messenger.attachments',
@@ -555,6 +550,7 @@ function ChatConversationScreen() {
               ) : (
                 <IconButton
                   icon="mic"
+                  variant="accent"
                   label={t('messenger.voice')}
                   onPress={() => {
                     Keyboard.dismiss();
@@ -695,6 +691,26 @@ function ChatConversationScreen() {
                     }}
                   />
                   <AttachmentAction
+                    icon="navigation"
+                    color="#008B68"
+                    label={t('messenger.attachmentMyLocation')}
+                    busy={action.busy}
+                    onPress={() =>
+                      void action.run(async () => {
+                        const origin = locationOrigin.current;
+                        const permission = await Location.requestForegroundPermissionsAsync();
+                        if (!origin || origin !== locationOrigin.current) return;
+                        if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
+                        const point = await Location.getCurrentPositionAsync({
+                          accuracy: Location.Accuracy.Balanced,
+                        });
+                        if (origin !== locationOrigin.current) return;
+                        await sendCurrent(coordinateBody(point.coords), { kind: 'location' });
+                        attachmentPanel.close();
+                      })
+                    }
+                  />
+                  <AttachmentAction
                     icon="user"
                     color="#7460CE"
                     label={t('messenger.attachmentContact')}
@@ -729,26 +745,6 @@ function ChatConversationScreen() {
                       attachmentPanel.close();
                       setCardComposer('event');
                     }}
-                  />
-                  <AttachmentAction
-                    icon="navigation"
-                    color="#008B68"
-                    label={t('messenger.attachmentMyLocation')}
-                    busy={action.busy}
-                    onPress={() =>
-                      void action.run(async () => {
-                        const origin = locationOrigin.current;
-                        const permission = await Location.requestForegroundPermissionsAsync();
-                        if (!origin || origin !== locationOrigin.current) return;
-                        if (!permission.granted) throw new Error('LOCATION_PERMISSION_REQUIRED');
-                        const point = await Location.getCurrentPositionAsync({
-                          accuracy: Location.Accuracy.Balanced,
-                        });
-                        if (origin !== locationOrigin.current) return;
-                        await sendCurrent(coordinateBody(point.coords), { kind: 'location' });
-                        attachmentPanel.close();
-                      })
-                    }
                   />
                 </View>
               </View>
@@ -874,28 +870,26 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: theme.colors.surface,
   },
-  chatHeader: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingBottom: theme.spacing.sm,
-    gap: theme.spacing.xs,
+  chatContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 0,
+    paddingBottom: 0,
+    gap: theme.spacing.sm,
   },
-  chatContent: { paddingHorizontal: theme.spacing.md, paddingBottom: 0, gap: theme.spacing.sm },
+  timeline: { paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg },
   composer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     gap: theme.spacing.sm,
-    paddingVertical: 2,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    borderRadius: theme.radii.pill,
+    paddingVertical: theme.spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
   },
   attachmentPanel: {
     flex: 1,
     overflow: 'hidden',
-    backgroundColor: '#DCDDD9',
-    marginHorizontal: -theme.spacing.md,
+    backgroundColor: theme.colors.accentSoft,
+    marginHorizontal: -theme.spacing.lg,
     borderTopLeftRadius: theme.radii.lg,
     borderTopRightRadius: theme.radii.lg,
   },

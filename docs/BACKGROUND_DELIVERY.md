@@ -1,5 +1,7 @@
 # Background communication — required architecture
 
+Historical September 12 architecture below. Its no-durable-queue and zero-retention descriptions predate delivery v2 and are not current product claims. See [21 September launch preparation](PUBLIC_LAUNCH_2026_09_21.md) and the live privacy notice for the current encrypted delivery queue, message-alert expiry and Android FCM setup. Physical iOS/Android acceptance remains distinct from provider configuration checks.
+
 September 12 owner correction: background/closed-app incoming message alerts and calls are mandatory on **both iOS and Android** before the two-phone candidate is considered ready. The previously uploaded 0.1.0 (2) lacks this path and is not the accepted candidate. This document distinguishes implementation targets from verified results; QA_REPORT records actual tests.
 
 ## Privacy boundary

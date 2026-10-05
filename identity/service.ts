@@ -3,7 +3,7 @@ import { peerKey } from '../src/messenger/model';
 import { verify } from '../src/messenger/crypto';
 import { phoneProof, phoneProofPayload, type PhoneResponse } from '../src/messenger/phone-protocol';
 import { PhoneRegistry } from './registry';
-import type { SmsVerification } from './verification';
+import type { SmsAdmission, SmsVerification } from './verification';
 import type { TurnIssuer } from './turn';
 import type { WakeService } from '../notifications/service';
 import type { IdentityAccess } from './review-access';
@@ -27,7 +27,7 @@ export class PhoneService {
     private readonly registry: PhoneRegistry,
     private readonly sms: SmsVerification,
     private readonly now = Date.now,
-    private readonly admission?: { reserve(index: string): void },
+    private readonly admission?: SmsAdmission,
     private readonly turn?: TurnIssuer,
     private readonly wake?: WakeService,
     private readonly access?: IdentityAccess,
@@ -76,13 +76,15 @@ export class PhoneService {
       const index = this.registry.index(command.phone);
       this.access?.assertEnrollment(key, index);
       const review = Boolean(this.access?.review?.contains(index));
-      this.limit('sms-minute:' + index, 1, 60000);
-      this.limit('sms-hour:' + index, 5, 3600000);
-      this.limit('sms-device:' + key, 5, 3600000);
-      this.limit('sms-source:' + source, 10, 3600000);
-      this.limit('sms-global', 100, 3600000);
       if (this.attempts.size >= 1000) throw new Error('PHONE_RATE_LIMITED');
-      if (!review) this.admission?.reserve(index);
+      if (review || !this.admission?.publicRegistration) {
+        this.limit('sms-minute:' + index, 1, 60000);
+        this.limit('sms-hour:' + index, 5, 3600000);
+        this.limit('sms-device:' + key, 5, 3600000);
+        this.limit('sms-source:' + source, 10, 3600000);
+        this.limit('sms-global', 100, 3600000);
+      }
+      if (!review) this.admission?.reserve(index, { phone: command.phone, key, source });
       this.sending.add(key);
       try {
         const verification = review ? 'review' : await this.sms.send(command.phone);

@@ -94,7 +94,7 @@ function RecipientRow({ person, separated }: { person: MessageRecipientInfo; sep
   const name = person.name || t('messenger.contact');
   return (
     <View style={[styles.recipient, separated && styles.divider]}>
-      <PeerAvatar peer={person.peer} name={name} size="small" />
+      <PeerAvatar peer={person.peer} name={name} size="small" colorfulFallback />
       <View style={styles.person}>
         <AppText>{name}</AppText>
         <AppText variant="caption" tone="secondary">
@@ -175,7 +175,7 @@ export function MessageInfoContent({
 
 const styles = StyleSheet.create({
   page: { paddingHorizontal: theme.spacing.lg, gap: theme.spacing.xl },
-  preview: { gap: theme.spacing.lg, paddingBottom: theme.spacing.sm },
+  preview: { gap: theme.spacing.sm, paddingBottom: theme.spacing.sm },
   date: { textAlign: 'center' },
   sections: { gap: theme.spacing.xl },
   section: { gap: theme.spacing.sm },
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
+    borderRadius: 18,
     paddingHorizontal: theme.spacing.lg,
     overflow: 'hidden',
   },

@@ -52,6 +52,9 @@ beforeEach(() => {
 
 test('Me identity opens profile, where individual details and the verified-number flow are accessible', async () => {
   const page = await render(<MeScreen />);
+  expect(screen.getByText('+995555010203')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'My QR code' }));
+  expect(router.push).toHaveBeenCalledWith({ pathname: '/my-code', params: { from: 'me' } });
   await fireEvent.press(screen.getByRole('button', { name: 'Profile: Nino Test' }));
   expect(router.push).toHaveBeenCalledWith('/edit-profile');
   await page.unmount();

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import type { LocalCall } from '@/messenger/model';
 import { CallsScreen, NewCallScreen } from '@/messenger/screens/CallsScreen';
 import { CallActions } from '@/messenger/screens/CallActions';
+import { recentCallPeers } from '@/messenger/components/RecentCalls';
 
 jest.mock('@/messenger/phone-client', () => ({ devicePhoneClient: () => null }));
 jest.mock('@/messenger/screens/FindPhoneScreen', () => ({ FindPhoneScreen: () => null }));
@@ -160,3 +161,62 @@ test.each(['alice', 'blocked'] as const)(
     expect(screen.queryByText('Development Alice')).toBeNull();
   },
 );
+
+test('recent call shortcuts use unique real peers, start voice calls and keep day-grouped history', async () => {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const records: LocalCall[] = [
+    {
+      id: 'a-new',
+      chatId: 'alice-chat',
+      peer: 'alice',
+      name: 'Development Alice',
+      media: 'video',
+      status: 'ended',
+      direction: 'outgoing',
+      unseen: 0,
+      endedAt: Date.now(),
+      sequence: 3,
+    },
+    {
+      id: 'a-old',
+      chatId: 'alice-chat',
+      peer: 'alice',
+      name: 'Development Alice',
+      media: 'voice',
+      status: 'ended',
+      direction: 'incoming',
+      unseen: 0,
+      endedAt: Date.now(),
+      sequence: 2,
+    },
+    {
+      id: 'b-old',
+      chatId: 'bob-chat',
+      peer: 'bob',
+      name: 'Development Bob',
+      media: 'voice',
+      status: 'missed',
+      direction: 'incoming',
+      unseen: 0,
+      endedAt: yesterday.getTime(),
+      sequence: 1,
+    },
+  ];
+  expect(
+    recentCallPeers([...records, { ...records[0]!, group: true, peer: 'group' }]).map(
+      (call) => call.peer,
+    ),
+  ).toEqual(['alice', 'bob']);
+  mockRuntime.engine.callHistory.mockResolvedValueOnce(records);
+  await show(<CallsScreen />);
+  await screen.findByRole('button', { name: 'Voice call Development Alice' });
+  expect(screen.getAllByRole('button', { name: 'Voice call Development Alice' })).toHaveLength(1);
+  expect(screen.getByRole('header', { name: 'Today' })).toBeOnTheScreen();
+  expect(screen.getByRole('header', { name: 'Yesterday' })).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Voice call Development Alice' }));
+  expect(router.push).toHaveBeenLastCalledWith({
+    pathname: '/call/[id]',
+    params: { id: 'alice-chat', media: 'voice' },
+  });
+});

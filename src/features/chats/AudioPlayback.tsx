@@ -72,7 +72,7 @@ export function AudioPlayback({
     <View style={ui.stack}>
       <View style={[styles.player, waveform && styles.compact]}>
         <IconButton
-          variant="soft"
+          variant="primary"
           icon={status.playing ? 'pause' : 'play'}
           label={t(status.playing ? 'media.pause' : 'media.play')}
           busy={action.busy}

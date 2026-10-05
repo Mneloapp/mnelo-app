@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, type PressableProps } from 'react-native';
 import { theme } from '@/theme/tokens';
 import { useCallAppearance } from '@/theme/appearance';
-export function FocusPressable({ style, onFocus, onBlur, ...props }: PressableProps) {
+export function FocusPressable({
+  style,
+  onFocus,
+  onBlur,
+  focusColor,
+  ...props
+}: PressableProps & { focusColor?: string }) {
   const [focused, setFocused] = useState(false);
   const dark = useCallAppearance();
   return (
@@ -20,6 +26,7 @@ export function FocusPressable({ style, onFocus, onBlur, ...props }: PressablePr
         typeof style === 'function' ? style(state) : style,
         focused && styles.focus,
         focused && dark && { outlineColor: theme.colors.callText },
+        focused && focusColor && { outlineColor: focusColor },
       ]}
     />
   );

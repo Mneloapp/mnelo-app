@@ -5,7 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { AppIcon, type IconName } from '@/components/AppIcon';
 import { FocusPressable } from '@/components/FocusPressable';
+import { Avatar } from '@/components/ui';
 import { theme } from '@/theme/tokens';
+import { fallbackAvatarColor } from '../avatar-color';
 import { useDevice } from '../DeviceProvider';
 import { readSharedContact } from '../contact-share';
 import { resolveSharedContact } from '../shared-contact-action';
@@ -84,8 +86,21 @@ export function SharedContactMessage({
   }
   return (
     <View style={styles.card}>
-      {!!displayName && <AppText variant="bodyMedium">{displayName}</AppText>}
-      {!!contact.phone && <AppText tone="secondary">{contact.phone}</AppText>}
+      <View style={styles.identity}>
+        <Avatar
+          name={displayName}
+          size="small"
+          fallbackRingColor={fallbackAvatarColor(contact.phone ?? displayName)}
+        />
+        <View style={styles.heading}>
+          {!!displayName && <AppText variant="bodyMedium">{displayName}</AppText>}
+          {!!contact.phone && (
+            <AppText variant="caption" tone="secondary">
+              {contact.phone}
+            </AppText>
+          )}
+        </View>
+      </View>
       {enabled && contact.phone && (
         <View style={[styles.actions, fontScale > 1.35 && { flexDirection: 'column' }]}>
           <ContactCardAction
@@ -141,19 +156,18 @@ function ContactCardAction({
       onPress={onPress}
       style={({ pressed }) => [
         styles.action,
-        stacked && { flexDirection: 'row', justifyContent: 'flex-start' },
+        stacked && styles.stackedAction,
         (disabled || pressed) && styles.dimmed,
       ]}
     >
-      <View style={styles.icon}>
-        <AppIcon name={icon} size={22} color={theme.colors.success} />
-      </View>
+      <AppIcon name={icon} size={20} color={theme.colors.success} />
       <AppText
         variant="caption"
         centered
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.85}
+        style={styles.actionLabel}
       >
         {label}
       </AppText>
@@ -162,28 +176,27 @@ function ContactCardAction({
 }
 const styles = StyleSheet.create({
   card: { gap: theme.spacing.sm },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+  heading: { flex: 1, minWidth: 0, gap: 2 },
   actions: {
     flexDirection: 'row',
     gap: theme.spacing.xs,
     paddingTop: theme.spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.controlBorder,
+    borderTopColor: theme.colors.border,
   },
   action: {
     flex: 1,
-    minWidth: 48,
-    alignItems: 'center',
-    gap: theme.spacing.xs,
-    paddingVertical: theme.spacing.xs,
-    borderRadius: theme.radii.md,
-  },
-  icon: {
-    width: 48,
-    height: 48,
-    borderRadius: theme.radii.pill,
-    backgroundColor: theme.colors.background,
+    minWidth: 0,
+    minHeight: theme.controls.minTapTarget,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: 12,
   },
+  stackedAction: { flex: 0, alignSelf: 'stretch', justifyContent: 'flex-start' },
+  actionLabel: { flexShrink: 1, color: theme.colors.success },
   dimmed: { opacity: theme.opacity.disabled },
 });

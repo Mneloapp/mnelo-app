@@ -23,6 +23,7 @@ export function ChatHistoryRow({
   now,
   onDelete,
   onExportDelete,
+  onPin,
 }: {
   chat: Chat;
   subtitle: string;
@@ -31,6 +32,7 @@ export function ChatHistoryRow({
   now?: number;
   onDelete?: () => void;
   onExportDelete?: () => void;
+  onPin?: () => void;
 }) {
   const { t } = useTranslation();
   const [mountedAt] = useState(Date.now);
@@ -40,17 +42,18 @@ export function ChatHistoryRow({
   return (
     <FocusPressable
       onPress={onPress}
-      accessibilityActions={
-        onDelete
-          ? [
-              { name: 'delete', label: t('messenger.deleteChat') },
-              { name: 'exportDelete', label: t('messenger.exportDeleteChat') },
-            ]
-          : undefined
-      }
+      onLongPress={onPin}
+      accessibilityActions={[
+        ...(onPin ? [{ name: 'pin', label: t('focus.pinChat') }] : []),
+        ...(onDelete ? [{ name: 'delete', label: t('messenger.deleteChat') }] : []),
+        ...(onExportDelete
+          ? [{ name: 'exportDelete', label: t('messenger.exportDeleteChat') }]
+          : []),
+      ]}
       onAccessibilityAction={(event) => {
         if (event.nativeEvent.actionName === 'delete') onDelete?.();
         if (event.nativeEvent.actionName === 'exportDelete') onExportDelete?.();
+        if (event.nativeEvent.actionName === 'pin') onPin?.();
       }}
       accessibilityRole="button"
       accessibilityLabel={[chat.title, subtitle, stamp, chat.unread ? unread : '']
@@ -86,10 +89,10 @@ export function ChatHistoryRow({
 }
 const uiTitle = { flex: 1, minWidth: 0 };
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, minHeight: 88 },
   content: {
     flex: 1,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: theme.spacing.lg,
     borderBottomWidth: theme.controls.borderWidth,
     borderBottomColor: theme.colors.border,
     gap: theme.spacing.xs,

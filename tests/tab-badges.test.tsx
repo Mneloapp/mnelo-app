@@ -4,22 +4,28 @@ let mockCounts = { messages: 123, calls: 2 };
 jest.mock('@/messenger/attention', () => ({ useAttentionCounts: () => ({ data: mockCounts }) }));
 jest.mock('expo-router', () => {
   const React = jest.requireActual<typeof import('react')>('react');
-  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
-  const Tabs = ({ children }: { children: React.ReactNode }) =>
-    React.createElement(View, null, children);
-  Tabs.Screen = function Screen({
-    options,
+  const Tabs = ({
+    children,
+    tabBar,
   }: {
-    options: {
-      tabBarAccessibilityLabel: string;
-      tabBarIcon: (props: { focused: boolean }) => React.ReactNode;
-    };
-  }) {
-    return React.createElement(
-      View,
-      { accessibilityLabel: options.tabBarAccessibilityLabel },
-      options.tabBarIcon({ focused: false }),
-    );
+    children: React.ReactNode;
+    tabBar: (props: unknown) => React.ReactNode;
+  }) => {
+    const routes = React.Children.toArray(children).map((child) => {
+      const element = child as React.ReactElement<{ name: string; options: { title: string } }>;
+      return { key: element.props.name, name: element.props.name, options: element.props.options };
+    });
+    return tabBar({
+      state: { routes, index: 0 },
+      descriptors: Object.fromEntries(
+        routes.map((route) => [route.key, { options: route.options }]),
+      ),
+      navigation: { emit: jest.fn(() => ({ defaultPrevented: false })), navigate: jest.fn() },
+      insets: { top: 59, bottom: 34, left: 0, right: 0 },
+    });
+  };
+  Tabs.Screen = function Screen() {
+    return null;
   };
   return { Tabs };
 });

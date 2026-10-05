@@ -8,6 +8,21 @@ type TranslationShape<T> = {
 };
 // Complete Georgian product copy. User-authored content and canonical server data are not rewritten.
 export const ka = {
+  focus: {
+    newChat: 'ახალი ჩატი',
+    newCall: 'ახალი ზარი',
+    pinned: 'მიმაგრებული ჩატები',
+    pinChat: 'ჩატის მიმაგრება',
+    unpinChat: 'ჩატის მოხსნა',
+    pinLimit: 'შეგიძლია მიამაგრო მაქსიმუმ 8 ჩატი.',
+    recentCalls: 'ხელახლა დარეკვა',
+    today: 'დღეს',
+    yesterday: 'გუშინ',
+    mySpace: 'ჩემი სივრცე',
+    profileSettings: 'პროფილი და პარამეტრები',
+    myAccount: 'ჩემი ანგარიში',
+    storageManagement: 'შენახვა და მართვა',
+  },
   incomingShare: {
     fileSize: 'ფაილი 10 მბ-ზე დიდია. აირჩიე უფრო პატარა ფაილი და ხელახლა გააზიარე.',
     imageSize: 'ფოტო დასამუშავებლად ძალიან დიდია. გააზიარე შემცირებული ასლი.',

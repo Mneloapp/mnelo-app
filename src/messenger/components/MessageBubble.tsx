@@ -14,6 +14,7 @@ export function MessageBubble({
   interactiveChildren = false,
   containerStyle,
   stacked = false,
+  continues = false,
   bubbleRef,
   onLongPress,
   accessibilityLabel,
@@ -29,6 +30,7 @@ export function MessageBubble({
   highlighted?: boolean;
   interactiveChildren?: boolean;
   stacked?: boolean;
+  continues?: boolean;
   containerStyle?: StyleProp<ViewStyle>;
   bubbleRef?: Ref<View>;
   onLongPress?: () => void;
@@ -44,8 +46,17 @@ export function MessageBubble({
   const counts = new Map<string, number>();
   for (const { emoji } of reactions) counts.set(emoji, (counts.get(emoji) ?? 0) + 1);
   const receipt = own && (status === 'delivered' || status === 'read');
+  const accessibleAction = !visual && !interactiveChildren && Boolean(onLongPress);
   return (
-    <View style={[styles.row, own && styles.own, media && !visual && styles.media, containerStyle]}>
+    <View
+      style={[
+        styles.row,
+        continues && styles.continuation,
+        own && styles.own,
+        media && !visual && styles.media,
+        containerStyle,
+      ]}
+    >
       <Pressable
         testID="message-bubble"
         ref={bubbleRef}
@@ -53,18 +64,19 @@ export function MessageBubble({
         style={[
           styles.bubble,
           stacked && { flexDirection: 'column', alignItems: 'stretch' },
-          own && styles.outgoing,
+          own ? styles.outgoing : styles.incoming,
           media && styles.mediaBubble,
           visual && styles.visualBubble,
           highlighted && styles.highlighted,
         ]}
         onLongPress={onLongPress}
         delayLongPress={450}
-        accessible={!visual && !interactiveChildren && Boolean(onLongPress)}
-        accessibilityRole={!visual && onLongPress ? 'button' : undefined}
-        accessibilityLabel={accessibilityLabel}
+        accessible={accessibleAction}
+        focusable={accessibleAction}
+        accessibilityRole={accessibleAction ? 'button' : undefined}
+        accessibilityLabel={accessibleAction ? accessibilityLabel : undefined}
         accessibilityActions={
-          onLongPress ? [{ name: 'longpress', label: t('common.more') }] : undefined
+          accessibleAction ? [{ name: 'longpress', label: t('common.more') }] : undefined
         }
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'longpress') onLongPress?.();
@@ -121,7 +133,7 @@ export function MessageBubble({
 const styles = StyleSheet.create({
   highlightRing: {
     borderWidth: 3,
-    borderRadius: theme.radii.lg,
+    borderRadius: 18,
     borderColor: theme.colors.success,
   },
   highlighted: {
@@ -133,21 +145,24 @@ const styles = StyleSheet.create({
   row: {
     alignSelf: 'flex-start',
     maxWidth: '86%',
-    marginVertical: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    marginBottom: 2,
     marginRight: theme.spacing.xl,
   },
   own: { alignSelf: 'flex-end', marginRight: 0, marginLeft: theme.spacing.xl },
+  continuation: { marginTop: 2 },
   media: { width: '86%' },
   bubble: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.lg,
+    borderRadius: 18,
     padding: theme.spacing.md,
     flexDirection: 'row',
     alignItems: 'flex-end',
     columnGap: theme.spacing.sm,
     rowGap: theme.spacing.xs,
   },
-  outgoing: { backgroundColor: theme.colors.messageOutgoing },
+  outgoing: { backgroundColor: theme.colors.messageOutgoing, borderBottomRightRadius: 5 },
+  incoming: { borderBottomLeftRadius: 5 },
   visualBubble: { padding: 0, overflow: 'hidden', rowGap: 0, columnGap: 0 },
   visualMetadata: { marginHorizontal: 8, marginBottom: 6 },
   overlayMetadata: {

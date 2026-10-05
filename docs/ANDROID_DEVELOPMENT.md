@@ -22,7 +22,7 @@ JAVA_HOME="$MNELO_ANDROID_ROOT/jdk-21.0.12.1+1/Contents/Home" \
   'ndk;27.1.12297006' 'cmake;3.22.1'
 ```
 
-Review SDK licensing prompts when setting up another machine. This creates no Google Play application/account or production signing credential. Downloads, SDK, Gradle caches and emulator data consume substantial disk space; the build helper checks a five-GiB cold / two-GiB incremental free-space floor before starting. That floor is a guard, not a guarantee for a fresh complete download/build.
+Review SDK licensing prompts when setting up another machine. This creates no Google Play application/account or production signing credential. Downloads, SDK, Gradle caches and emulator data consume substantial disk space; the build helper checks a ten-GiB cold / two-GiB incremental free-space floor before starting. The cold floor was raised after the September 21 native build exhausted approximately seven GiB. That floor is a guard, not a guarantee for a fresh complete download/build.
 
 ## Development build and local backend
 

@@ -250,7 +250,7 @@ export function IconButton({
   onPress: () => void;
   disabled?: boolean;
   busy?: boolean;
-  variant?: 'plain' | 'accent' | 'soft';
+  variant?: 'plain' | 'accent' | 'soft' | 'primary';
 }) {
   const dark = useCallAppearance();
   return (
@@ -264,15 +264,36 @@ export function IconButton({
         ui.icon,
         ui.iconSurface,
         dark && ui.callSurface,
+        variant === 'primary' && ui.primary,
         variant === 'accent' && ui.accent,
         (disabled || busy) && ui.disabled,
         pressed && ui.pressed,
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={dark ? t.colors.callText : t.colors.black} />
+        <ActivityIndicator
+          color={
+            variant === 'primary'
+              ? t.colors.onBlack
+              : dark && variant !== 'accent'
+                ? t.colors.callText
+                : t.colors.black
+          }
+        />
       ) : (
-        <AppIcon name={icon} size={26} />
+        <AppIcon
+          name={icon}
+          size={24}
+          color={
+            variant === 'primary'
+              ? t.colors.onBlack
+              : variant === 'accent'
+                ? t.colors.onAccent
+                : dark
+                  ? t.colors.callText
+                  : t.colors.black
+          }
+        />
       )}
     </Pressable>
   );
@@ -575,7 +596,7 @@ export const ui = StyleSheet.create({
     width: '100%',
     maxWidth: t.layout.contentMaxWidth,
     alignSelf: 'center',
-    paddingHorizontal: t.spacing.xl,
+    paddingHorizontal: t.spacing.step,
     paddingBottom: t.spacing.xl,
     gap: t.spacing.lg,
   },
@@ -631,9 +652,7 @@ export const ui = StyleSheet.create({
   },
   iconSurface: {
     backgroundColor: t.colors.surface,
-    borderRadius: t.radii.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: t.colors.border,
+    borderRadius: t.radii.md,
   },
   field: { gap: t.spacing.sm },
   input: {

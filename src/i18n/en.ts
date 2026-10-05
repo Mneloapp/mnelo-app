@@ -3,6 +3,21 @@ import { cardEn } from '@/messenger/contact-card-copy';
 import { messengerEn } from '../messenger/copy';
 import { phoneEn } from '../messenger/phone-copy';
 export const en = {
+  focus: {
+    newChat: 'New chat',
+    newCall: 'New call',
+    pinned: 'Pinned chats',
+    pinChat: 'Pin chat',
+    unpinChat: 'Unpin chat',
+    pinLimit: 'You can pin up to 8 chats.',
+    recentCalls: 'Call again',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    mySpace: 'My space',
+    profileSettings: 'Profile and settings',
+    myAccount: 'My account',
+    storageManagement: 'Storage and management',
+  },
   incomingShare: {
     fileSize: 'This file is larger than 10 MB. Choose a smaller file and share it again.',
     imageSize: 'This photo is too large to process. Share a smaller copy.',

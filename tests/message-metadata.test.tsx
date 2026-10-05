@@ -1,10 +1,11 @@
 import { MessageBubble } from '@/messenger/components/MessageBubble';
 import { AppText } from '@/components/AppText';
 import { formatTime } from '@/i18n/format';
-import { act, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
   Animated,
   PanResponder,
+  Pressable,
   type PanResponderGestureState,
   type GestureResponderEvent,
 } from 'react-native';
@@ -83,4 +84,60 @@ test('both sides show a time without a gesture and only acknowledged outgoing me
   );
   expect(screen.getByRole('image', { name: 'Read on their device' })).toBeOnTheScreen();
   expect(screen.getByTestId('message-metadata')).toHaveStyle({ flexDirection: 'row' });
+});
+
+test.each(['button', 'link'] as const)(
+  'message cards preserve child %s actions without a nested focusable parent',
+  async (role) => {
+    const select = jest.fn();
+    const open = jest.fn();
+    await render(
+      <MessageBubble
+        own={false}
+        status="received"
+        interactiveChildren
+        onLongPress={select}
+        accessibilityLabel="Shared message"
+      >
+        <Pressable
+          accessibilityRole={role}
+          accessibilityLabel="Open contact or link"
+          onPress={open}
+        >
+          <AppText>Open</AppText>
+        </Pressable>
+      </MessageBubble>,
+    );
+    const bubble = screen.getByTestId('message-bubble');
+    // Native accessible=false does not suppress a web role/tab stop; both
+    // contracts must avoid turning the child action into a nested control.
+    expect(bubble.props.accessible).toBe(false);
+    expect(bubble.props.focusable).toBe(false);
+    expect(bubble.props.accessibilityRole).toBeUndefined();
+    expect(bubble.props.accessibilityActions).toBeUndefined();
+    await fireEvent.press(screen.getByRole(role, { name: 'Open contact or link' }));
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(select).not.toHaveBeenCalled();
+    await fireEvent(bubble, 'longPress');
+    expect(select).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledTimes(1);
+  },
+);
+
+test('plain text messages retain their accessible more action', async () => {
+  const select = jest.fn();
+  await render(
+    <MessageBubble
+      own={false}
+      status="received"
+      onLongPress={select}
+      accessibilityLabel="Plain message"
+    >
+      <AppText>Hello</AppText>
+    </MessageBubble>,
+  );
+  const bubble = screen.getByRole('button', { name: 'Plain message' });
+  expect(bubble.props.focusable).toBe(true);
+  await fireEvent(bubble, 'accessibilityAction', { nativeEvent: { actionName: 'longpress' } });
+  expect(select).toHaveBeenCalledTimes(1);
 });

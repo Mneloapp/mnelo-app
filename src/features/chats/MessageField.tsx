@@ -49,7 +49,7 @@ export function MessageField({
         minHeight: minimum,
         height: value ? undefined : minimum,
         maxHeight: maximum,
-        borderRadius: theme.radii.xl,
+        borderRadius: 16,
         borderColor: theme.colors.border,
         backgroundColor: theme.colors.surface,
       }}

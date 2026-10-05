@@ -132,6 +132,7 @@ export function ChatMessageBubble({
   onInfo,
   onQuote,
   highlighted = false,
+  continues = false,
   menuOpen,
 }: {
   message: LocalMessage;
@@ -140,6 +141,7 @@ export function ChatMessageBubble({
   onInfo?: (() => void) | undefined;
   onQuote?: (id: string) => void;
   highlighted?: boolean;
+  continues?: boolean;
   menuOpen: boolean;
 }) {
   const { identity, engine } = useDevice();
@@ -179,6 +181,7 @@ export function ChatMessageBubble({
     >
       <MessageBubble
         own={own}
+        continues={continues}
         highlighted={highlighted}
         interactiveChildren={
           Boolean(message.replyTo && onQuote) ||

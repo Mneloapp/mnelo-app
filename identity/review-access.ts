@@ -58,15 +58,16 @@ export class IdentityAccess {
     private readonly registry: PhoneRegistry,
     private readonly admitted: (index: string) => boolean,
     readonly review?: ReviewAccess,
+    private readonly realScope: 'development' | 'public' = 'development',
   ) {
     if (review && reviewPhones.some((phone) => admitted(registry.index(phone))))
       throw new Error('REVIEW_OVERLAPS_REAL_ADMISSION');
   }
-  scope(key: string): 'development' | 'review' | null {
+  scope(key: string): 'development' | 'public' | 'review' | null {
     const index = this.registry.indexForKey(key);
     if (!index) return null;
     if (this.review?.contains(index)) return this.review.active() ? 'review' : null;
-    return this.admitted(index) ? 'development' : null;
+    return this.admitted(index) ? this.realScope : null;
   }
   canContact(from: string, to: string) {
     const scope = this.scope(from);

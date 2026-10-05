@@ -31,17 +31,22 @@ test('Chats keeps search mounted while filters and clear search update the local
   );
   await fireEvent.press(screen.getByRole('button', { name: 'Show chat search' }));
   const input = screen.getByLabelText('Search chats');
-  expect(screen.queryByRole('button', { name: 'Search' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Search' })).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Search' }));
+  expect(screen.getByLabelText('Search chats')).toBe(input);
+  expect(screen.getByLabelText('Chats')).toHaveProp('accessibilityRole', 'tablist');
+  expect(screen.getByRole('tab', { name: 'Unread' })).not.toBeSelected();
   await fireEvent.changeText(input, 'Development');
-  await fireEvent.press(screen.getByRole('button', { name: 'Unread' }));
+  await fireEvent.press(screen.getByRole('tab', { name: 'Unread' }));
   await waitFor(() =>
     expect(mockEngine.chatPage).toHaveBeenCalledWith('unread', 'Development', undefined),
   );
+  expect(screen.getByRole('tab', { name: 'Unread' })).toBeSelected();
   expect(screen.getByLabelText('Search chats')).toBe(input);
-  await fireEvent.press(screen.getByRole('button', { name: 'Groups' }));
+  await fireEvent.press(screen.getByRole('tab', { name: 'Groups' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Clear search' }));
   await waitFor(() => expect(mockEngine.chatPage).toHaveBeenCalledWith('group', '', undefined));
-  expect(screen.getByRole('button', { name: 'Groups' })).toBeSelected();
+  expect(screen.getByRole('tab', { name: 'Groups' })).toBeSelected();
 });
 test('count badge disappears at zero and bounds large visible counts while preserving the exact accessible count', async () => {
   const view = await render(<CountBadge count={120} label="120 unread messages" />);

@@ -6,6 +6,11 @@ export interface SmsVerification {
   send(phone: string): Promise<string>;
   check(verification: string, code: string): Promise<boolean>;
 }
+export type SmsRequestContext = { phone: string; key: string; source: string };
+export interface SmsAdmission {
+  readonly publicRegistration?: boolean;
+  reserve(index: string, context?: SmsRequestContext): void;
+}
 // NANP's reserved fictional 555-0100..0199 range, never real subscriber numbers.
 export const fixturePhones = new Set(['+12025550101', '+12025550102']);
 export function fixtureSms(local: boolean): SmsVerification {

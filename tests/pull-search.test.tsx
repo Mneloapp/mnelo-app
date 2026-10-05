@@ -2,7 +2,7 @@ import { act, renderHook, render, screen } from '@testing-library/react-native';
 import { usePullSearch, PullSearch } from '@/components/PullSearch';
 import { chatStamp, ChatHistoryRow } from '@/messenger/components/ChatHistoryRow';
 import type { Chat } from '@/messenger/model';
-import { FlatList, View, type LayoutChangeEvent } from 'react-native';
+import { FlatList, Platform, View, type LayoutChangeEvent } from 'react-native';
 const layout = (height: number) =>
   ({ nativeEvent: { layout: { height, width: 390, x: 0, y: 0 } } }) as LayoutChangeEvent;
 test('even an empty list has native scroll travel for its search header; later layout changes never reset a user scroll', async () => {
@@ -82,4 +82,29 @@ test('chat rows show the latest local activity at the upper right in 24-hour for
 test('a new message after midnight shows its time even before the list clock ticks', () => {
   const midnight = new Date(2026, 8, 14, 0, 0).getTime();
   expect(chatStamp(midnight, midnight)).toBe('00:00');
+});
+
+test('web hides search by normal scroll and never inserts a wrapper while the user types', async () => {
+  const previous = Platform.OS;
+  Platform.OS = 'web';
+  try {
+    const { result, rerender } = await renderHook(
+      ({ value }: { value: string }) => usePullSearch<Chat>(value),
+      { initialProps: { value: '' } },
+    );
+    const scrollToOffset = jest.fn();
+    result.current.listRef.current = { scrollToOffset } as unknown as FlatList<Chat>;
+    await act(() => result.current.measureHeader(layout(92)));
+    expect(scrollToOffset).toHaveBeenLastCalledWith({ offset: 92, animated: false });
+    expect(result.current.scrollProps.stickyHeaderIndices).toEqual([]);
+    await act(() => result.current.focus(true));
+    expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 0 }));
+    await rerender({ value: 'Saved contact' });
+    expect(result.current.scrollProps.stickyHeaderIndices).toEqual([]);
+    await act(() => result.current.close());
+    expect(result.current.scrollProps.stickyHeaderIndices).toEqual([]);
+    expect(scrollToOffset).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 92 }));
+  } finally {
+    Platform.OS = previous;
+  }
 });

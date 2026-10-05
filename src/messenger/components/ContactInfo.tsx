@@ -1,5 +1,5 @@
 import type { PropsWithChildren } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { AppText } from '@/components/AppText';
 import { AppIcon, type IconName } from '@/components/AppIcon';
@@ -7,38 +7,50 @@ import { FocusPressable } from '@/components/FocusPressable';
 import { SheetAction } from '@/components/SheetAction';
 import { Avatar } from '@/components/ui';
 import { theme } from '@/theme/tokens';
-import { profileStyles } from './OwnProfile';
 
 export function ContactHero({
   name,
   uri,
   subtitle,
   about,
+  group = false,
+  fallbackRingColor,
 }: {
   name: string;
   uri?: string | undefined;
   subtitle?: string | undefined;
   about?: string | undefined;
+  group?: boolean;
+  fallbackRingColor?: string | undefined;
 }) {
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 360 || fontScale >= 1.4;
   return (
     <View style={infoStyles.hero}>
-      {about ? (
-        <View style={profileStyles.status}>
-          <AppText variant="label" centered numberOfLines={3}>
-            {about}
-          </AppText>
-          <View style={profileStyles.statusTip} />
+      <View style={[infoStyles.identity, stacked && infoStyles.identityStack]}>
+        <View style={infoStyles.avatarRing}>
+          <Avatar
+            name={name}
+            uri={uri}
+            group={group}
+            fallbackRingColor={fallbackRingColor}
+            size="large"
+          />
         </View>
-      ) : null}
-      <View style={profileStyles.avatarRing}>
-        <Avatar name={name} uri={uri} size="profile" />
+        <View style={[infoStyles.identityText, stacked && infoStyles.identityStackText]}>
+          <AppText variant="title" style={infoStyles.name}>
+            {name}
+          </AppText>
+          {subtitle ? (
+            <AppText variant="caption" tone="secondary" selectable>
+              {subtitle}
+            </AppText>
+          ) : null}
+        </View>
       </View>
-      <AppText variant="title" centered style={infoStyles.name}>
-        {name}
-      </AppText>
-      {subtitle ? (
-        <AppText centered tone="secondary" selectable>
-          {subtitle}
+      {about ? (
+        <AppText variant="caption" tone="secondary" style={infoStyles.about}>
+          {about}
         </AppText>
       ) : null}
     </View>
@@ -128,12 +140,27 @@ export function ChatPrivacyActions({
 }
 
 export const infoStyles = StyleSheet.create({
-  hero: { alignItems: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.lg },
-  name: { fontSize: 26, lineHeight: 34, marginTop: theme.spacing.sm },
-  about: { marginTop: theme.spacing.sm },
+  hero: {
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg,
+    backgroundColor: theme.colors.accentSoft,
+    borderRadius: 26,
+  },
+  identity: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  identityStack: { flexDirection: 'column', alignItems: 'stretch' },
+  identityText: { flex: 1, minWidth: 0, gap: theme.spacing.sm },
+  identityStackText: { flex: 0 },
+  avatarRing: {
+    alignSelf: 'flex-start',
+    padding: theme.spacing.xs,
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.radii.pill,
+  },
+  name: { fontSize: 23, lineHeight: 31, letterSpacing: -0.4 },
+  about: { lineHeight: 21 },
   group: {
     backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
+    borderRadius: theme.radii.lg,
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.sm,
   },
@@ -141,12 +168,12 @@ export const infoStyles = StyleSheet.create({
   tile: {
     flex: 1,
     minWidth: 88,
-    minHeight: 88,
+    minHeight: 80,
     alignItems: 'center',
     justifyContent: 'center',
     gap: theme.spacing.sm,
     padding: theme.spacing.md,
-    borderRadius: theme.radii.lg,
+    borderRadius: 16,
     backgroundColor: theme.colors.surface,
   },
   disabled: { opacity: 0.4 },

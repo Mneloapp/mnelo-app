@@ -8,7 +8,6 @@ import { formatDate, formatTime } from '@/i18n/format';
 import { theme } from '@/theme/tokens';
 import type { LocalCall } from '../model';
 import { callOutcomeCopy } from '../call-record';
-import { IconButton } from '@/components/ui';
 
 export function CallHistoryRow({
   call,
@@ -97,11 +96,14 @@ export function CallHistoryRow({
         </View>
       </FocusPressable>
       {onInfo && (
-        <IconButton
-          icon="info"
-          label={t('messenger.callInformation', { name: call.name })}
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel={t('messenger.callInformation', { name: call.name })}
           onPress={onInfo}
-        />
+          style={({ pressed }) => [styles.info, pressed && styles.infoPressed]}
+        >
+          <AppIcon name="info" size={22} color={theme.colors.actionGreen} />
+        </FocusPressable>
       )}
     </View>
   );
@@ -130,6 +132,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   summary: { flex: 1, minWidth: 0 },
+  info: {
+    width: theme.controls.minTapTarget,
+    height: theme.controls.minTapTarget,
+    borderRadius: theme.radii.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: theme.spacing.xs,
+  },
+  infoPressed: { backgroundColor: theme.colors.accentSoft },
   stamp: { flexShrink: 0, maxWidth: '30%', textAlign: 'right' },
   missed: { color: theme.colors.error },
   missedRow: {

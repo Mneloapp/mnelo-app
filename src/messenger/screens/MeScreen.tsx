@@ -27,7 +27,6 @@ export function MeScreen() {
         subtitle={t('focus.profileSettings')}
         actionLabel={t('card.edit')}
         actionIcon="edit-2"
-        actionIconOnly
         onAction={openProfile}
       />
       {enrollment?.testOnly && isReviewPhone(enrollment.phone) ? (

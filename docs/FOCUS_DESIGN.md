@@ -111,6 +111,39 @@ bounded fixture uses an existing compatible development client and replaces the
 application/session boundary; it does not verify the complete release or real
 message delivery. Web font-scale overrides exercise layout branches only.
 
-The October 7 refinements are not included in TestFlight build 54. Physical
-iPhone keyboard/attachment transitions, full-app Dynamic Type and VoiceOver
-remain release acceptance checks.
+The October 7 refinements are not included in TestFlight build 54. The subsequent
+build and distribution checkpoint is tracked in [BUILD55_QA](BUILD55_QA.md).
+Physical iPhone keyboard/attachment transitions, full-app Dynamic Type and
+VoiceOver remain release acceptance checks.
+
+## October 7 upper-right actions, after build 55
+
+Chats, Calls and My space now use a consistent 52-point circular lime action at
+the upper right. Compose and profile edit use a pencil; new call uses a plus.
+Large Dynamic Type no longer stacks these actions below the title. The title
+retains its own flexible column and can wrap without moving the action. Full
+localized accessibility labels, action destinations and title-tap/pull search
+remain intact.
+
+Call history uses an unfilled round information action with a green outline icon,
+a separate 48-point touch area and a soft lime pressed state. Tapping the call
+row and opening its information remain separate operations.
+
+TypeScript, ESLint, formatting, localization and all 711 Jest tests across 122
+suites passed. Independent review found no further actionable source issues.
+The ignored `artifacts/design-header-20261007/` records source hashes, screenshots
+and presentation QA. Browser checks covered all three tabs in Georgian/English
+at 320/393/430 pixels (18 cases), with no horizontal overflow or reported axe
+violations; icon-font contrast remains an automated incomplete/manual item.
+Visible action destinations and the separate row/info interactions were checked.
+
+A fresh disposable iPhone SE simulator (375 × 667, iOS 26.5) rendered the actual
+header and call-row components at native font scale 1.00 in Georgian and 1.79 in
+Georgian/English. All actions stayed upper right; the long Georgian My space
+title wrapped into two lines without overlap. This bounded presentation fixture
+uses a compatible development client and fictional data with inert callbacks,
+not a complete new native release. Some native captures include Expo's floating
+development-tools badge, which is absent from production. Full-app physical
+device and VoiceOver acceptance are still separate checks.
+
+These follow-up changes are not yet included in TestFlight build 55.

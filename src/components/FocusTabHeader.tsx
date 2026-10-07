@@ -1,4 +1,4 @@
-import { StyleSheet, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { AppText } from './AppText';
 import { AppIcon, type IconName } from './AppIcon';
 import { FocusPressable } from './FocusPressable';
@@ -9,7 +9,6 @@ export function FocusTabHeader({
   subtitle,
   actionLabel,
   actionIcon = 'plus',
-  actionIconOnly = false,
   onAction,
   onTitlePress,
   titleActionLabel,
@@ -18,52 +17,38 @@ export function FocusTabHeader({
   subtitle?: string | undefined;
   actionLabel: string;
   actionIcon?: IconName;
-  actionIconOnly?: boolean;
   onAction: () => void;
   onTitlePress?: () => void;
   titleActionLabel?: string;
 }) {
-  const { width, fontScale } = useWindowDimensions();
-  const stacked = (!actionIconOnly && width < 375) || fontScale >= 1.35;
   return (
     <View style={styles.header}>
-      <View style={[styles.titleRow, stacked && styles.titleStack]}>
+      <View style={styles.titleRow}>
         {onTitlePress ? (
           <FocusPressable
             accessibilityRole="button"
             accessibilityLabel={titleActionLabel ?? title}
             onPress={onTitlePress}
-            style={[styles.title, styles.titleControl, stacked && styles.stackedTitle]}
+            style={styles.title}
           >
             <AppText variant="focusTitle" accessibilityRole="header">
               {title}
             </AppText>
           </FocusPressable>
         ) : (
-          <AppText
-            variant="focusTitle"
-            accessibilityRole="header"
-            style={[styles.title, stacked && styles.stackedTitle]}
-          >
-            {title}
-          </AppText>
+          <View style={styles.title}>
+            <AppText variant="focusTitle" accessibilityRole="header">
+              {title}
+            </AppText>
+          </View>
         )}
         <FocusPressable
           accessibilityRole="button"
           accessibilityLabel={actionLabel}
           onPress={onAction}
-          style={({ pressed }) => [
-            styles.action,
-            actionIconOnly && styles.iconAction,
-            pressed && styles.pressed,
-          ]}
+          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
         >
-          <AppIcon name={actionIcon} size={20} color={theme.colors.onAccent} />
-          {!actionIconOnly && (
-            <AppText variant="label" style={styles.actionText}>
-              {actionLabel}
-            </AppText>
-          )}
+          <AppIcon name={actionIcon} size={24} color={theme.colors.onAccent} />
         </FocusPressable>
       </View>
       {Boolean(subtitle) && (
@@ -78,24 +63,20 @@ export function FocusTabHeader({
 const styles = StyleSheet.create({
   header: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.lg, gap: theme.spacing.sm },
   action: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    maxWidth: '100%',
-    gap: theme.spacing.sm,
+    width: theme.controls.buttonHeight,
+    height: theme.controls.buttonHeight,
     backgroundColor: theme.colors.accent,
-    borderRadius: theme.radii.md,
-    minHeight: theme.controls.minTapTarget,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.radii.pill,
   },
-  actionText: { color: theme.colors.onAccent, flexShrink: 1 },
-  iconAction: { width: theme.controls.minTapTarget, paddingHorizontal: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
-  titleStack: { flexDirection: 'column', alignItems: 'flex-start' },
-  title: { flex: 1, minWidth: 0 },
-  titleControl: { minHeight: theme.controls.minTapTarget, justifyContent: 'center' },
-  stackedTitle: { flex: 0, width: '100%' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: theme.spacing.md },
+  title: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: theme.controls.buttonHeight,
+    justifyContent: 'center',
+  },
   pressed: { backgroundColor: theme.colors.accentPressed },
 });

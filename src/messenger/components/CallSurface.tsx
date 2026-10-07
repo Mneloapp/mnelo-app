@@ -121,7 +121,6 @@ export function CallSurface({
             <CallControl icon="chevron-down" label={t('calls.returnToChat')} onPress={onBack} />
             <View style={styles.heading}>
               <AppText variant="caption" centered tone="secondary">
-                {t('brand')} ·{' '}
                 {t(call?.media === 'video' ? 'messenger.callVideo' : 'messenger.callVoice')}
               </AppText>
               <AppText variant="title" centered numberOfLines={2} accessibilityRole="header">

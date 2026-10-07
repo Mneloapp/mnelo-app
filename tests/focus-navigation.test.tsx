@@ -53,7 +53,7 @@ test('compact navigation keeps every tab named, exposes attention and invokes it
   expect(onLongPress).toHaveBeenCalledTimes(1);
 });
 
-test('screen heading keeps search and compose as distinct actions', async () => {
+test('screen heading reveals pull search from its title without a separate search button', async () => {
   const compose = jest.fn();
   const search = jest.fn();
   await render(
@@ -61,7 +61,6 @@ test('screen heading keeps search and compose as distinct actions', async () => 
       title="Chats"
       actionLabel="New chat"
       onAction={compose}
-      onSearch={search}
       onTitlePress={search}
       titleActionLabel="Show chat search"
     />,
@@ -69,7 +68,7 @@ test('screen heading keeps search and compose as distinct actions', async () => 
   await fireEvent.press(screen.getByRole('button', { name: 'New chat' }));
   expect(compose).toHaveBeenCalledTimes(1);
   expect(search).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Search' }));
+  expect(screen.queryByRole('button', { name: 'Search' })).not.toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Show chat search' }));
-  expect(search).toHaveBeenCalledTimes(2);
+  expect(search).toHaveBeenCalledTimes(1);
 });

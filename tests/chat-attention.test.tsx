@@ -31,8 +31,8 @@ test('Chats keeps search mounted while filters and clear search update the local
   );
   await fireEvent.press(screen.getByRole('button', { name: 'Show chat search' }));
   const input = screen.getByLabelText('Search chats');
-  expect(screen.getByRole('button', { name: 'Search' })).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Search' }));
+  expect(screen.queryByRole('button', { name: 'Search' })).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Show chat search' }));
   expect(screen.getByLabelText('Search chats')).toBe(input);
   expect(screen.getByLabelText('Chats')).toHaveProp('accessibilityRole', 'tablist');
   expect(screen.getByRole('tab', { name: 'Unread' })).not.toBeSelected();

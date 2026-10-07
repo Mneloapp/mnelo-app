@@ -46,11 +46,21 @@ export function ConversationHeader({
         >
           {avatar}
           <View style={styles.heading}>
-            <AppText variant="headline" numberOfLines={1} accessibilityRole="header">
+            <AppText
+              variant="headline"
+              numberOfLines={fontScale >= 1.4 ? 2 : 1}
+              maxFontSizeMultiplier={theme.controls.navigationMaxScale}
+              accessibilityRole="header"
+            >
               {title}
             </AppText>
             {onInfo && (
-              <AppText variant="caption" tone="secondary" numberOfLines={1}>
+              <AppText
+                variant="caption"
+                tone="secondary"
+                numberOfLines={fontScale >= 1.4 ? 2 : 1}
+                maxFontSizeMultiplier={theme.controls.navigationMaxScale}
+              >
                 {infoLabel}
               </AppText>
             )}

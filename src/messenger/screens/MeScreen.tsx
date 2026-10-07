@@ -27,6 +27,7 @@ export function MeScreen() {
         subtitle={t('focus.profileSettings')}
         actionLabel={t('card.edit')}
         actionIcon="edit-2"
+        actionIconOnly
         onAction={openProfile}
       />
       {enrollment?.testOnly && isReviewPhone(enrollment.phone) ? (
@@ -47,7 +48,6 @@ export function MeScreen() {
             label={t('card.qr')}
             onPress={() => router.push({ pathname: '/my-code', params: { from: 'me' } })}
           />
-          <ProfileAction icon="edit-2" label={t('card.edit')} onPress={openProfile} />
         </View>
       </ProfileHero>
       <ProfileGroup flat title={t('focus.myAccount')}>

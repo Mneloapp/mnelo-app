@@ -1265,3 +1265,53 @@ packaged scanner false positive independently resolved through AST/source review
 The backend code-only update is healthy with four identities preserved. Apple
 build ID is `954cb5fe-1e7d-48e3-a81d-64b153526265`; physical acceptance is still
 pending. Source, IPA hashes and evidence are recorded in [BUILD_45](BUILD_45.md).
+
+## October 5/6, 2026 — Build 54 Focus TestFlight upload
+
+The approved Focus design is compiled from private source
+`c942bf3cfb901ae860f9490435d57156d36bb012`; public corresponding source
+`ios-0.1.0-54` at `db744f32ffc06473d5aa1158d184f690fa9f599c` has the exact tree
+`771ab1e8fcd0ca09f831683daee3e97a012277e9`. No private Git history was published.
+The existing beta endpoints, app/keychain/vault identity and protocol/audio
+implementation are retained. No new latency reduction is claimed.
+
+Application checks passed 711 Jest tests / 122 suites, 244 device/protocol tests
+and three server tests, plus type/lint/format/localization/source-security checks.
+The fictional real-component browser fixture passed 26 accessibility runs. Native
+archive and Apple Distribution export passed compiled-feature/security/signature
+checks; five native binaries and dSYMs and 95 non-signing resources match. IPA
+152,199,253 bytes, SHA-256
+`811ddc7724175e9f3e61f16623f1be0c3cc833d17c9b2996db5cd3158d133e94`.
+
+Apple upload succeeded October 5 at 20:08 Asia/Tbilisi with the four retained
+vendor dSYM warnings. Apple processing completed (processed upload date 20:17),
+ID `12225e13-7cf9-429c-bb53-f127448f4663`; compliance and What to Test were saved.
+Group distribution is not verified: combined submission returned an Apple save
+error and the subsequent internal-group action redirected to login. Owner login
+is required; check actual membership before retrying. No public submission or new
+tester invitation was made. Earlier artifacts, including 37, remain retained.
+
+Exact-source CI installation/full check pass, but Doctor failed on newer Expo
+patch recommendations. Independently rerun clean install, both native exports,
+source/history/bundle secret scans and 16 native link tests pass. Dependency
+manifests match 53. Audit remains failed with 52 high and 12 moderate affected
+entries; scoped native reachability found no affected high implementation in the
+shipped JS, while a runtime moderate decoder has the existing verified input
+gate. Remediation and public security review remain open; gates were not disabled.
+See [BUILD54_QA](BUILD54_QA.md) and `artifacts/build54-evidence.json`.
+
+## October 7, 2026 — Build 54 tester distribution completed
+
+The owner resumed work with an authenticated App Store Connect session. Actual
+build54 group membership was checked before retrying; no group had been added by
+the earlier interrupted attempt. The existing internal and external groups were
+added separately. Each group's Builds tab now visibly shows 0.1.0 (54) **Testing**:
+Mnelo Development (one internal tester) and Mnelo Preview (two external testers),
+with 89 days remaining. What to Test is retained, and automatic external tester
+notification was enabled during submission. No new testers, public link or public
+App Store submission were created. The source and uploaded binary are unchanged.
+
+Screenshots and the completed group checkpoint are saved in the build54 artifacts.
+The internal tester page reports Installed 0.1.0 (54); this is Apple installation
+metadata and does not establish physical functional acceptance. Focus phone QA and
+compatible dependency remediation remain pending. [Full checkpoint](BUILD54_QA.md).

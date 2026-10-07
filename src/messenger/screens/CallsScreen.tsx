@@ -62,7 +62,6 @@ export function CallsScreen() {
         title={t('tabs.calls')}
         actionLabel={t('messenger.newCall')}
         onAction={() => router.push('/new-call')}
-        onSearch={searchBar.reveal}
         onTitlePress={searchBar.reveal}
         titleActionLabel={t('callSearch.open')}
       />

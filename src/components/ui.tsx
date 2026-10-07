@@ -20,7 +20,6 @@ import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import { AppText } from './AppText';
 import { AppIcon, type IconName } from './AppIcon';
-import { MneloLogo } from './MneloBrand';
 import { useAppFont } from '@/theme/fonts';
 import { useCallAppearance } from '@/theme/appearance';
 import { theme as t } from '@/theme/tokens';
@@ -70,6 +69,7 @@ export function Page({
   const dark = useCallAppearance();
   const { width, fontScale } = useWindowDimensions();
   const stackedActions = Boolean(back && avatarName && right && fontScale >= 1.4);
+  const showHeader = title !== undefined && (back || title !== tr('brand'));
   const IdentityContainer = onTitlePress ? Pressable : View;
   const body = <View style={[ui.body, contentStyle]}>{children}</View>;
   return (
@@ -98,7 +98,7 @@ export function Page({
               : undefined
         }
       >
-        {title !== undefined && (
+        {showHeader && (
           <View style={[ui.header, headerStyle]}>
             {back && (
               <IconButton
@@ -109,43 +109,37 @@ export function Page({
                 }
               />
             )}
-            {!back && title === tr('brand') ? (
-              <View style={ui.headerTitle}>
-                <MneloLogo />
-              </View>
-            ) : (
-              <IdentityContainer
-                style={[ui.headerTitle, ui.headerIdentity]}
-                onPress={onTitlePress}
-                accessibilityRole={onTitlePress ? 'button' : undefined}
-                accessibilityLabel={onTitlePress ? (titleActionLabel ?? title) : undefined}
+            <IdentityContainer
+              style={[ui.headerTitle, ui.headerIdentity]}
+              onPress={onTitlePress}
+              accessibilityRole={onTitlePress ? 'button' : undefined}
+              accessibilityLabel={onTitlePress ? (titleActionLabel ?? title) : undefined}
+            >
+              {avatarName &&
+                width >= t.layout.compactHeaderWidth &&
+                fontScale < 1.4 &&
+                (avatar ?? <Avatar name={avatarName} size="small" />)}
+              <AppText
+                variant={
+                  back
+                    ? fontScale >= 1.4 || (avatarName && width < t.layout.compactHeaderWidth)
+                      ? 'bodyMedium'
+                      : 'headline'
+                    : 'title'
+                }
+                accessibilityRole="header"
+                latin={title === tr('brand')}
+                style={ui.headerTitle}
+                maxFontSizeMultiplier={t.controls.navigationMaxScale}
+                numberOfLines={titleLines}
               >
-                {avatarName &&
-                  width >= t.layout.compactHeaderWidth &&
-                  fontScale < 1.4 &&
-                  (avatar ?? <Avatar name={avatarName} size="small" />)}
-                <AppText
-                  variant={
-                    back
-                      ? fontScale >= 1.4 || (avatarName && width < t.layout.compactHeaderWidth)
-                        ? 'bodyMedium'
-                        : 'headline'
-                      : 'title'
-                  }
-                  accessibilityRole="header"
-                  latin={title === tr('brand')}
-                  style={ui.headerTitle}
-                  maxFontSizeMultiplier={t.controls.navigationMaxScale}
-                  numberOfLines={titleLines}
-                >
-                  {title}
-                </AppText>
-              </IdentityContainer>
-            )}
+                {title}
+              </AppText>
+            </IdentityContainer>
             {!stackedActions && right}
           </View>
         )}
-        {title !== undefined && stackedActions && <View style={ui.headerActionRow}>{right}</View>}
+        {showHeader && stackedActions && <View style={ui.headerActionRow}>{right}</View>}
         {!online && (
           <View accessibilityRole="alert" style={[ui.notice, dark && ui.callSurface]}>
             <AppText variant="caption">{tr('common.offline')}</AppText>

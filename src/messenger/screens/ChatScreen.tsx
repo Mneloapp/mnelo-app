@@ -18,6 +18,7 @@ import { Avatar, Button, IconButton, Page, StateView, ui } from '@/components/ui
 import { theme } from '@/theme/tokens';
 import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { MessageField } from '@/features/chats/MessageField';
+import { ComposerAction } from '@/features/chats/ComposerAction';
 import { VoiceRecorder } from '@/features/chats/VoiceRecorder';
 import { imageSelections, fileSelection, type SelectedMedia } from '@/features/chats/media-files';
 import { useDevice } from '../DeviceProvider';
@@ -503,16 +504,15 @@ function ChatConversationScreen() {
             </View>
           ) : (
             <View style={styles.composer}>
-              <IconButton
+              <ComposerAction
                 disabled={Boolean(editing)}
-                variant="primary"
                 icon={attachmentPanel.visible ? 'keyboard' : 'plus'}
                 label={t(
                   attachmentPanel.visible ? 'messenger.showKeyboard' : 'messenger.attachments',
                 )}
                 onPress={() => attachmentPanel.toggle(() => messageInput.current?.focus())}
               />
-              <View style={ui.flex}>
+              <View style={styles.composerInput}>
                 <MessageField
                   inputRef={messageInput}
                   editable={!editing || !action.busy}
@@ -526,9 +526,9 @@ function ChatConversationScreen() {
                 />
               </View>
               {text.trim() || editing ? (
-                <IconButton
+                <ComposerAction
                   icon={editing ? 'check' : 'send'}
-                  variant="accent"
+                  accent
                   label={t(editing ? 'common.save' : 'common.send')}
                   disabled={!text.trim() || Boolean(editing && text === editing.message.body)}
                   busy={action.busy}
@@ -548,9 +548,9 @@ function ChatConversationScreen() {
                   }
                 />
               ) : (
-                <IconButton
+                <ComposerAction
                   icon="mic"
-                  variant="accent"
+                  accent
                   label={t('messenger.voice')}
                   onPress={() => {
                     Keyboard.dismiss();
@@ -879,12 +879,14 @@ const styles = StyleSheet.create({
   timeline: { paddingTop: theme.spacing.sm, paddingBottom: theme.spacing.lg },
   composer: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: theme.spacing.sm,
-    paddingVertical: theme.spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border,
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    padding: theme.spacing.xs,
+    marginVertical: theme.spacing.xs,
+    borderRadius: theme.radii.xl,
+    backgroundColor: theme.colors.surface,
   },
+  composerInput: { flex: 1, minWidth: 0 },
   attachmentPanel: {
     flex: 1,
     overflow: 'hidden',

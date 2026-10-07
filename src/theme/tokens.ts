@@ -62,7 +62,7 @@ export const theme = {
     title: { fontSize: 28, lineHeight: 36, fontWeight: '500' },
     titleLarge: { fontSize: 32, lineHeight: 40, fontWeight: '500', letterSpacing: -0.2 },
     display: { fontSize: 38, lineHeight: 46, fontWeight: '500', letterSpacing: -0.35 },
-    focusTitle: { fontSize: 38, lineHeight: 46, fontWeight: '600', letterSpacing: -0.7 },
+    focusTitle: { fontSize: 32, lineHeight: 40, fontWeight: '500', letterSpacing: -0.35 },
   },
   icons: { sm: 16, md: 24, lg: 32 },
   brand: {

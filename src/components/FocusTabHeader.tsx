@@ -2,18 +2,15 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { AppText } from './AppText';
 import { AppIcon, type IconName } from './AppIcon';
 import { FocusPressable } from './FocusPressable';
-import { MneloLogo } from './MneloBrand';
-import { IconButton } from './ui';
 import { theme } from '@/theme/tokens';
-import { useTranslation } from 'react-i18next';
 
 export function FocusTabHeader({
   title,
   subtitle,
   actionLabel,
   actionIcon = 'plus',
+  actionIconOnly = false,
   onAction,
-  onSearch,
   onTitlePress,
   titleActionLabel,
 }: {
@@ -21,47 +18,53 @@ export function FocusTabHeader({
   subtitle?: string | undefined;
   actionLabel: string;
   actionIcon?: IconName;
+  actionIconOnly?: boolean;
   onAction: () => void;
-  onSearch?: () => void;
   onTitlePress?: () => void;
   titleActionLabel?: string;
 }) {
-  const { t } = useTranslation();
-  const { fontScale } = useWindowDimensions();
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = (!actionIconOnly && width < 375) || fontScale >= 1.35;
   return (
     <View style={styles.header}>
-      <View style={[styles.brandRow, fontScale >= 1.7 && styles.brandStack]}>
-        <MneloLogo />
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel={actionLabel}
-          onPress={onAction}
-          style={({ pressed }) => [styles.action, pressed && styles.pressed]}
-        >
-          <AppIcon name={actionIcon} size={20} color={theme.colors.onBlack} />
-          <AppText variant="label" style={styles.actionText}>
-            {actionLabel}
-          </AppText>
-        </FocusPressable>
-      </View>
-      <View style={styles.titleRow}>
+      <View style={[styles.titleRow, stacked && styles.titleStack]}>
         {onTitlePress ? (
           <FocusPressable
             accessibilityRole="button"
             accessibilityLabel={titleActionLabel ?? title}
             onPress={onTitlePress}
-            style={styles.title}
+            style={[styles.title, styles.titleControl, stacked && styles.stackedTitle]}
           >
             <AppText variant="focusTitle" accessibilityRole="header">
               {title}
             </AppText>
           </FocusPressable>
         ) : (
-          <AppText variant="focusTitle" accessibilityRole="header" style={styles.title}>
+          <AppText
+            variant="focusTitle"
+            accessibilityRole="header"
+            style={[styles.title, stacked && styles.stackedTitle]}
+          >
             {title}
           </AppText>
         )}
-        {onSearch && <IconButton icon="search" label={t('common.search')} onPress={onSearch} />}
+        <FocusPressable
+          accessibilityRole="button"
+          accessibilityLabel={actionLabel}
+          onPress={onAction}
+          style={({ pressed }) => [
+            styles.action,
+            actionIconOnly && styles.iconAction,
+            pressed && styles.pressed,
+          ]}
+        >
+          <AppIcon name={actionIcon} size={20} color={theme.colors.onAccent} />
+          {!actionIconOnly && (
+            <AppText variant="label" style={styles.actionText}>
+              {actionLabel}
+            </AppText>
+          )}
+        </FocusPressable>
       </View>
       {Boolean(subtitle) && (
         <AppText tone="secondary" variant="caption">
@@ -73,29 +76,26 @@ export function FocusTabHeader({
 }
 
 const styles = StyleSheet.create({
-  header: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.lg, gap: theme.spacing.xs },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.lg,
-    marginBottom: theme.spacing.step,
-  },
-  brandStack: { flexDirection: 'column', alignItems: 'flex-start' },
+  header: { paddingTop: theme.spacing.md, paddingBottom: theme.spacing.lg, gap: theme.spacing.sm },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 1,
+    flexShrink: 0,
+    maxWidth: '100%',
     gap: theme.spacing.sm,
-    backgroundColor: theme.colors.black,
+    backgroundColor: theme.colors.accent,
     borderRadius: theme.radii.md,
     minHeight: theme.controls.minTapTarget,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  actionText: { color: theme.colors.onBlack, flexShrink: 1 },
+  actionText: { color: theme.colors.onAccent, flexShrink: 1 },
+  iconAction: { width: theme.controls.minTapTarget, paddingHorizontal: 0 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md },
+  titleStack: { flexDirection: 'column', alignItems: 'flex-start' },
   title: { flex: 1, minWidth: 0 },
-  pressed: { backgroundColor: theme.colors.blackPressed },
+  titleControl: { minHeight: theme.controls.minTapTarget, justifyContent: 'center' },
+  stackedTitle: { flex: 0, width: '100%' },
+  pressed: { backgroundColor: theme.colors.accentPressed },
 });

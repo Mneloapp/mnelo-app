@@ -1,7 +1,7 @@
 # Focus interface — October 5, 2026
 
 Focus implements the approved visual direction in the application: a white canvas,
-light gray controls, soft lime sections, larger page titles, a small Mnelo wordmark,
+light gray controls, soft lime sections, restrained page titles,
 and a dark bottom navigation bar with a lime selected tab. Shared theme tokens and
 components carry the treatment across screens; incoming and outgoing messages,
 missed calls, destructive actions and active-call controls retain distinct states.
@@ -10,7 +10,7 @@ missed calls, destructive actions and active-call controls retain distinct state
 
 | Surface                              | Change                                                                                                                                                                                                                      |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Chats                                | Brand/action header, search access, underline filters, a separate pinned section, compact conversation rows and unread badges.                                                                                              |
+| Chats                                | Title and lime action, pull-down search, underline filters, a separate pinned section, compact conversation rows and unread badges.                                                                                         |
 | Calls                                | Matching header, recent-contact shortcuts, date-grouped history and a distinct missed-call surface. Existing call and information destinations remain available.                                                            |
 | Conversation                         | Contact identity and labeled voice/video actions, tighter spacing within consecutive messages, individual timestamps/receipts, compact shared-contact actions and an attachment grid.                                       |
 | My space                             | Horizontal identity block with the enrolled phone number, QR/edit actions, and flat account/storage settings groups with gray icon surfaces.                                                                                |
@@ -69,3 +69,48 @@ or native distribution. The subsequent TestFlight build is tracked separately in
 pin persistence and account isolation,
 large Georgian names and Dynamic Type, keyboard/attachment transitions, VoiceOver,
 and the existing call, notification and message-action flows.
+
+## October 7 refinement and design QA
+
+Internal page, tab and active-call headers no longer show the Mnelo brand label.
+The launch and phone-registration artwork remains. Primary tab-header actions
+use lime; titles use a lighter 32-point treatment. Me keeps one accessible edit
+action. Chats and Calls retain the original pull-down search implementation and
+title-tap access, without a separate search icon.
+
+The conversation composer is one gray capsule. Its attachment and Send/Mic
+actions have identical 52-point slots, vertically centered with the input.
+Nonempty native inputs use intrinsic text measurement; explicit line breaks
+provide a minimum-height floor. Long drafts scroll at the height limit and
+clearing or sending restores the compact empty field without remounting it.
+Web-only content measurements are guarded against stale value/width/font-scale
+callbacks. Large contact headings can use two lines.
+
+The final Jest run passed 711 tests across 122 suites. TypeScript, ESLint,
+Prettier, localization and whitespace checks passed. An independent source
+review found no further material issues. These changes affect presentation;
+message sending, call media and transport logic were not changed.
+
+The ignored `artifacts/design-polish-20261007/` fixture imports current production
+components with fictional in-memory data. Visual checks covered 320, 393 and
+430-pixel widths in Georgian and English, including attachments and revealed
+search. Twenty-two accessibility runs across eleven screens reported no
+automated violations. Icon-font contrast and offscreen/video-fixture items
+remain manual-review candidates, so this is not accessibility certification.
+Composer measurements show matching vertical centers and stable input width
+when Mic changes to Send; empty height returns to 52 points after a three-line
+draft grows to 98 points on web.
+
+A separate disposable iPhone SE simulator (375 × 667, iOS 26.5) exercised the
+actual current `MessageField`, `ComposerAction` and `FocusTabHeader` with the
+production composer row styles. It verified a three-line Georgian draft,
+native keyboard editing, Send/reset with keyboard retained, and long wrapped
+drafts at the height limit. At native font scale 1.79, the empty field and long
+draft were also checked, including moving the caret to reveal the end. The
+bounded fixture uses an existing compatible development client and replaces the
+application/session boundary; it does not verify the complete release or real
+message delivery. Web font-scale overrides exercise layout branches only.
+
+The October 7 refinements are not included in TestFlight build 54. Physical
+iPhone keyboard/attachment transitions, full-app Dynamic Type and VoiceOver
+remain release acceptance checks.

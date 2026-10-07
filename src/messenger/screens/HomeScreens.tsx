@@ -117,7 +117,6 @@ export function ChatsScreen() {
         }
         actionLabel={t('messenger.newMessage')}
         onAction={() => router.push('/new-message')}
-        onSearch={searchBar.reveal}
         onTitlePress={searchBar.reveal}
         titleActionLabel={t('messenger.openChatSearch')}
       />
